@@ -41,14 +41,3 @@ jobs:
     - name: Run Tests
       working-directory: ./BigStitcher
       run: mvn test
-
-    # Step 7: Display test results
-    - name: Display Test Results
-      working-directory: ./BigStitcher
-      run: |
-        echo "Test Results Summary:"
-        grep -E "Tests run:" target/surefire-reports/*.txt | while read -r line; do
-          file=$(echo $line | cut -d: -f1)
-          summary=$(echo $line | cut -d: -f2- | sed 's/^[ ]*//')
-          echo "$summary (from $file)"
-        done
