@@ -1,12 +1,55 @@
-name: Big Stitcher Java Tests 
+name: Build and Test BigStitcher
 
 on:
-  workflow_dispatch:
+  push:
+    branches:
+      - main
+  pull_request:
+    branches:
+      - main
 
 jobs:
-  say-hello:
+  build-and-test:
     runs-on: ubuntu-latest
 
     steps:
-      - name: Run Hello World
-        run: echo "Hello, World!"
+    # Step 1: Checkout the current repository
+    - name: Checkout Repository
+      uses: actions/checkout@v3
+
+    # Step 2: Clone the BigStitcher repository
+    - name: Clone BigStitcher Repository
+      run: |
+        git clone https://github.com/PreibischLab/BigStitcher.git
+
+    # Step 3: Set up Java and Maven
+    - name: Set up Java
+      uses: actions/setup-java@v3
+      with:
+        java-version: '17' 
+        distribution: 'temurin'
+
+    - name: Install Maven
+      run: sudo apt-get install -y maven
+
+    # Step 4: Change directory to the cloned BigStitcher repo
+    - name: Navigate to BigStitcher Directory
+      working-directory: ./BigStitcher
+      run: pwd
+
+    # Step 5: Build the project
+    - name: Build with Maven
+      working-directory: ./BigStitcher
+      run: mvn clean install
+
+    # Step 6: Run tests
+    - name: Run Tests
+      working-directory: ./BigStitcher
+      run: mvn test
+
+    # Step 7: Display test results
+    - name: Display Test Results
+      working-directory: ./BigStitcher
+      run: |
+        echo "Test Results Summary:"
+        grep -A 5 "<testsuite" target/surefire-reports/*.xml | grep -E 'tests|failures|errors|skipped'
