@@ -1,12 +1,7 @@
 name: Build and Test BigStitcher
 
 on:
-  push:
-    branches:
-      - main
-  pull_request:
-    branches:
-      - main
+  workflow_dispatch:
 
 jobs:
   build-and-test:
@@ -14,7 +9,7 @@ jobs:
 
     steps:
     # Step 1: Checkout the current repository
-    - name: Checkout Repository
+    - name: Checkout the Current Repository
       uses: actions/checkout@v3
 
     # Step 2: Clone the BigStitcher repository
@@ -52,4 +47,8 @@ jobs:
       working-directory: ./BigStitcher
       run: |
         echo "Test Results Summary:"
-        grep -A 5 "<testsuite" target/surefire-reports/*.xml | grep -E 'tests|failures|errors|skipped'
+        grep -E "Tests run:" target/surefire-reports/*.txt | while read -r line; do
+          file=$(echo $line | cut -d: -f1)
+          summary=$(echo $line | cut -d: -f2- | sed 's/^[ ]*//')
+          echo "$summary (from $file)"
+        done
