@@ -6,6 +6,17 @@ Rhapso is being developed as part of the Allen Institute for Neurotechnology (AI
 
 [![License](https://img.shields.io/badge/license-MIT-brightgreen)](LICENSE)
 
+## Table of Contents
+- [Setup Instructions](#setup-instructions)
+  - [Clone Git Repository](#clone-git-repository)
+  - [Setup Python Virtual Environment](#setup-python-virtual-environment)
+  - [Install Rhapso Package Locally](#install-rhapso-package-locally)
+  - [Check Installed Rhapso Version](#check-installed-rhapso-version)
+  - [Run Rhapso Package](#run-rhapso-package)
+  - [Uninstall Rhapso Package](#uninstall-rhapso-package)
+  - [Run Tests](#run-tests)
+- [To Do](#to-do)
+
 ## Setup Instructions
 
 ### Clone Git Repository
@@ -49,6 +60,12 @@ print(Rhapso.say_hello("Test"))
 ### Uninstall Rhapso Package
 ```sh
 pip uninstall rhapso
+```
+
+### Run Tests
+To run the tests, use the following command:
+```sh
+python -m unittest discover
 ```
 
 ### To Do:
