@@ -34,6 +34,12 @@ virtenv\Scripts\activate
 source virtenv/bin/activate
 ```
 
+### Download and Install Dependencies
+Before installing the Rhapso package, ensure all necessary dependencies are installed:
+```sh
+pip install -r requirements.txt
+```
+
 ### Install Rhapso Package Locally
 ```sh
 pip install -e .
