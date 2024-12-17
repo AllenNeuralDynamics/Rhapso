@@ -7,15 +7,114 @@ Rhapso is being developed as part of the Allen Institute for Neurotechnology (AI
 [![License](https://img.shields.io/badge/license-MIT-brightgreen)](LICENSE)
 
 ## Table of Contents
+- [Repository Structure](#repository-structure)
+- [Command Line Usage](#command-line-usage)
 - [Setup Instructions](#setup-instructions)
-  - [Clone Git Repository](#clone-git-repository)
-  - [Setup Python Virtual Environment](#setup-python-virtual-environment)
-  - [Install Rhapso Package Locally](#install-rhapso-package-locally)
-  - [Check Installed Rhapso Version](#check-installed-rhapso-version)
-  - [Run Rhapso Package](#run-rhapso-package)
-  - [Uninstall Rhapso Package](#uninstall-rhapso-package)
-  - [Run Tests](#run-tests)
+- [Run Tests](#run-tests)
 - [To Do](#to-do)
+
+---
+
+## Repository Structure
+
+```
+rhapso/
+│
+├── Rhapso/                      # Main package directory
+│   ├── __init__.py              # Package initialization
+│   ├── cli.py                   # Command-line interface entry point
+│
+│   ├── detection/               # Detection algorithms
+│   │   ├── __init__.py
+│   │   └── interest_points.py   # Interest point detection
+│
+│   ├── fusion/                  # Fusion methods
+│   │   ├── __init__.py
+│   │   └── affine_fusion.py     # Affine fusion
+│
+│   ├── matching/                # Matching algorithms
+│   │   ├── __init__.py
+│   │   └── feature_matching.py  # Feature-based matching
+│
+│   ├── solving/                 # Solvers for optimization
+│   │   ├── __init__.py
+│   │   └── solver.py            # Solve transformations
+│
+├── tests/                       # Unit tests for each module
+│   ├── test_detection.py
+│   ├── test_fusion.py
+│   ├── test_matching.py
+│   ├── test_solving.py
+│   └── __init__.py
+│
+├── setup.py                     # Package installation
+├── README.md                    # Project documentation
+└── requirements.txt             # Dependencies
+```
+
+---
+
+## Command Line Usage
+
+After installing Rhapso, you can use the following commands:
+
+### View General Help
+
+```bash
+Rhapso -h
+```
+
+### View Subcommand-Specific Help
+
+- **Detect Help**
+
+```bash
+Rhapso detect -h
+```
+
+- **Match Help**
+
+```bash
+Rhapso match -h
+```
+
+- **Fuse Help**
+
+```bash
+Rhapso fuse -h
+```
+
+- **Solve Help**
+
+```bash
+Rhapso solve -h
+```
+
+---
+
+## Example CLI Commands
+
+1. **Detect Interest Points**
+```bash
+Rhapso detect --sigma 1.8 --threshold 0.05 --medianFilter 10
+```
+
+2. **Match Features**
+```bash
+Rhapso match --method ORB --distance 0.7 --verbose
+```
+
+3. **Affine Fusion**
+```bash
+Rhapso fuse --scale 2.0 --output ./output/fused.tif --blend
+```
+
+4. **Solve Transformations**
+```bash
+Rhapso solve --method Affine --iterations 50 --tolerance 0.0005
+```
+
+---
 
 ## Setup Instructions
 
