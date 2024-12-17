@@ -1,1 +1,1 @@
-"""Requests test package initialisation."""
+# Empty init file for tests package
