@@ -1,7 +1,10 @@
 import sys
 import os
 import boto3
+import json
 import numpy as np
+import pandas as pd
+from pyspark.sql import Row, SparkSession, DataFrame
 from awsglue.context import GlueContext
 from awsglue.job import Job
 from awsglue.utils import getResolvedOptions
@@ -9,17 +12,20 @@ from pyspark.sql.utils import AnalysisException
 from pyspark.sql.functions import explode, col
 from awsglue.utils import getResolvedOptions
 from pyspark.sql import SparkSession
+from pyspark.sql.types import StructType, StructField, IntegerType, StringType, BooleanType, FloatType, ArrayType, MapType
+from pyspark.sql.functions import col, explode, udf, collect_list, udf
 
 # This version is designed to run locally
 
-# To Get Docker Image: 
-# docker pull public.ecr.aws/glue/aws-glue-libs:glue_libs_4.0.0_image_01
-# docker run -d --name awsglue -p 4040:4040 -p 8888:8888 -p 8998:8998 -p 18080:18080 public.ecr.aws/glue/aws-glue-libs:glue_libs_4.0.0_image_01 bash -l
+# Pull and Run Docker Image: 
+# docker pull amazon/aws-glue-libs:glue_libs_4.0.0_image_01
+# docker run -it --rm amazon/aws-glue-libs:glue_libs_4.0.0_image_01
 
-# To Run
-# docker start  awsglue
-# docker attach awsglue
-# python3 /workspace/GlueJobs/input_preparation_local.py --JOB_NAME input_preparation_local --BUCKET_NAME rhapso-example-data-zarr --XML_FILENAME dataset.xml
+# AWS auth inside docker image:
+# aws configure
+
+# To Run Script
+# python3 /jupyter_workspace/glue/input_preparation_local.py --JOB_NAME input_preparation_local --BUCKET_NAME rhapso-example-data-zarr --XML_FILENAME dataset.xml
 
 class Initialize:
     def __init__(self, args):
@@ -27,14 +33,10 @@ class Initialize:
         self.bucket_name = args['BUCKET_NAME']
         self.xml_filename = args['XML_FILENAME']
         self.s3_input_path = f"s3://{self.bucket_name}/{self.xml_filename}"
-        self.output_path = f"s3://{self.bucket_name}/parallel-processing/"
+        self.output_path = f"s3://{self.bucket_name}/spim-data/"
+        self.setup_contexts()
         self.base_path_uri = self.base_path_URI(self.s3_input_path)
         self.df = None
-        self.setup_contexts()
-    
-    def base_path_URI(self, file_key: str) -> str:
-        directory_path = os.path.dirname(file_key)
-        return f"s3://{self.bucket_name}/{directory_path}" if directory_path else f"s3://{self.bucket_name}/"
     
     def setup_contexts(self):
         if '--JOB_NAME' not in sys.argv: sys.argv.extend(['--JOB_NAME', self.job_name])
@@ -51,6 +53,15 @@ class Initialize:
             self.job.init(self.args['JOB_NAME'], self.args)
         else:
             print("Running locally, skipping job.init")
+    
+    def base_path_URI(self, file_key: str):
+        directory_path = os.path.dirname(file_key)
+        base_path_uri = f"s3://{self.bucket_name}/{directory_path}" if directory_path else f"s3://{self.bucket_name}/"
+        
+        schema = StructType([StructField("base_path_uri", StringType(), True)])
+        uri_df = self.spark.createDataFrame([(base_path_uri,)], schema)
+        
+        return uri_df
 
     def load_data(self):
         dyf = self.glueContext.create_dynamic_frame.from_options(
@@ -64,27 +75,28 @@ class Initialize:
         return self.df
     
 class SequenceDescription:
-    def __init__(self, dataframe, bucket_name):
+    def __init__(self, dataframe, bucket_name, spark):
         self.df = dataframe
         self.bucket_name = bucket_name
+        self.spark = spark
      
     def load_view_setups(self):
         try:
-            exploded_df = self.df.select(explode("SequenceDescription.ViewSetups.ViewSetup").alias("view_setup"))  
+            exploded_df = self.df.select(explode("SequenceDescription.ViewSetups.ViewSetup").alias("view_setup"))   
+            if exploded_df.rdd.isEmpty(): raise ValueError("No view setups found in DataFrame.")
             
-            if exploded_df.rdd.isEmpty():
-                raise ValueError("No view setups found in DataFrame.")  
-            
-            view_setups_dict = {
-                int(row.view_setup.id): row.view_setup.asDict() 
+            view_setups_list = [
+                {**row.view_setup.asDict(), 'id': int(row.view_setup.id)}
                 for row in exploded_df.collect()
                 if row.view_setup and row.view_setup.id is not None
-            }
+            ]
 
-            if not view_setups_dict:
-                raise ValueError("View setups dictionary is empty after processing.")
+            if not view_setups_list:
+                raise ValueError("View setups list is empty after processing.")
+            
+            view_setups_df = self.spark.createDataFrame(view_setups_list)
 
-            return view_setups_dict
+            return view_setups_df
         
         except AnalysisException as e:
             raise ValueError(f"Error processing DataFrame: {e}")
@@ -92,29 +104,31 @@ class SequenceDescription:
     def load_time_points(self):
         try:
             timepoints_df = self.df.select("SequenceDescription.Timepoints.*")
-            if timepoints_df.rdd.isEmpty():
-                raise ValueError("Timepoints data is missing in the DataFrame.")
+            if timepoints_df.rdd.isEmpty(): raise ValueError("Timepoints data is missing in the DataFrame.")
             
-            result = {}
+            rows = []
             timepoints_type = timepoints_df.first()._type
 
             if timepoints_type == "pattern":
                 pattern = timepoints_df.first().integerpattern
-                result['pattern'] = pattern
+                rows.append(Row(type='pattern', data=pattern))
 
             elif timepoints_type == "range":
                 first = timepoints_df.first().first
                 last = timepoints_df.first().last
-                result['range'] = {t: {'timepoint': t} for t in range(first, last + 1)}
+                rows.extend(Row(type='range', timepoint=t) for t in range(first, last + 1))
 
             elif timepoints_type == "list":
                 list_ids = timepoints_df.select(explode("id").alias("id"))
-                result['list'] = {row.id: {'timepoint': row.id} for row in list_ids.collect()}
+                rows.extend(Row(type='list', timepoint=row.id) for row in list_ids.collect())
 
             else:
                 raise ValueError(f"Unknown timepoints type: {timepoints_type}")
+            
+            result_df = self.spark.createDataFrame(rows)
 
-            return result
+            return result_df
+
         except AnalysisException as e:
             raise ValueError(f"Error accessing timepoints data: {e}")
 
@@ -122,70 +136,60 @@ class SequenceDescription:
         if 'MissingViews' in self.df.columns:
             try:
                 missing_views_df = self.df.select(explode("SequenceDescription.MissingViews.view").alias("missing_view"))
-                views = set(
-                    (row.missing_view.timepoint, row.missing_view.setup)
+                if missing_views_df.rdd.isEmpty():
+                    return self.spark.createDataFrame([], schema="timepoint INT, setup INT")
+
+                rows = [
+                    Row(timepoint=row.missing_view.timepoint, setup=row.missing_view.setup)
                     for row in missing_views_df.collect()
                     if row.missing_view is not None
-                )
+                ]
 
-                return views
+                result_df = self.spark.createDataFrame(rows)
+
+                return result_df
             
             except AnalysisException as e:
                 print(f"Error processing DataFrame for missing views: {e}")
-                return set()
-            
+                return self.spark.createDataFrame([], schema="timepoint INT, setup INT")
+                
         else:
-            return set()
+            return self.spark.createDataFrame([], schema="timepoint INT, setup INT")
     
-    def zarr_image_loader(self, sequence_description):
+    def zarr_image_loader(self):
+        self.spark = SparkSession.builder.appName("Zarr Image Loader").getOrCreate()
+        schema = StructType([
+            StructField("timepoint", IntegerType(), True),
+            StructField("setup", IntegerType(), True),
+            StructField("path", StringType(), True),
+            StructField("uri", StringType(), True),
+            StructField("bucket_name", StringType(), True),
+            StructField("s3_mode", BooleanType(), True)
+        ])
+        
         try:
             s3_bucket_element = self.df.select("SequenceDescription.ImageLoader.s3bucket").first()
-            s3_client = boto3.client('s3') if 's3_client_needed' in os.environ else None
-
-            bucket = None
-            folder = None
-
+            bucket = s3_bucket_element[0] if s3_bucket_element and s3_bucket_element[0] else None
             zarr_folder_element = self.df.select("SequenceDescription.ImageLoader.zarr").first()
+            folder = zarr_folder_element[0]._VALUE if zarr_folder_element and hasattr(zarr_folder_element[0], "_VALUE") else str(zarr_folder_element[0]) if zarr_folder_element else ""
+            folder = f"/{folder.strip('/')}/"
 
-            if zarr_folder_element and hasattr(zarr_folder_element[0], "_VALUE"):
-                folder = zarr_folder_element[0]._VALUE
-            else:
-                folder = str(zarr_folder_element[0]) if zarr_folder_element else ""
-
-            if not folder.startswith("/"):
-                folder = "/" + folder
-            if not folder.endswith("/"):
-                folder += "/"
-
-            if s3_bucket_element and s3_bucket_element[0]:
-                bucket = s3_bucket_element[0]
-                uri = f"s3://{bucket}{folder}"
-            else:
-                uri = folder  
-
+            uri = f"s3://{bucket}{folder}" if bucket else folder
             zgroups_df = self.df.select(explode("SequenceDescription.ImageLoader.zgroups.zgroup").alias("zgroup"))
-            zgroups = {
-                (int(row.zgroup['_timepoint']), int(row.zgroup['_setup'])): row.zgroup['path']
+            
+            rows = [
+                Row(timepoint=int(row.zgroup['_timepoint']), setup=int(row.zgroup['_setup']), path=row.zgroup['path'], uri=uri, bucket_name=bucket, s3_mode=bool(bucket))
                 for row in zgroups_df.collect()
-                if row.zgroup['path'] is not None
-            }
-
-            keyValueReader = {
-                'multi_scale_path': uri,
-                's3_client': s3_client,
-                'bucket_name': bucket,
-                's3_mode': bool(bucket) 
-            }
-
-            return {
-                'z_groups': zgroups,
-                'seq': sequence_description,
-                'zarr_key_value_reader_builder': keyValueReader
-            }
+                if row.zgroup and row.zgroup['path'] is not None
+            ]
+            
+            output = self.spark.createDataFrame(rows, schema)
+            output.show(20)
+            return output
         
         except Exception as e:
             print(f"❌ Error in Zarr Image Loader: {e}")
-            return {}
+            return self.spark.createDataFrame([], schema)
     
     def tiff_image_loader(self, sequence_description):
         try:
@@ -244,18 +248,12 @@ class SequenceDescription:
 
             image_loader_format = self.df.select("SequenceDescription.ImageLoader._format").first()[0]
             if image_loader_format == "bdv.multimg.zarr":
-                return self.zarr_image_loader(sequence_description)
+                return self.zarr_image_loader()
             elif image_loader_format == "spimreconstruction.filemap2":
                 return self.tiff_image_loader(sequence_description)
             else:
                 raise ValueError(f"Unsupported image format: {image_loader_format}")
 
-        except AnalysisException as e:
-            print(f"Error processing zgroups: {e}")
-            return {}
-        except ValueError as e:
-            print(f"Configuration Error: {e}")
-            return {}
         except Exception as e:
             print(f"Unexpected error while loading image loader: {e}")
             return {}
@@ -307,26 +305,41 @@ class ViewRegistrations:
             process_transform(row.transform_type, row.transform_name, row.affine_data)
         )).groupByKey().mapValues(list).collectAsMap()
 
-        return transformed_data
+        transform_udf = udf(process_transform, StructType([
+            StructField("type", StringType(), True),
+            StructField("name", StringType(), True),
+            StructField("affine", ArrayType(ArrayType(FloatType(), False), False), True)
+        ]))
+
+        transformed_data = registration_processed_df.withColumn(
+            "transformed",
+            transform_udf("transform_type", "transform_name", "affine_data")
+        )
+
+        grouped_transformed_data = transformed_data.groupBy("timepoint_id", "setup_id").agg(
+            collect_list("transformed").alias("transformations")
+        )
+
+        return grouped_transformed_data
     
     def run(self):
         return self.load_view_registrations()
 
 class ViewInterestPoints():
-    def __init__(self, dataframe, base_path_URI):
+    def __init__(self, dataframe, spark, base_path_URI):
         self.df = dataframe
         self.base_path_URI = base_path_URI
+        self.spark = spark
     
     def load_view_interest_points(self):
-        interestPointCollectionLookup = {}
         if self.df.rdd.isEmpty():
-            return interestPointCollectionLookup
+            print("DataFrame is empty.")
+            return None
 
+        # Explode and select necessary fields
         interest_points_df = (
             self.df
-            .select(
-                explode("ViewInterestPoints.ViewInterestPointsFile").alias("interest_points"),
-            )
+            .select(explode("ViewInterestPoints.ViewInterestPointsFile").alias("interest_points"))
             .select(
                 col("interest_points._timepoint").alias("timepoint_id"),
                 col("interest_points._setup").alias("setup_id"),
@@ -336,48 +349,39 @@ class ViewInterestPoints():
             )
         )
 
-        interest_points = interest_points_df.collect()
-
-        for row in interest_points:
-            timepoint_id, setup_id, label, parameters, interest_point_file_name = row
-            view_id = (timepoint_id, setup_id)
-
-            if view_id not in interestPointCollectionLookup:
-                interestPointCollectionLookup[view_id] = {
-                    'timepoint_id': timepoint_id,
-                    'setup_id': setup_id,
-                    'interest_point_lists': {}
-                }
-
-            collection = interestPointCollectionLookup[view_id]
-
-            interest_point_list = {
-                'base_dir': self.base_path_URI,  
-                'modified_interest_points': False,
-                'modified_corresponding_interest_points': False,
-            }
-
-            if interest_point_file_name.startswith("interestpoints/"):
-                interest_point_list.update({
-                    'file': interest_point_file_name,
-                    'interest_points': None,
-                    'corresponding_interest_points': None,
-                    'parameters': '',
-                    'object_parameters': parameters
-                })
-
-            elif interest_point_file_name.startswith("tpId_"):
-                interest_point_list.update({
-                    'n5path': interest_point_file_name,
-                    'object_parameters': parameters
-                })
-
+        # Dynamically determine schema based on the file name pattern
+        def determine_schema(file_name):
+            if file_name.startswith("interestpoints/"):
+                return ("file", StructType([
+                    StructField("timepoint_id", IntegerType(), True),
+                    StructField("setup_id", IntegerType(), True),
+                    StructField("label", StringType(), True),
+                    StructField("parameters", StringType(), True),
+                    StructField("file", StringType(), True),
+                    StructField("base_dir", StringType(), True),
+                    StructField("object_parameters", StringType(), True),
+                    StructField("modified_interest_points", BooleanType(), True),
+                    StructField("modified_corresponding_interest_points", BooleanType(), True)
+                ]))
+            elif file_name.startswith("tpId_"):
+                return ("n5path", StructType([
+                    StructField("timepoint_id", IntegerType(), True),
+                    StructField("setup_id", IntegerType(), True),
+                    StructField("label", StringType(), True),
+                    StructField("parameters", StringType(), True),
+                    StructField("n5path", StringType(), True),
+                    StructField("base_dir", StringType(), True),
+                    StructField("object_parameters", StringType(), True),
+                    StructField("modified_interest_points", BooleanType(), True),
+                    StructField("modified_corresponding_interest_points", BooleanType(), True)
+                ]))
             else:
-                raise Exception("Unknown interest point file format.")
-            
-            collection['interest_point_lists'][label] = interest_point_list
+                return (None, None)
 
-        return interestPointCollectionLookup
+        file_type_udf = udf(determine_schema, StringType())
+        final_df = interest_points_df.withColumn("file_type", file_type_udf(col("interest_point_file_name")))
+
+        return final_df
     
     def run(self):
         return self.load_view_interest_points()
@@ -388,7 +392,7 @@ class BoundingBoxes():
     
     def load_bounding_boxes(self):
         if self.df.rdd.isEmpty() or "ViewRegistrations.ViewRegistration.bounding_boxes" not in self.df.columns:
-            return []
+            return self.df.sparkSession.createDataFrame([], StructType([]))
 
         bounding_boxes_df = self.df.select(
             explode("ViewRegistrations.ViewRegistration.bounding_boxes").alias("bounding_box")
@@ -398,7 +402,7 @@ class BoundingBoxes():
             col("bounding_box.max").alias("max")
         )
 
-        bounding_boxes = []
+        results = []
         for row in bounding_boxes_df.collect():
             title = row['title']
             try:
@@ -407,13 +411,20 @@ class BoundingBoxes():
             except ValueError as e:
                 raise Exception(f"Error parsing bounding box coordinates: {str(e)}")
 
-            bounding_boxes.append({
-                'title': title,
-                'min': min_coords,
-                'max': max_coords
-            })
+            result = Row(
+                title=title,
+                min=min_coords,
+                max=max_coords
+            )
+            results.append(result)
 
-        return bounding_boxes
+        schema = StructType([
+            StructField("title", StringType(), True),
+            StructField("min", ArrayType(IntegerType()), True),
+            StructField("max", ArrayType(IntegerType()), True)
+        ])
+
+        return self.df.sparkSession.createDataFrame(results, schema)
     
     def run(self):
         return self.load_bounding_boxes()
@@ -423,35 +434,40 @@ class PointSpreadFunctions():
         self.df = dataframe
     
     def load_point_spread_functions(self):
-        if "PointSpreadFunctions.PointSpreadFunction" not in self.df.columns: 
-            return {}
+        if "PointSpreadFunctions.PointSpreadFunction" not in self.df.columns:
+            return self.df.sparkSession.createDataFrame([], StructType([]))
         
-        try:
-            psfs_df = self.df.select(
-                explode("PointSpreadFunctions.PointSpreadFunction").alias("psf")
-            )
+        psfs_df = self.df.select(
+            explode("PointSpreadFunctions.PointSpreadFunction").alias("psf")
+        )
 
-            psfs = {}
+        results = []
+        try:
             for row in psfs_df.collect():
                 tp_id = int(row.psf._timepoint) if row.psf._timepoint else None
                 vs_id = int(row.psf._setup) if row.psf._setup else None
                 file = row.psf._file if row.psf._file else None
 
                 if tp_id is not None and vs_id is not None:
-                    view_id = (tp_id, vs_id)
+                    result = Row(
+                        timepoint_id=tp_id,
+                        setup_id=vs_id,
+                        base_path_URI=self.base_path_URI,
+                        file=file
+                    )
+                    results.append(result)
 
-                    psf_entry = {
-                        'base_path_URI': self.base_path_URI,
-                        'file': file
-                    }
+            schema = StructType([
+                StructField("timepoint_id", IntegerType(), True),
+                StructField("setup_id", IntegerType(), True),
+                StructField("base_path_URI", StringType(), True),
+                StructField("file", StringType(), True)
+            ])
 
-                    if view_id not in psfs:
-                        psfs[view_id] = []
-                    psfs[view_id].append(psf_entry)
+            return self.df.sparkSession.createDataFrame(results, schema)
 
-            return psfs
         except AnalysisException as e:
-            return {}
+            return self.df.sparkSession.createDataFrame([], schema)
         
     def run(self):
         return self.load_point_spread_functions()
@@ -461,10 +477,11 @@ class StitchingResults():
         self.df = dataframe
     
     def load_stitching_results(self):
-        if "StitchingResults" not in self.df.columns: return {}
+        if "StitchingResults" not in self.df.columns:
+            return self.df.sparkSession.createDataFrame([], StructType([]))
+        
         stitching_df = self.df.select(explode("StitchingResults").alias("pairwiseResult"))
-
-        stitching_results = {}
+        results = []
         for row in stitching_df.collect():
             vsA = list(map(int, row.pairwiseResult.vsA.split(',')))
             vsB = list(map(int, row.pairwiseResult.vsB.split(',')))
@@ -489,59 +506,87 @@ class StitchingResults():
                 minmax = np.array(row.pairwiseResult.bbox.split()).astype(float)
                 bbox = {'min': minmax[:len(minmax)//2], 'max': minmax[len(minmax)//2:]}
 
-            pair_key = (tuple(vidsA), tuple(vidsB))
-            stitching_results[pair_key] = {
-                'transform': transform,
-                'correlation': corr,
-                'hash': hash_value,
-                'bounding_box': bbox
-            }
+            result = Row(pairwise_key=(tuple(vidsA), tuple(vidsB)),
+                         transform=transform.flatten().tolist(),
+                         correlation=corr,
+                         hash=hash_value,
+                         bounding_box=bbox)
 
-        return stitching_results
+            results.append(result)
+        
+        schema = StructType([
+            StructField("pairwise_key", StringType(), True),
+            StructField("transform", ArrayType(FloatType()), True),
+            StructField("correlation", FloatType(), True),
+            StructField("hash", FloatType(), True),
+            StructField("bounding_box", MapType(StringType(), ArrayType(FloatType())), True)
+        ])
+        
+        stitching_df = self.df.sparkSession.createDataFrame(results, schema)
+        return stitching_df
     
     def run(self):
-        return self.load_stitching_results
+        return self.load_stitching_results()
 
 class IntensityAdjustments():
     def __init__(self, dataframe):
         self.df = dataframe
     
     def load_intensity_adjustments(self):
-        if "IntensityAdjustments" not in self.df.columns: return {}
+        if "IntensityAdjustments" not in self.df.columns: 
+            return self.df.sparkSession.createDataFrame([], StructType([]))
 
         try:
-            adjustments_df = self.df.select(explode("IntensityAdjustments").alias("adjustment"))
+            adjustments_df = self.df.select(
+                col("adjustment.timepointId").cast("int").alias("timepoint_id"),
+                col("adjustment.setupId").cast("int").alias("setup_id"),
+                col("adjustment.model")
+            )
 
-            intensity_adjustments = {}
-            for row in adjustments_df.collect():
-                timepoint_id = int(row.adjustment.timepointId)
-                setup_id = int(row.adjustment.setupId)
-                model_params = np.array(row.adjustment.model.split()).astype(float)
+            def parse_model(model_str):
+                params = np.array(model_str.split()).astype(float)
+                if len(params) == 2:
+                    return {'a': params[0], 'b': params[1]}
+                else:
+                    return None
 
-                if len(model_params) != 2:
-                    continue  
+            parse_model_udf = udf(parse_model, MapType(StringType(), FloatType()))
+            result_df = adjustments_df.withColumn("affine_model", parse_model_udf(col("model"))).drop("model")
+            
+            return result_df
 
-                affine_model = {'a': model_params[0], 'b': model_params[1]}
-                view_id = (timepoint_id, setup_id)
-
-                intensity_adjustments[view_id] = affine_model
-
-            return intensity_adjustments
-        except AnalysisException as e:
-            return {}
+        except Exception as e:
+            print(f"Error processing intensity adjustments: {e}")
+            return self.df.sparkSession.createDataFrame([], StructType([]))
     
     def run(self):
         return self.load_intensity_adjustments()
 
 if __name__ == "__main__":
+    
+    def save_to_parquet(df, output_path):
+        if df and not df.rdd.isEmpty():
+            df.write.mode('overwrite').parquet(output_path)
+
+    def save_nested_dataframes(data, base_path):
+        for key, value in data.items():
+            current_path = f"{base_path}/{key}"
+            if isinstance(value, DataFrame):
+                save_to_parquet(value, current_path)
+            elif isinstance(value, dict) and key == 'sequence_description':
+                for nested_key, nested_value in value.items():
+                    nested_path = f"{current_path}/{nested_key}"
+                    if isinstance(nested_value, DataFrame):
+                        save_to_parquet(nested_value, nested_path)
+        
     args = getResolvedOptions(sys.argv, ['JOB_NAME', 'BUCKET_NAME', 'XML_FILENAME'])
 
     input_prep = Initialize(args)
     df = input_prep.load_data()
 
-    sequence_description = SequenceDescription(df, input_prep.bucket_name)
+    sequence_description = SequenceDescription(df, input_prep.bucket_name, input_prep.spark)
     view_registrations = ViewRegistrations(df)
-    view_interest_points = ViewInterestPoints(df, input_prep.base_path_uri)
+    view_interest_points = ViewInterestPoints(df, input_prep.spark, input_prep.base_path_uri)
     bounding_boxes = BoundingBoxes(df)
     point_spread_functions = PointSpreadFunctions(df)
     stitching_results = StitchingResults(df)
@@ -564,7 +609,10 @@ if __name__ == "__main__":
         'point_spread_functions' : from_point_spread_functions,      
         'stitching_results' : from_stitching_results,               
         'intensity_adjustments' : from_intensity_adjustments    
-    }
+    } 
+
+    base_output_path = f"s3://{input_prep.bucket_name}/output-ipd"
+    save_nested_dataframes(spim_data, base_output_path)
 
     if input_prep.job:
         input_prep.job.commit()
