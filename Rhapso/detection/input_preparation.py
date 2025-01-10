@@ -206,19 +206,16 @@ class InputPreparation:
     def run(self) -> Dict[str, Any]:
         root = self.fetch_xml_data(Config.XMLFILENAME)
 
-        # We might need to dynamically check for missing XML tags to ensure completeness of parsing. 
-        # This involves starting with a list of expected tags and for each new parsing method, checking for new 
-        # tags at each level of the XML structure beginning from the root. This process, while not currently 
-        # implemented, would be initiated here once its impact is evaluated.
-
         from_sequence_description = SequenceDescription(root, self.s3)
         from_view_registrations = ViewRegistrations(root)
         from_view_interest_points = ViewInterestPoints(root)
+        # Remaining content finished in glue_jobs version
 
         spim_data = {
             'sequence_description': from_sequence_description.run(),
             'view_registrations' : from_view_registrations.run(),
             'view_interest_points' : from_view_interest_points.run()
+            # Remaining content finished in glue_jobs version
         }
 
         return spim_data
