@@ -19,7 +19,7 @@ from pyspark.sql import SparkSession
 # To Run
 # docker start  awsglue
 # docker attach awsglue
-# python3 /workspace/GlueJobs/input_preperation_local.py --JOB_NAME input_preperation_local --BUCKET_NAME rhapso-example-data-zarr --XML_FILENAME dataset.xml
+# python3 /workspace/GlueJobs/input_preparation_local.py --JOB_NAME input_preparation_local --BUCKET_NAME rhapso-example-data-zarr --XML_FILENAME dataset.xml
 
 class Initialize:
     def __init__(self, args):
