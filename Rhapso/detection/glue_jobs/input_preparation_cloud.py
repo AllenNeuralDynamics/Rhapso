@@ -540,7 +540,7 @@ if __name__ == "__main__":
     from_intensity_adjustments = intensity_adjustments.run()
 
     spim_data = {
-        'base_path_URI' : input_prep.base_path_uri,
+        'base_path_uri' : input_prep.base_path_uri,
         'sequence_description': from_sequence_description,
         'view_registrations' : from_view_registrations,
         'view_interest_points' : from_view_interest_points,

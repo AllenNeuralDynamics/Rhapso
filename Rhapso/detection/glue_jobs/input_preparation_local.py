@@ -10,12 +10,16 @@ from pyspark.sql.functions import explode, col
 from awsglue.utils import getResolvedOptions
 from pyspark.sql import SparkSession
 
-# To Run: 
-# docker start ee0480b5bfe9
-# docker attach ee0480b5bfe9
-# python3 /workspace/GlueJobs/input_preparation_local.py --JOB_NAME input_preparation_local --BUCKET_NAME rhapso-example-data-zarr --XML_FILENAME dataset.xml
-
 # This version is designed to run locally
+
+# To Get Docker Image: 
+# docker pull public.ecr.aws/glue/aws-glue-libs:glue_libs_4.0.0_image_01
+# docker run -d --name awsglue -p 4040:4040 -p 8888:8888 -p 8998:8998 -p 18080:18080 public.ecr.aws/glue/aws-glue-libs:glue_libs_4.0.0_image_01 bash -l
+
+# To Run
+# docker start  awsglue
+# docker attach awsglue
+# python3 /workspace/GlueJobs/input_preperation_local.py --JOB_NAME input_preperation_local --BUCKET_NAME rhapso-example-data-zarr --XML_FILENAME dataset.xml
 
 class Initialize:
     def __init__(self, args):
@@ -552,7 +556,7 @@ if __name__ == "__main__":
     from_intensity_adjustments = intensity_adjustments.run()
 
     spim_data = {
-        'base_path_URI' : input_prep.base_path_uri,
+        'base_path_uri' : input_prep.base_path_uri,
         'sequence_description': from_sequence_description,
         'view_registrations' : from_view_registrations,
         'view_interest_points' : from_view_interest_points,
