@@ -10,7 +10,11 @@ Rhapso is being developed as part of the Allen Institute for Neurotechnology (AI
 - [Repository Structure](#repository-structure)
 - [Command Line Usage](#command-line-usage)
 - [Setup Instructions](#setup-instructions)
+- [Build Package](#build-package)
+  - [Using the Built `.whl` File](#using-the-built-whl-file)
 - [Run Tests](#run-tests)
+- [Environments](#environments)
+- [Use Cases](#use-cases)
 - [To Do](#to-do)
 
 ---
@@ -167,11 +171,91 @@ print(Rhapso.say_hello("Test"))
 pip uninstall rhapso
 ```
 
-### Run Tests
+---
+
+## Build Package
+
+To build the Rhapso package as a `.whl` file, follow these steps:
+
+1. **Navigate to the project directory:**
+   ```sh
+   cd /path/to/Rhapso
+   ```
+
+2. **Ensure you have the required build tools installed:**
+   ```sh
+   pip install setuptools wheel
+   ```
+
+3. **Build the package:**
+   ```sh
+   python setup.py sdist bdist_wheel
+   ```
+
+4. **The built `.whl` file will be located in the `dist` directory.**
+
+### Using the Built `.whl` File
+
+1. **Navigate to the `dist` directory:**
+   ```sh
+   cd dist
+   ```
+
+2. **Install the `.whl` file:**
+   ```sh
+   pip install rhapso-0.1-py3-none-any.whl
+   ```
+
+3. **Verify the installation:**
+   ```sh
+   pip show rhapso
+   ```
+
+4. **Run the Rhapso CLI:**
+   ```sh
+   Rhapso -h
+   ```
+
+---
+
+## Run Tests
+
 To run the tests, use the following command:
 ```sh
 python -m unittest discover
 ```
+
+---
+
+## Environments
+
+- **Dev**
+- **Prod**
+
+---
+
+## Use Cases
+
+### Fully Local
+
+```sh
+pip install Rhapso
+Rhapso detect --i '../../dataset.zarr' --o '../dataset_with_ip.xml'
+```
+
+### Fully in Cloud
+
+Install Rhapso package and call it either via CLI, Python module, or as a Python library in scripts.
+
+### Cloud/Local Hybrid
+
+```sh
+pip install Rhapso
+aws configure
+Rhapso detect --i 's3://data.zarr' --o 's3://output/my_dataset.xml'
+```
+
+---
 
 ### To Do:
 - Setup and add Tests 

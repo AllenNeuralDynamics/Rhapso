@@ -1,0 +1,145 @@
+name: Publish to PyPI
+
+on:
+  workflow_dispatch:
+    inputs:
+      part:
+        description: "Semver part to bump (major, minor, patch)"
+        type: choice
+        required: true
+        default: "patch"
+        options: ["major", "minor", "patch"]
+      dry-run:
+        description: "Dry run"
+        type: boolean
+        required: true
+        default: true
+      python-version:
+        description: "Python version used to build the distribution"
+        type: choice
+        required: true
+        default: "3.11"
+        options: ["3.9", "3.10", "3.11", "3.12"]
+
+jobs:
+  bump:
+    name: Bump version
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+      id-token: write
+    outputs:
+      VERSION: ${{ steps.get-version-and-commit-sha.outputs.VERSION }}
+      SHORT_VERSION: ${{ steps.get-version-and-commit-sha.outputs.SHORT_VERSION }}
+      MAJOR_VERSION: ${{ steps.get-version-and-commit-sha.outputs.MAJOR_VERSION }}
+      MINOR_VERSION: ${{ steps.get-version-and-commit-sha.outputs.MINOR_VERSION }}
+      PATCH_VERSION: ${{ steps.get-version-and-commit-sha.outputs.PATCH_VERSION }}
+      VERSION_TAG: ${{ steps.get-version-and-commit-sha.outputs.VERSION_TAG }}
+      COMMIT_SHA: ${{ steps.get-version-and-commit-sha.outputs.COMMIT_SHA }}
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          ssh-key: ${{ secrets.AIBSGITHUB_PRIVATE_KEY }}
+      - name: Set up Python ${{ github.event.inputs.python-version }}
+        uses: actions/setup-python@v4        
+        with:
+          python-version: ${{ github.event.inputs.python-version }}
+          cache: 'pip'
+      - name: Set up AllenInstitute Repo Authorization
+        uses: ./.github/actions/configure-org-repo-authorization
+        with:
+          token: ${{ secrets.AI_PACKAGES_TOKEN }}
+      - name: Get tags
+        run: git fetch --tags origin
+      - name: Configure git for github-actions[bot]
+        run: |
+          git config --global user.name "github-actions[bot]"
+          git config --global user.email "github-actions[bot]@users.noreply.github.com"
+      - name: Run Install
+        run: |
+          make install-release
+        shell: bash
+      - name: Bump version with bumpversion
+        run: |
+          source .venv/bin/activate  
+          bump-my-version bump ${{ github.event.inputs.part }}
+      - name: Commit and push with tags
+        if: ${{ github.event.inputs.dry-run == 'false' }}
+        run: |
+          git push --follow-tags
+      - name: Get version and commit SHA
+        id: get-version-and-commit-sha
+        run: |
+          latest_tag=$(git describe --tags `git rev-list --tags --max-count=1`)
+          # remove the leading v from tag
+          version="${latest_tag:1}"
+          echo "VERSION=$version" >> $GITHUB_OUTPUT
+          major_version="$(cut -d '.' -f 1 <<< $version)"
+          echo "MAJOR_VERSION=$major_version" >> $GITHUB_OUTPUT
+          minor_version="$(cut -d '.' -f 2 <<< $version)"
+          echo "MINOR_VERSION=$minor_version" >> $GITHUB_OUTPUT
+          patch_version="$(cut -d '.' -f 3 <<< $version)"
+          echo "PATCH_VERSION=$patch_version" >> $GITHUB_OUTPUT
+          short_version="$major_version.$minor_version"
+          echo "SHORT_VERSION=$short_version" >> $GITHUB_OUTPUT
+          echo "VERSION_TAG=$latest_tag" >> $GITHUB_OUTPUT
+          commit_sha=$(git rev-list -n 1 $latest_tag)
+          echo "COMMIT_SHA=$commit_sha" >> $GITHUB_OUTPUT
+      - name: Show version
+        run: |
+          echo VERSION: ${{ steps.get-version-and-commit-sha.outputs.VERSION }}
+          echo SHORT_VERSION: ${{ steps.get-version-and-commit-sha.outputs.SHORT_VERSION }}
+          echo MAJOR_VERSION: ${{ steps.get-version-and-commit-sha.outputs.MAJOR_VERSION }}
+          echo MINOR_VERSION: ${{ steps.get-version-and-commit-sha.outputs.MINOR_VERSION }}
+          echo PATCH_VERSION: ${{ steps.get-version-and-commit-sha.outputs.PATCH_VERSION }}
+          echo VERSION_TAG: ${{ steps.get-version-and-commit-sha.outputs.VERSION_TAG }}
+          echo COMMIT_SHA: ${{ steps.get-version-and-commit-sha.outputs.COMMIT_SHA }}
+
+  build:
+    name: Build distribution
+    runs-on: ubuntu-latest
+    needs: bump
+    if: ${{ github.event.inputs.dry-run == 'false' }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ needs.bump.outputs.VERSION_TAG }}
+          ssh-key: ${{ secrets.AIBSGITHUB_PRIVATE_KEY }}
+      - name: Set up Python ${{ github.event.inputs.python-version }}
+        uses: actions/setup-python@v4        
+        with:
+          python-version: ${{ github.event.inputs.python-version }}
+          cache: 'pip'
+      - name: Set up AllenInstitute Repo Authorization
+        uses: ./.github/actions/configure-org-repo-authorization
+        with:
+          token: ${{ secrets.AI_PACKAGES_TOKEN }}
+      - name: Run Release
+        run: |
+          make dist
+        shell: bash
+      - name: Store the distribution packages
+        uses: actions/upload-artifact@v4
+        with:
+          name: python-package-distributions
+          path: dist/
+
+  publish-to-pypi:
+    name: Publish to PyPI
+    needs: build
+    if: ${{ github.event.inputs.dry-run == 'false' }}
+    runs-on: ubuntu-latest
+    environment:
+      name: pypi
+      url: https://pypi.org/p/aibs-informatics-cdk-lib
+    permissions:
+      id-token: write # IMPORTANT: mandatory for trusted publishing
+    steps:
+      - name: Download all the dists
+        uses: actions/download-artifact@v4
+        with:
+          name: python-package-distributions
+          path: dist/
+      - name: Publish distribution to PyPI
+        uses: pypa/gh-action-pypi-publish@release/v1
