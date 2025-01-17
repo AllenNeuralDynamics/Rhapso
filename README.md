@@ -163,7 +163,7 @@ python -m Rhapso
 
 # Using Python script
 import Rhapso
-print(Rhapso.say_hello("Test"))
+print(Rhapso.__version__)
 ```
 
 ### Uninstall Rhapso Package
