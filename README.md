@@ -15,6 +15,7 @@ Rhapso is being developed as part of the Allen Institute for Neurotechnology (AI
 - [Run Tests](#run-tests)
 - [Environments](#environments)
 - [Use Cases](#use-cases)
+- [Cloud Deployment Plan](#cloud-deployment-plan)
 - [To Do](#to-do)
 
 ---
@@ -254,6 +255,113 @@ pip install Rhapso
 aws configure
 Rhapso detect --i 's3://data.zarr' --o 's3://output/my_dataset.xml'
 ```
+
+---
+
+## Cloud Deployment Plan
+
+### Pushing with GitHub Actions Workflow to S3 Bucket
+
+1. **Create an S3 Bucket:**
+   - Go to the AWS Management Console.
+   - Navigate to S3 and create a new bucket (e.g., `rhapso-deployments`).
+
+2. **Set Up IAM Role and Policy:**
+   - Create an IAM role with permissions to access the S3 bucket.
+   - Attach the following policy to the role:
+     ```json
+     {
+       "Version": "2012-10-17",
+       "Statement": [
+         {
+           "Effect": "Allow",
+           "Action": [
+             "s3:PutObject",
+             "s3:GetObject",
+             "s3:ListBucket"
+           ],
+           "Resource": [
+             "arn:aws:s3:::rhapso-deployments",
+             "arn:aws:s3:::rhapso-deployments/*"
+           ]
+         }
+       ]
+     }
+     ```
+
+3. **Configure GitHub Secrets:**
+   - Go to your GitHub repository settings.
+   - Add the following secrets:
+     - `AWS_ACCESS_KEY_ID`
+     - `AWS_SECRET_ACCESS_KEY`
+
+4. **GitHub Actions Workflow:**
+   - Create a GitHub Actions workflow file (e.g., `.github/workflows/deploy.yml`) with the following content:
+     ```yaml
+     name: Deploy to S3
+
+     on:
+       push:
+         branches:
+           - main
+
+     jobs:
+       deploy:
+         runs-on: ubuntu-latest
+         steps:
+           - name: Checkout code
+             uses: actions/checkout@v4
+
+           - name: Configure AWS credentials
+             uses: aws-actions/configure-aws-credentials@v1
+             with:
+               aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY_ID }}
+               aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+               aws-region: us-west-2
+
+           - name: Sync files to S3
+             run: |
+               aws s3 sync . s3://rhapso-deployments --exclude ".git/*" --delete
+     ```
+
+### Setting Up Permissions with IAM
+
+1. **Create IAM User:**
+   - Go to the AWS Management Console.
+   - Navigate to IAM and create a new user (e.g., `rhapso-deployer`).
+   - Attach the following policy to the user:
+     ```json
+     {
+       "Version": "2012-10-17",
+       "Statement": [
+         {
+           "Effect": "Allow",
+           "Action": [
+             "s3:PutObject",
+             "s3:GetObject",
+             "s3:ListBucket"
+           ],
+           "Resource": [
+             "arn:aws:s3:::rhapso-deployments",
+             "arn:aws:s3:::rhapso-deployments/*"
+           ]
+         }
+       ]
+     }
+     ```
+
+2. **Generate Access Keys:**
+   - Generate access keys for the IAM user.
+   - Store the access keys securely and add them as GitHub secrets.
+
+3. **Revoking Credentials:**
+   - To revoke credentials, go to the IAM user in the AWS Management Console.
+   - Delete the access keys or deactivate the user.
+   - Generate new access keys and update the GitHub secrets.
+
+### Cloud Deployment Image
+
+![Cloud Deployment](docs/deployment.png)
 
 ---
 

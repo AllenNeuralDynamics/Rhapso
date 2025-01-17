@@ -1,0 +1,45 @@
+name: Build and Push .whl to S3
+
+on:
+  workflow_dispatch: # This allows the workflow to be triggered manually from the GitHub Actions UI
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+
+    steps:
+      # Step 1: Checkout the main branch
+      - name: Checkout Main Branch
+        uses: actions/checkout@v2
+        with:
+          ref: main  # Ensure we are checking out the main branch
+
+      # Step 2: Set up Python environment
+      - name: Set up Python
+        uses: actions/setup-python@v2
+        with:
+          python-version: '3.x'
+
+      # Step 3: Install dependencies
+      - name: Install dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install setuptools wheel twine
+
+      # Step 4: Build the .whl file
+      - name: Build the distribution package
+        run: |
+          python setup.py sdist bdist_wheel
+
+      # Step 5: Configure AWS CLI with credentials
+      - name: Configure AWS CLI
+        uses: aws-actions/configure-aws-credentials@v1
+        with:
+          aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY_ID }}
+          aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+          aws-region: us-east-1
+
+      # Step 6: Upload only the .whl file(s) to the S3 bucket
+      - name: Upload .whl to S3
+        run: |
+          aws s3 cp dist/*.whl s3://your-s3-bucket-name/ --recursive
