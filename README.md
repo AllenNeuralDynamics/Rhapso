@@ -28,6 +28,7 @@ rhapso/
 ├── Rhapso/                      # Main package directory
 │   ├── __init__.py              # Package initialization
 │   ├── cli.py                   # Command-line interface entry point
+│   ├── pipeline.py              # Pipeline demo/example file
 │
 │   ├── detection/               # Detection algorithms
 │   │   ├── __init__.py
@@ -38,6 +39,18 @@ rhapso/
 │   │   ├── filtering_and_optimization.py  # Filtering and optimization
 │   │   └── advanced_refinement.py    # Advanced refinement
 │
+│   ├── fusion/                  # Fusion methods
+│   │   ├── __init__.py
+│   │   └── affine_fusion.py     # Affine fusion
+│
+│   ├── matching/                # Matching algorithms
+│   │   ├── __init__.py
+│   │   └── feature_matching.py  # Feature-based matching
+│
+│   ├── solving/                 # Solvers for optimization
+│   │   ├── __init__.py
+│   │   └── solver.py  
+
 │   ├── data_preparation/        # Data preparation methods
 │   │   ├── __init__.py
 │   │   ├── xml_to_dataframe.py  # XML to DataFrame conversion
