@@ -1,4 +1,5 @@
 import argparse
+from Rhapso.utils import xmlToDataframe
 
 def add_parser(subparsers):
     """
@@ -8,7 +9,14 @@ def add_parser(subparsers):
     parser.add_argument('--medianFilter', type=int, help='Median filter radius for preprocessing.')
     parser.add_argument('--sigma', type=float, required=True, help='Sigma for segmentation, e.g., 1.8.')
     parser.add_argument('--threshold', type=float, required=True, help='Threshold for detection.')
-    parser.set_defaults(func=main)
+    parser.add_argument('--xmlToDataframe', type=str, help='Convert XML to DataFrame and print a portion of the results')
+    parser.set_defaults(func=handle_detect)
+
+def handle_detect(args):
+    if args.xmlToDataframe:
+        xmlToDataframe(args.xmlToDataframe)
+    else:
+        main(args)
 
 def main(args):
     """

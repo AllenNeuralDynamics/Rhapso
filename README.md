@@ -377,3 +377,18 @@ Rhapso detect --i 's3://data.zarr' --o 's3://output/my_dataset.xml'
 ### To Do:
 - Setup and add Tests 
 - Improve `setup.py` to include more metadata details about this package.
+
+
+### Example Commands:
+```sh
+
+# Example script run for import method
+python example.py 
+
+# Run locally with local xml file
+Rhapso --xmlToDataframe /mnt/c/Users/marti/Documents/Allen/repos/Rhapso-Sample-Data/IP_TIFF_XML/dataset.xml
+
+# Run locally with cloud s3 xml file (must run aws configure first, and give iam access with correct s3 permission) 
+Rhapso --xmlToDataframe s3://rhapso-dev/rhapso-sample-data/dataset.xml
+
+```

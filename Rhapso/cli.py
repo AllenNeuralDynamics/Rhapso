@@ -1,27 +1,30 @@
 import argparse
-from Rhapso.detection import interest_points
-from Rhapso.fusion import affine_fusion
-from Rhapso.matching import feature_matching
-from Rhapso.solving import solver  # Import the solver module
+from Rhapso.utils import xmlToDataframe
+from Rhapso.data_preparation.xml_to_dataframe import XMLToDataFrame
+from Rhapso.detection.overlap_detection import OverlapDetection
+from Rhapso import __version__
 
 def main():
     parser = argparse.ArgumentParser(
         description="Rhapso CLI - Image processing tool for detection, matching, solving, and fusion."
     )
-    subparsers = parser.add_subparsers(title="Commands", dest="command")
 
-    # Dynamically add parsers from each module
-    interest_points.add_parser(subparsers)
-    affine_fusion.add_parser(subparsers)
-    feature_matching.add_parser(subparsers)
-    solver.add_parser(subparsers)  # Register the 'solve' command here
-    
+    # Add flags directly
+    parser.add_argument('--xmlToDataframe', type=str, help='Convert XML to DataFrame and print a portion of the results')
+    parser.add_argument('--runOverlapDetection', action='store_true', help='Run overlap detection.')
+    parser.add_argument('-v', '--version', action='version', version=f'Rhapso {__version__}', help='Show the version of Rhapso')
+
     # Parse arguments and call the corresponding function
     args = parser.parse_args()
-    if hasattr(args, 'func'):
-        args.func(args)
-    else:
-        parser.print_help()
+    if args.xmlToDataframe:
+        dataframes = xmlToDataframe(args.xmlToDataframe, XMLToDataFrame)
+        for name, df in dataframes.items():
+            print(f"DataFrame: {name}")
+            print(df.info())
+            print(df.head())
+    if args.runOverlapDetection:
+        overlap_detection = OverlapDetection()
+        overlap_detection.run()
 
 if __name__ == "__main__":
     main()
