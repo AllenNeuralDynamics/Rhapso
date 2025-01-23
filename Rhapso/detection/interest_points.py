@@ -1,5 +1,5 @@
 import argparse
-from Rhapso.data_preparation.utils import xml_to_dataframe
+from Rhapso.utils import xml_to_dataframe
 
 def add_parser(subparsers):
     """

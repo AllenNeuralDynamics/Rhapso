@@ -1,7 +1,7 @@
 import pandas as pd
 import xml.etree.ElementTree as ET
 
-# This component recieves an XML file containing Tiff or Zarr image metadata and converts it into several Dataframes
+# This component receives an XML file containing Tiff or Zarr image metadata and converts it into several Dataframes
 
 class XMLToDataFrame:
     def __init__(self, xml_file):
