@@ -1,4 +1,4 @@
-__version__ = "0.1.1"
+__version__ = "0.0.1"
 
 from .data_preparation.xml_to_dataframe import XMLToDataFrame
 from .detection.overlap_detection import OverlapDetection
