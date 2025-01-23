@@ -28,10 +28,16 @@ rhapso/
 ├── Rhapso/                      # Main package directory
 │   ├── __init__.py              # Package initialization
 │   ├── cli.py                   # Command-line interface entry point
+│   ├── pipeline.py              # Pipeline demo/example file
 │
 │   ├── detection/               # Detection algorithms
 │   │   ├── __init__.py
-│   │   └── interest_points.py   # Interest point detection
+│   │   ├── save_interest_points.py  # Save interest points
+│   │   ├── overlap_detection.py     # Overlap detection
+│   │   ├── interest_points.py       # Interest point detection CLI
+│   │   ├── interest_point_detection.py  # Interest point detection logic
+│   │   ├── filtering_and_optimization.py  # Filtering and optimization
+│   │   └── advanced_refinement.py    # Advanced refinement
 │
 │   ├── fusion/                  # Fusion methods
 │   │   ├── __init__.py
@@ -43,13 +49,16 @@ rhapso/
 │
 │   ├── solving/                 # Solvers for optimization
 │   │   ├── __init__.py
-│   │   └── solver.py            # Solve transformations
+│   │   └── solver.py  
+
+│   ├── data_preparation/        # Data preparation methods
+│   │   ├── __init__.py
+│   │   ├── xml_to_dataframe.py  # XML to DataFrame conversion
+│   │   └── dataframe_to_xml.py  # DataFrame to XML conversion
 │
 ├── tests/                       # Unit tests for each module
 │   ├── test_detection.py
-│   ├── test_fusion.py
-│   ├── test_matching.py
-│   ├── test_solving.py
+│   ├── test_data_preparation.py
 │   └── __init__.py
 │
 ├── setup.py                     # Package installation
