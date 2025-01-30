@@ -391,4 +391,23 @@ Rhapso --xmlToDataframe /mnt/c/Users/marti/Documents/Allen/repos/Rhapso-Sample-D
 # Run locally with cloud s3 xml file (must run aws configure first, and give iam access with correct s3 permission) 
 Rhapso --xmlToDataframe s3://rhapso-dev/rhapso-sample-data/dataset.xml
 
+# Run overlap detection locally with a local xml file
+Rhapso --xmlToDataframe ../../demo/dataset.xml --runOverlapDetection
+
+# Run overlap detection locally with a aws s3 cloud xml file
+Rhapso --xmlToDataframe s3://rhapso-dev/rhapso-sample-data/dataset.xml --runOverlapDetection
+```
+Run overlap detection in Python script:
+```
+import Rhapso
+
+# Call the xmlToDataframe function
+# myDataframe = Rhapso.xmlToDataframe("/mnt/c/Users/marti/Documents/Allen/repos/Rhapso-Sample-Data/IP_TIFF_XML/dataset.xml")
+myDataframe = Rhapso.xmlToDataframe("s3://rhapso-dev/rhapso-sample-data/dataset.xml")
+print('myDataframe = ', myDataframe)
+
+# Call the runOverlapDetection function
+overlapDetection = Rhapso.OverlapDetection()
+output = overlapDetection.run(myDataframe)
+print("Overlap Detection Output: ", output)
 ```

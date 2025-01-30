@@ -76,7 +76,7 @@ def main(file_location):
 
     # TRANSFORMS - call custom transforms here 
     overlap_detection = OverlapDetection()
-    overlap_detection.run()
+    overlap_detection.run(dataframes)
 
     # interest_point_detection = InterestPointDetection()
     # interest_point_detection.run()
@@ -99,4 +99,4 @@ s3_url = "s3://rhapso-dev/rhapso-sample-data/dataset.xml"
 local_xml_file = "/mnt/c/Users/marti/Documents/Allen/repos/Rhapso-Sample-Data/IP_TIFF_XML/dataset.xml"
 
 # main(s3_url)  
-main(local_xml_file)  
+main(local_xml_file)
