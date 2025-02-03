@@ -17,8 +17,11 @@ class OverlapDetection():
         new_size = (image.width // factor, image.height // factor)
         return image.resize(new_size, Image.LANCZOS)  
 
-    def run(self):
+    def run(self, dataframe):
+        print("Running overlap detection with the following dataframe:")
+        print(dataframe)
         original_image = self.create_dummy_image((100,100), (0,0,0))
         original_image.show(title="Original Image")
         downsampled_image = self.downsample_image(original_image, factor=2)
         downsampled_image.show(title="Downsampled Image")
+        return "Overlap detection completed"
