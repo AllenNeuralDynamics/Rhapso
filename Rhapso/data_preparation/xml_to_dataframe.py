@@ -1,7 +1,8 @@
 import pandas as pd
 import xml.etree.ElementTree as ET
 
-# This component receives an XML file containing Tiff or Zarr image metadata and converts it into several Dataframes
+# This component recieves an XML file containing Tiff or Zarr image metadata and converts 
+# it into several Dataframes
 
 class XMLToDataFrame:
     def __init__(self, xml_file):
@@ -78,15 +79,18 @@ class XMLToDataFrame:
         viewregistrations_data = []
         
         for vr in root.findall('.//ViewRegistration'):
-            view_transforms = vr.find('.//ViewTransform')
-            affine = view_transforms.find('affine').text.replace('\n', '').replace(' ', ', ')
-            viewregistrations_data.append({
-                'timepoint': vr.get('timepoint'),
-                'setup': vr.get('setup'),
-                'type': view_transforms.get('type'),
-                'name': view_transforms.find('Name').text,
-                'affine': affine
-            })
+            timepoint = vr.get('timepoint')
+            setup = vr.get('setup')
+
+            for vt in vr.findall('.//ViewTransform'):
+                affine_text = vt.find('affine').text.replace('\n', '').replace(' ', ', ')
+                viewregistrations_data.append({
+                    'timepoint': timepoint,
+                    'setup': setup,
+                    'type': vt.get('type'),
+                    'name': vt.find('Name').text.strip(),
+                    'affine': affine_text
+                })
         
         return pd.DataFrame(viewregistrations_data)
     
