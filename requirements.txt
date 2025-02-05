@@ -5,4 +5,4 @@ opencv-python
 scikit-image
 boto3
 pandas
-bioio
+bioio-tifffile
