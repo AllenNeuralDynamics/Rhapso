@@ -6,3 +6,4 @@ scikit-image
 boto3
 pandas
 bioio-tifffile
+bioio

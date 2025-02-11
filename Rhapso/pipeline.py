@@ -2,10 +2,11 @@ import boto3
 import io
 from urllib.parse import urlparse
 from data_preparation.xml_to_dataframe import XMLToDataFrame
-from data_preparation.tiff_image_reader import TiffImageReader
 from detection.view_transform_models import ViewTransformModels
 from detection.overlap_detection import OverlapDetection
-# from detection.interest_point_detection import InterestPointDetection
+from detection.python.interest_point_detection import PythonInterestPointDetection
+from detection.spark_etl.spark_pipeline import SparkPipeline
+from detection.aws_glue.glue_pipeline import GluePipeline
 # from detection.advanced_refinement import AdvancedRefinement
 # from detection.filtering_and_optimizing import FilteringAndOptimization
 # from detection.save_interest_points import SaveInterestPoints
@@ -36,50 +37,65 @@ def print_dataframe_info(dataframes):
         print(df.info())
         print(df.head())
 
-def main(file_location):
-
-    prefix = 'filepath/to/image/data'
-    dsxy = 4                    # amount downsampling x and y
-    dsz = 2                     # amount downsampling z
+def main(xml_key, image_data_prefix, dsxy, dsz, **kwargs):
     
-    if file_location.startswith("s3://"):
+    """Fetch XML file from specified storage."""
+    if image_data_prefix.startswith("s3://"):                  
+        # from s3
         s3 = boto3.client('s3')
         
-        # Parse the S3 URL
-        parsed_url = urlparse(file_location)
+        parsed_url = urlparse(image_data_prefix)
         bucket_name = parsed_url.netloc
-        input_file = parsed_url.path.lstrip('/')
+        prefix = parsed_url.path.lstrip('/')
         
-        # Fetch XML from S3
-        xml_file = fetch_from_s3(s3, bucket_name, input_file)
+        if not prefix.endswith('/'):
+            prefix += '/'
+        
+        full_xml_key = f"{prefix}{s3_xml_key_tiff}"
+        xml_file = fetch_from_s3(s3, bucket_name, full_xml_key)
     else:
-        # Fetch XML from local file
-        xml_file = fetch_from_local(file_location)
+        # from local file
+        image_data_key = image_data_prefix + xml_key
+        xml_file = fetch_from_local(image_data_key)
 
+    
     # INTEREST POINT DETECTION
     # --------------------------
 
+    strategy_type = kwargs.pop('strategy_type', None)
+
     # Load XML data into dataframes
-    processor = XMLToDataFrame(xml_file)
-    dataframes = processor.run()
+    if strategy_type == 'python':          
+        processor = XMLToDataFrame(xml_file)
+        dataframes = processor.run()
+    elif strategy_type == 'aws_glue':
+        print("hi")
+    elif strategy_type == 'spark-etl':
+        # TODO - update to utilize aws glue crawler and classifier        
+        processor = XMLToDataFrame(xml_file)
+        dataframes = processor.run()
+    print("XML to dataframes done")
 
     # Create view_transform_matrices (affine, inverse.affine, degree, inverse.degree)
     create_models = ViewTransformModels(dataframes)
     view_transform_matrices = create_models.run()
+    print("Created view transform models")
 
     # Use view_transform_matrices to calculate bounding boxes and find areas of overlap
-    overlap_detection = OverlapDetection(view_transform_matrices, dataframes, dsxy, dsz, prefix)
+    overlap_detection = OverlapDetection(view_transform_matrices, dataframes, dsxy, dsz, image_data_prefix)
     overlapping_area = overlap_detection.run()
+    print("Found areas of overlap")
 
-    # Load image data
-    image_reader = TiffImageReader(dataframes, dsxy, dsz, prefix)                              
-    images = image_reader.run()
-    # image_reader = ZarrImageReader(dataframes)                              
-    # images = image_reader.run()
-
-    # Use image data and areas of overlap to find interest points - custom transform (parallel processing)
-    # interest_point_detection = InterestPointDetection(overlapping_area, images)
-    # interest_point_detection.run()
+    # Use image data and areas of overlap to find interest points - (custom transform) 
+    if strategy_type == "python":
+        strategy = PythonInterestPointDetection(dataframes, overlapping_area, dsxy, dsz, image_data_prefix, **kwargs)
+        strategy.run()
+    elif strategy_type == "aws-glue":
+        strategy = GluePipeline(dataframes, overlapping_area, dsxy, dsz, image_data_prefix, **kwargs)
+        # TODO - implement
+    elif strategy_type == "spark-etl":
+        strategy = SparkPipeline(dataframes, overlapping_area, dsxy, dsz, image_data_prefix, **kwargs)
+        strategy.run()
 
     # filtering_and_optimizing = FilteringAndOptimizing()
     # filtering_and_optimizing.run()
@@ -104,13 +120,57 @@ def main(file_location):
     # --------------------------
 
 
-s3_url = "s3://rhapso-dev/rhapso-sample-data/dataset.xml"
-local_xml_file = "/mnt/c/Users/marti/Documents/Allen/repos/Rhapso-Sample-Data/IP_TIFF_XML/dataset.xml"
+# BASE PARAMS
+# ------------------------------
 
-# bucket_name = "rhapso-tif-sample"
-# # bucket_name = "rhapso-zarr-sample"
-# file_path = "IP_TIFF_XML/dataset.xml"
-# # file_path = "dataset.xml"
+# s3 storage - tiff
+s3_xml_key_tiff = 'dataset.xml'
+s3_image_data_prefix_tiff = 's3://rhapso-tif-sample/IP_TIFF_XML/'
 
-# main(s3_url)  
-main(local_xml_file)
+# s3 storage - zarr
+s3_xml_key_zarr = 'dataset.xml'
+s3_image_data_prefix_zarr = 's3://rhapso-zar-sample/'
+
+# local storage - tiff
+local_xml_key_tiff = 'dataset.xml'
+# local_image_data_prefix_tiff = '/mnt/c/Users/marti/Documents/Allen/repos/Rhapso-Sample-Data/IP_TIFF_XML/'
+local_image_data_prefix_tiff = '/Users/seanfite/Desktop/AllenInstitute/Rhapso/Data/IP_TIFF_XML/'
+
+# local storage - zarr
+local_xml_key_zarr = 'dataset.xml'
+local_image_data_prefix_zarr = '/Users/seanfite/Desktop/AllenInstitute/Rhapso/Data/Zarr/'
+
+# downsampling
+dsxy = 4
+dsz = 4
+
+# DYNAMIC PARAMS
+# -------------------------------
+
+# Python
+python_params = {
+    "strategy_type": "python", 
+}
+
+# Spark ETL 
+spark_params = {
+    "rhapso_prefix": '/Users/seanfite/Desktop/Rhapso',
+    'bucket_name': 'interest-point-detection',
+    "strategy_type": "spark-etl", 
+    "region": 'us-west-2',
+    "job_name": 'mouse-134548584',
+    "role": 'arn:aws:iam::443370675126:role/rhapso-s3',
+    "worker_type": 'G.1X',
+    "number_of_workers": 10,
+    "glue_version": '2.0',
+    "job_timeout": 480,
+    "retries": 3,
+    "job_bookmark_option": 'disable',
+    "flex_execution": False
+}
+
+# TODO
+# glue_params = {
+# }
+
+main(local_xml_key_tiff, local_image_data_prefix_tiff, dsxy, dsz, **python_params)
