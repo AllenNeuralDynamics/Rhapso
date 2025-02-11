@@ -12,12 +12,17 @@ class OverlapDetection():
         self.dsxy, self.dsz = dsxy, dsz
         self.prefix = prefix
         self.to_process = {}
+        self.image_shape_cache = {}
     
     def load_image_metadata(self, file_path):
+        # using a cache system to optimize repeating requests
+        if file_path in self.image_shape_cache:
+            return self.image_shape_cache[file_path]
         img = BioImage(file_path, reader=bioio_tifffile.Reader)
         data = img.get_dask_stack()
-        self.image_data = np.zeros(data.shape[3:], dtype=data.dtype)
-        return data
+        shape = data.shape
+        self.image_shape_cache[file_path] = shape
+        return shape
 
     def create_mipmap_transform(self):
         scale_matrix = np.array([
@@ -120,8 +125,7 @@ class OverlapDetection():
             all_intervals = []
             
             # get inverted matrice of downsampling
-            img_base = self.load_image_metadata(self.prefix + row_i['file_path'])
-            dim_base = img_base.shape
+            dim_base = self.load_image_metadata(self.prefix + row_i['file_path'])
             downsampled_dim_base, mipmap_of_downsample = self.open_and_downsample(dim_base)
             t1 = self.get_inverse_mipmap_transform(mipmap_of_downsample) 
 
@@ -130,8 +134,7 @@ class OverlapDetection():
                 if i == j: continue
                 
                 view_id_other = f"timepoint: {row_j['timepoint']}, setup: {row_j['view_setup']}"
-                img_other = self.load_image_metadata(self.prefix + row_j['file_path'])
-                dim_other = img_other.shape
+                dim_other = self.load_image_metadata(self.prefix + row_j['file_path'])
                 
                 # get transforms matrix from both view_ids and downsampling matrices
                 matrix = self.transform_models.get(view_id)
@@ -156,7 +159,7 @@ class OverlapDetection():
                         'span': self.calculate_new_dims(intersect[0], intersect[1])
                     }
                     all_intervals.append(intersect_dict)        
-                    
+    
             self.to_process[view_id] = all_intervals
                 
     def run(self):
