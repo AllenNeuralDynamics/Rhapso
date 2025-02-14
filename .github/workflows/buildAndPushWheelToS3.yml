@@ -1,7 +1,7 @@
 name: Build and Push .whl to S3
 
 on:
-  workflow_dispatch: # This allows the workflow to be triggered manually from the GitHub Actions UI
+  workflow_dispatch: # Allows the workflow to be triggered manually from the GitHub Actions UI
 
 jobs:
   deploy:
@@ -12,7 +12,7 @@ jobs:
       - name: Checkout Main Branch
         uses: actions/checkout@v2
         with:
-          ref: main  # Ensure we are checking out the main branch
+          ref: main
 
       # Step 2: Set up Python environment
       - name: Set up Python
@@ -39,7 +39,7 @@ jobs:
           aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
           aws-region: us-east-1
 
-      # Step 6: Upload only the .whl file(s) to the S3 bucket
+      # Step 6: Upload only the .whl file(s) to the specified S3 location
       - name: Upload .whl to S3
         run: |
-          aws s3 cp dist/*.whl s3://your-s3-bucket-name/ --recursive
+          aws s3 cp dist/*.whl s3://rhapso-dev/rhapso-whl-package/ --acl public-read
