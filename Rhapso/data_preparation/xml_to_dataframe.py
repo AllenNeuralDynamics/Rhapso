@@ -11,14 +11,17 @@ class XMLToDataFrame:
     def parse_image_loader_zarr(self, root):
         image_loader_data = []
         
-        for il in root.findall('.//ImageLoader'):
-            s3bucket = il.find('s3bucket').text if il.find('s3bucket') is not None else None
-            zarr_path = il.find('zarr').text if il.find('zarr') is not None else None
+        for il in root.findall('.//ImageLoader/zgroups/zgroup'):
+            view_setup = il.get('setup')
+            timepoint = il.get('timepoint')
+            file_path = il.find('path').text if il.find('path') is not None else None
+            
             image_loader_data.append({
-                'format': il.get('format'),
-                'version': il.get('version'),
-                's3bucket': s3bucket,
-                'zarr': zarr_path
+                'view_setup': view_setup,
+                'timepoint': timepoint,
+                'series': 1,
+                'channel': 1,
+                'file_path': file_path
             })
         
         return pd.DataFrame(image_loader_data)
@@ -127,4 +130,3 @@ class XMLToDataFrame:
             'view_registrations': view_registrations_df,
             'view_interest_points': view_interest_points_df
         }
-
