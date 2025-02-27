@@ -42,4 +42,4 @@ jobs:
       # Step 6: Upload only the .whl file(s) to the specified S3 location
       - name: Upload .whl to S3
         run: |
-          aws s3 cp dist/*.whl s3://rhapso-dev/rhapso-whl-package/ --acl public-read
+          aws s3 cp dist/*.whl s3://rhapso-dev/rhapso-whl-package/
