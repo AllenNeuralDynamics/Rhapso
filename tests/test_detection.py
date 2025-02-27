@@ -1,5 +1,5 @@
 import unittest
-from Rhapso.detection.interest_points import main
+from Rhapso.detection.interest_point_detection import main
 
 class TestDetection(unittest.TestCase):
     def test_main(self):

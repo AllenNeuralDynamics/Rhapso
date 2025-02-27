@@ -1,27 +1,41 @@
 import numpy as np
 from bioio import BioImage
 import bioio_tifffile
+import zarr
+import s3fs
+import dask.array as da
 
 # This components uses transforms models to find areas of overlap between image tiles
 
 class OverlapDetection():
-
-    def __init__(self, transform_models, dataframes, dsxy, dsz, prefix):
+    def __init__(self, transform_models, dataframes, dsxy, dsz, prefix, file_type):
         self.transform_models = transform_models
         self.image_loader_df = dataframes['image_loader']
         self.dsxy, self.dsz = dsxy, dsz
         self.prefix = prefix
+        self.file_type = file_type
         self.to_process = {}
         self.image_shape_cache = {}
     
     def load_image_metadata(self, file_path):
-        # using a cache system to optimize repeating requests
         if file_path in self.image_shape_cache:
             return self.image_shape_cache[file_path]
-        img = BioImage(file_path, reader=bioio_tifffile.Reader)
-        data = img.get_dask_stack()
-        shape = data.shape
-        self.image_shape_cache[file_path] = shape
+        
+        if self.file_type == 'zarr':
+            s3 = s3fs.S3FileSystem(anon=False)
+            store = s3fs.S3Map(root=file_path, s3=s3)
+            zarr_array = zarr.open(store, mode='r')
+            dask_array = da.from_zarr(zarr_array)
+            dask_array = da.expand_dims(dask_array, axis=2)
+            shape = dask_array.shape
+            self.image_shape_cache[file_path] = shape
+        elif self.file_type == 'tiff':
+            img = BioImage(file_path, reader=bioio_tifffile.Reader)
+            data = img.get_dask_stack()
+            # (1, 1, 1, 91, 1040, 1388)
+            shape = data.shape
+            self.image_shape_cache[file_path] = shape
+        
         return shape
 
     def create_mipmap_transform(self):
@@ -31,6 +45,7 @@ class OverlapDetection():
             [0, 0, self.dsz, 0],  
             [0, 0, 0, 1]          
         ])
+        
         return scale_matrix
     
     def open_and_downsample(self, shape):
@@ -66,6 +81,7 @@ class OverlapDetection():
         except np.linalg.LinAlgError:
             print("Matrix cannot be inverted.")
             return None
+        
         return inverse_scale_matrix
     
     def estimate_bounds(self, a, interval):
@@ -75,9 +91,14 @@ class OverlapDetection():
         t0, t1, t2 = 0, 0, 0
         
         # set upper bounds
-        s0 = interval[5] - t0
-        s1 = interval[4] - t1
-        s2 = interval[3] - t2
+        if self.file_type == 'zarr':
+            s0 = interval[4] - t0
+            s1 = interval[3] - t1
+            s2 = interval[2] - t2 
+        elif self.file_type == 'tiff':
+            s0 = interval[5] - t0
+            s1 = interval[4] - t1
+            s2 = interval[3] - t2
 
         # get dot product of uppper bounds and inverted downsampling matrix
         matrix = np.array(a) 
@@ -107,6 +128,7 @@ class OverlapDetection():
     def calculate_intersection(self, bbox1, bbox2):
         intersect_min = np.maximum(bbox1[0], bbox2[0])
         intersect_max = np.minimum(bbox1[1], bbox2[1])
+        
         return (intersect_min, intersect_max)
 
     def calculate_new_dims(self, lower_bound, upper_bound):
@@ -116,6 +138,7 @@ class OverlapDetection():
                 new_dims.append(ub + 1)
             else:
                 new_dims.append(ub - lb)
+        
         return new_dims
 
     def find_overlapping_area(self):
@@ -125,7 +148,11 @@ class OverlapDetection():
             all_intervals = []
             
             # get inverted matrice of downsampling
-            dim_base = self.load_image_metadata(self.prefix + row_i['file_path'])
+            if self.file_type == 'zarr':
+                dim_base = self.load_image_metadata(self.prefix + row_i['file_path'] + f'/{4}')
+            elif self.file_type == 'tiff':
+                dim_base = self.load_image_metadata(self.prefix + row_i['file_path'])
+
             downsampled_dim_base, mipmap_of_downsample = self.open_and_downsample(dim_base)
             t1 = self.get_inverse_mipmap_transform(mipmap_of_downsample) 
 
@@ -134,7 +161,11 @@ class OverlapDetection():
                 if i == j: continue
                 
                 view_id_other = f"timepoint: {row_j['timepoint']}, setup: {row_j['view_setup']}"
-                dim_other = self.load_image_metadata(self.prefix + row_j['file_path'])
+
+                if self.file_type == 'zarr':
+                    dim_other = self.load_image_metadata(self.prefix + row_j['file_path'] + f'/{4}')
+                elif self.file_type == 'tiff':
+                    dim_other = self.load_image_metadata(self.prefix + row_j['file_path'])
                 
                 # get transforms matrix from both view_ids and downsampling matrices
                 matrix = self.transform_models.get(view_id)
