@@ -57,7 +57,8 @@ def main():
         {'flags': ['-rmif', '--ransacMinInlierFactor'], 'type': float, 'help': 'RANSAC min inlier factor.', 'default': 3.0},
         {'flags': ['-ime', '--icpMaxError'], 'type': float, 'help': 'ICP max error in pixels.', 'default': 5.0},
         {'flags': ['-iit', '--icpIterations'], 'type': int, 'help': 'Max number of ICP iterations.', 'default': 200},
-        {'flags': ['--icpUseRANSAC'], 'action': 'store_true', 'help': 'ICP uses RANSAC at every iteration to filter correspondences.', 'default': False}
+        {'flags': ['--icpUseRANSAC'], 'action': 'store_true', 'help': 'ICP uses RANSAC at every iteration to filter correspondences.', 'default': False},
+        {'flags': ['--tiffPath'], 'type': str, 'help': 'Path to the TIFF file for feature matching.', 'required': True}
     ]
 
     solver_commands = []

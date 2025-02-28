@@ -115,7 +115,7 @@ Rhapso detect --sigma 1.8 --threshold 0.05 --medianFilter 10
 
 2. **Match Features**
 ```bash
-Rhapso match --method ORB --distance 0.7 --verbose
+Rhapso match --x debug --l debug --method ICP --tiffPath "/home/martin/Documents/Allen/BigStitcherSpark Example Datasets/Interest Points (unaligned)/IP_TIFF_XML (after detection)/spim_TL18_Angle0.tif"
 ```
 
 3. **Affine Fusion**
