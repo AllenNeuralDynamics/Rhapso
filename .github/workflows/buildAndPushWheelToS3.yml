@@ -1,18 +1,23 @@
 name: Build and Push .whl to S3
 
 on:
-  workflow_dispatch: # Allows the workflow to be triggered manually from the GitHub Actions UI
+  workflow_dispatch:
+    inputs:
+      branch:
+        description: 'Branch name'
+        required: true
+        default: 'main'
 
 jobs:
   deploy:
     runs-on: ubuntu-latest
 
     steps:
-      # Step 1: Checkout the main branch
-      - name: Checkout Main Branch
+      # Step 1: Checkout the specified branch
+      - name: Checkout Branch
         uses: actions/checkout@v2
         with:
-          ref: main
+          ref: ${{ github.event.inputs.branch }}
 
       # Step 2: Set up Python environment
       - name: Set up Python
@@ -26,10 +31,15 @@ jobs:
           python -m pip install --upgrade pip
           pip install setuptools wheel twine
 
-      # Step 4: Build the .whl file
+      # Step 4: Build the .whl file with branch name suffix
       - name: Build the distribution package
         run: |
           python setup.py sdist bdist_wheel
+          BRANCH_NAME=${{ github.event.inputs.branch }}
+          BRANCH_NAME_SANITIZED=$(echo "$BRANCH_NAME" | tr '/' '_' | tr '[:upper:]' '[:lower:]')
+          ORIGINAL_WHL=$(ls dist/*.whl)
+          NEW_WHL=$(echo $ORIGINAL_WHL | sed "s/\.whl/_${BRANCH_NAME_SANITIZED}.whl/")
+          mv "$ORIGINAL_WHL" "$NEW_WHL"
 
       # Step 5: Configure AWS CLI with credentials
       - name: Configure AWS CLI
@@ -39,7 +49,7 @@ jobs:
           aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
           aws-region: us-west-2
 
-      # Step 6: Upload only the .whl file(s) to the specified S3 location
+      # Step 6: Upload the renamed .whl file to S3
       - name: Upload .whl to S3
         run: |
           aws s3 cp dist/*.whl s3://rhapso-dev/rhapso-whl-package/
