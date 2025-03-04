@@ -3,18 +3,14 @@ class AdvancedRefinement:
     def __init__(
         self,
         result,
-        store_intensities,
-        max_spots,
-        max_spots_per_overlap,
         to_process,
-        max_interval_size,
     ):
         self.result = result  ## This is an array of [[[viewID],[Interval], [interestpoints],[intensities]]]
-        self.store_intensities = store_intensities
-        self.max_spots = max_spots
-        self.max_spots_per_overlap = max_spots_per_overlap
+        self.store_intensities = False
+        self.max_spots = 100
+        self.max_spots_per_overlap = False
         self.to_process = to_process
-        self.max_interval_size = max_interval_size
+        self.max_interval_size = 0
 
         self.interest_points_per_view_id = {}
         self.intensities_per_view_id = {}
@@ -131,12 +127,3 @@ def filter_points(interest_points, intensities, max_spots):
         interest_points.append((ip.location))
 
     return interest_points, intensities
-
-
-# process_results(result)
-# Example usage:
-# create instance of InterestPointsProcessor with appropriate arguments
-# call run method on the instance
-
-
-# advanced_refinements(data)
