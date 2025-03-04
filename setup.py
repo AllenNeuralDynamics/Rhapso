@@ -18,6 +18,7 @@ setup(
         'bioio-tifffile',
         'tifffile==2025.1.10',
         'opencv-python',  
+        'pyarrow',
     ],
     entry_points={
         "console_scripts": [

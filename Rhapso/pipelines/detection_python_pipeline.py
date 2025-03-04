@@ -1,13 +1,20 @@
-import boto3
-import io
 from data_preparation.xml_to_dataframe import XMLToDataFrame
 from detection.view_transform_models import ViewTransformModels
 from detection.overlap_detection import OverlapDetection
-from detection.interest_point_detection import PythonInterestPointDetection
+from data_preparation.load_image_data import LoadImageData
+from detection.difference_of_gaussian import DifferenceOfGaussian
+from data_preparation.zarr_image_reader import ZarrImageReader
 # from interest_point_detection.advanced_refinement import AdvancedRefinement
 # from interest_point_detection.filtering_and_optimizing import FilteringAndOptimization
 # from interest_point_detection.save_interest_points import SaveInterestPoints
 # from data_preparation.dataframe_to_xml import DataFrameToXML
+import boto3
+import io
+from dask import delayed
+from dask import compute
+from pyspark.sql import SparkSession
+import base64
+import numpy as np
 
 # Development testing pipeline / deployment template
 
@@ -57,18 +64,47 @@ print("XML loaded")
 # Create view transform matrices 
 create_models = ViewTransformModels(dataframes)
 view_transform_matrices = create_models.run()
-print("Transforms Models have been created")
+print("Transforms models have been created")
 
 # Use view transform matrices to find areas of overlap
 overlap_detection = OverlapDetection(view_transform_matrices, dataframes, dsxy, dsz, prefix, file_type)
 overlapping_area = overlap_detection.run()
-print("Overlap Detection is done")
+print("Overlap detection is done")
 
-# Use image data and areas of overlap to find interest points - (custom transform) 
-interest_point_detection = PythonInterestPointDetection(dataframes, overlapping_area, dsxy, dsz, prefix, file_type, image_bucket_name)
-interest_points = interest_point_detection.run()
+# Load images
+images_loader = LoadImageData(dataframes, overlapping_area, dsxy, dsz, prefix, file_type)
+all_image_data = images_loader.run()
+print("Loaded image data")
+
+# Detect interest points using DoG algorithm
+difference_of_gaussian = DifferenceOfGaussian()
+
+# BASE PYTHON VERSION - SLOWEST RUN TIME
+# def interest_point_detection(image_data):
+#     interval_key = image_data['interval_key']
+#     image_chunk = image_data['image_chunk']
+#     interest_points = difference_of_gaussian.run(image_chunk)
+#     return interval_key, interest_points
+# mapped_results = map(interest_point_detection, all_image_data)
+# interest_points = list(mapped_results)
+
+# DASK MAP VERSION (SINGLE THREAD INTERPRETER ONLY) - 10X FASTER
+interest_points = {}
+delayed_results = []
+delayed_keys = {} 
+for image_data in all_image_data:
+    interval_key = image_data['interval_key']
+    image_chunk = image_data['image_chunk']
+    dog_result = delayed(difference_of_gaussian.run)(image_chunk)
+    delayed_results.append(dog_result)
+    delayed_keys[dog_result] = interval_key
+computed_results = compute(*delayed_results) 
+for result, task in zip(computed_results, delayed_results):
+    interval_key = delayed_keys[task]
+    interest_points[interval_key] = result 
+
 print(interest_points)
-print("Interest Point Detection is done")
+print("Interest point detection is done")
 
 # filtering_and_optimizing = FilteringAndOptimizing(interest_points)
 # filtering_and_optimizing.run()
@@ -87,3 +123,5 @@ print("Interest Point Detection is done")
 
 # FUSION
 # --------------------------
+
+# TODO - Implement fetching of fused image data from s3

@@ -1,5 +1,5 @@
 import unittest
-from Rhapso.detection.interest_point_detection import main
+from Rhapso.detection.difference_of_gaussian import main
 
 class TestDetection(unittest.TestCase):
     def test_main(self):

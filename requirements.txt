@@ -7,3 +7,4 @@ boto3
 pandas
 bioio-tifffile
 bioio
+pyarrow
