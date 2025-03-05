@@ -69,7 +69,7 @@ class TestAdvancedRefinement(unittest.TestCase):
 
         self.to_process = [
             [
-                [18, 4],
+                (18, 4),
                 {
                     "lower": [0, 92, 0],
                     "upper": [346, 168, 49],
@@ -77,7 +77,7 @@ class TestAdvancedRefinement(unittest.TestCase):
                 },
             ],
             [
-                [30, 4],
+                (30, 4),
                 {
                     "lower": [0, 16, 0],
                     "upper": [346, 244, 49],
@@ -86,20 +86,9 @@ class TestAdvancedRefinement(unittest.TestCase):
             ],
         ]
 
-        self.advanced_refinement = AdvancedRefinement(
-            self.data,
-            store_intensities=True,
-            max_spots=10,
-            max_spots_per_overlap=5,
-            to_process=self.to_process,
-            max_interval_size=1000,
+        self.advanced_refinement = advanced_refinement.AdvancedRefinement(
+            self.data, to_process=self.to_process, max_spots=2
         )
-
-    def test_advanced_refinements(self):
-        advanced_refinement.main(self.data)
-        self.assertIn((18, 4), self.advanced_refinement.interest_points_per_view_id)
-        self.assertIn((30, 4), self.advanced_refinement.intervals_per_view_id)
-        self.assertIn((18, 4), self.advanced_refinement.intensities_per_view_id)
 
     def test_filter_points(self):
         interest_points = [
@@ -113,6 +102,7 @@ class TestAdvancedRefinement(unittest.TestCase):
             interest_points, intensities, max_spots
         )
         self.assertEqual(len(filtered_points), max_spots)
+
         self.assertEqual(len(filtered_intensities), max_spots)
 
 

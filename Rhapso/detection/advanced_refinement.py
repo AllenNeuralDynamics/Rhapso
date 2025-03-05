@@ -1,24 +1,22 @@
 # TODO Correct for data structures from other detection.
+
+
+# See testfile for currect starting data structures.
 class AdvancedRefinement:
-    def __init__(
-        self,
-        result,
-        to_process,
-    ):
+    def __init__(self, result, to_process, max_spots):
         self.result = result  ## This is an array of [[[viewID],[Interval], [interestpoints],[intensities]]]
         self.store_intensities = False
-        self.max_spots = 100
+        self.max_spots = max_spots
         self.max_spots_per_overlap = False
         self.to_process = to_process
         self.max_interval_size = 0
-
         self.interest_points_per_view_id = {}
         self.intensities_per_view_id = {}
         self.intervals_per_view_id = {}
 
 
-def main(self, result):
-
+def consolidate_interest_points(self, result):
+    # Add ips, intervals and intensities to hashmap with viewID as key
     for view in result:
         view_id = tuple(view[0])
         points = view[2]
@@ -38,6 +36,7 @@ def main(self, result):
 
     view_ids = sorted(list(self.interest_points_per_view_id.keys()))
 
+    # max_spots_overlap is a set param
     if self.max_spot_per_overlap and self.max_spots > 0:
         ips_list = []
         intensities_list = []
@@ -76,18 +75,18 @@ def main(self, result):
         self.intensities_per_view_id[view_id].clear()
 
         for interval in interval_data:
-            inter = interval[0]
+            intervals = interval[0]
             ips = interval[1]
             intensity_list = interval[2]
 
             my_max_spots = round(
-                self.max_spots * (sum(inter["dimensions"]) / self.max_interval_size)
+                self.max_spots * (sum(intervals["dimensions"]) / self.max_interval_size)
             )
             if my_max_spots > 0 and my_max_spots < len(ips):
                 old_size = len(ips)
                 # filter points from ips, intensity_list, mymaxspots
-                inter, intensities_list = filter_points(
-                    inter,
+                intervals, intensities_list = filter_points(
+                    ips,
                     intensity_list,
                 )
                 print(
@@ -96,12 +95,12 @@ def main(self, result):
                     + " old Size:"
                     + old_size
                     + "interval: "
-                    + inter
+                    + intervals
                 )
             else:
                 print("NOT filtered interval")
             self.interest_points_per_view_id[view_id] += ips
-            self.intensities_per_view_id[view_id] += intervals_list
+            self.intensities_per_view_id[view_id] += intensities_list
     return (
         self.interest_points_per_view_id,
         self.intensities_per_view_id,
@@ -111,7 +110,7 @@ def main(self, result):
 
 def filter_points(interest_points, intensities, max_spots):
     combined_list = []
-    for i in len(range(interest_points)):
+    for i in range(len(interest_points)):
         combined_list.append((intensities[i], interest_points[i]))
         print((intensities[i], interest_points[i]))
 
@@ -120,10 +119,19 @@ def filter_points(interest_points, intensities, max_spots):
     interest_points.clear()
 
     # Add back the top max_spots elements
-    for i in range(min(max_spots, len(combined_list))):
-
+    for i in range(max_spots):
         intensity, ip = combined_list[i]
         intensities.append(intensity)
-        interest_points.append((ip.location))
+        interest_points.append((ip))
 
     return interest_points, intensities
+
+
+def run(self):
+    self.AdvancedRefinement()
+    self.consolidate_interest_point(self.data)
+    return self.to_process, (
+        self.interest_points_per_view_id,
+        self.intensities_per_view_id,
+        self.intervals_per_view_id,
+    )
