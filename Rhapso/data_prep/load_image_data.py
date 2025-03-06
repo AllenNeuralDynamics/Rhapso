@@ -1,7 +1,5 @@
-from data_preparation.tiff_image_reader import TiffImageReader  # python version wants this way
-from data_preparation.zarr_image_reader import ZarrImageReader  # ""
-# from ..data_preparation.zarr_image_reader import ZarrImageReader # glue version wants this way
-# from ..data_preparation.tiff_image_reader import TiffImageReader # ""
+from ..data_prep.tiff_image_reader import TiffImageReader 
+from ..data_prep.zarr_image_reader import ZarrImageReader  
 
 class LoadImageData:
     def __init__(self, dataframes, overlapping_area, dsxy, dsz, prefix, file_type):

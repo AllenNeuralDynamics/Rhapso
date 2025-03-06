@@ -7,20 +7,20 @@ from awsglue.job import Job
 from awsglue.utils import getResolvedOptions
 from awsglue.dynamicframe import DynamicFrame
 from pyspark.sql import SparkSession
-from Rhapso.data_preparation.xml_to_dataframe import XMLToDataFrame
+from Rhapso.data_prep.xml_to_dataframe import XMLToDataFrame
 from Rhapso.detection.view_transform_models import ViewTransformModels
 from Rhapso.detection.overlap_detection import OverlapDetection
-from Rhapso.data_preparation.load_image_data import LoadImageData
+from Rhapso.data_prep.load_image_data import LoadImageData
 from Rhapso.detection.difference_of_gaussian import DifferenceOfGaussian
-from Rhapso.data_preparation.serialize_image_chunks import SerializeImageChunks
-from Rhapso.data_preparation.deserialize_image_chunks import DeserializeImageChunks
-from Rhapso.data_preparation.glue_crawler import GlueCrawler
+from Rhapso.data_prep.serialize_image_chunks import SerializeImageChunks
+from Rhapso.data_prep.deserialize_image_chunks import DeserializeImageChunks
+from Rhapso.data_prep.glue_crawler import GlueCrawler
 import boto3
 import base64
 import numpy as np
 import io
 
-# Spark ETL testing pipeline - this script runs directly in AWS Glue
+# Spark ETL testing pipeline - this script runs in AWS Glue
 
 s3 = boto3.client('s3')
 
@@ -32,42 +32,32 @@ spark = SparkSession.builder.appName("Interest Point Detection").getOrCreate()
 job = Job(glueContext)
 job.init(args['JOB_NAME'], args)
 
-# BUCKET NAME
-xml_bucket_name = "rhapso-tif-sample"
-image_bucket_name = "aind-open-data"
-# xml_bucket_name = "rhapso-zar-sample"
-
-# FILE KEY
-xml_file_path = "IP_TIFF_XML/dataset.xml"
-# xml_file_path = "dataset.xml"
-
-# BUCKET PREFIX
-prefix = 's3://rhapso-tif-sample/IP_TIFF_XML/'
-# prefix = 's3://aind-open-data/exaSPIM_708365_2024-04-29_12-46-15/SPIM.ome.zarr'
-
 # DOWNSAMPLING
 dsxy = 4
 dsz = 2
-
-# FILE TYPE
-file_type = 'tiff'
-# file_type_zarr = 'zarr'
-
-# STRATEGY
 strategy = 'spark-etl'
 
-# PARQUET
+# SPARK ETL PARAMS
 parquet_bucket_path = 's3://interest-point-detection/ipd-staging/'
-
-# CRAWLER
-crawler_name = "InterestPointDetectionCrawler"
+crawler_name = "InterestPointDetectionCrawler2"
 crawler_s3_path = "s3://interest-point-detection/ipd-staging/"
-crawler_database_name = "interest_point_detection"
+crawler_database_name = "interest_point_detection2"
 crawler_iam_role = "arn:aws:iam::443370675126:role/rhapso-s3"
+glue_database = 'interest_point_detection2'
+glue_table_name = 'ipd_staging'
 
-# GLUE JOB
-glue_database = 'interest_point_detection'
-glue_table_name = 'idp_ipd_staging'
+# FILE TYPE - PICK ONE
+file_type = 'tiff'
+xml_bucket_name = "rhapso-tif-sample"
+image_bucket_name = "tiff-sample"
+prefix = 's3://rhapso-tif-sample/IP_TIFF_XML/'
+xml_file_path = "IP_TIFF_XML/dataset.xml"
+
+# file_type_zarr = 'zarr'
+# xml_bucket_name = "rhapso-zar-sample"
+# image_bucket_name = "aind-open-data"
+# prefix = 's3://aind-open-data/exaSPIM_708365_2024-04-29_12-46-15/SPIM.ome.zarr'
+# xml_file_path = "dataset.xml"
 
 def fetch_from_s3(s3, bucket_name, input_file):
     response = s3.get_object(Bucket=bucket_name, Key=input_file)
@@ -103,10 +93,10 @@ def fetch_from_s3(s3, bucket_name, input_file):
 # serialized_images_dyf = serialize_image_chunks.run()
 # print("Serialized image data")
 
-# # Create and start crawler
-# glue_crawler = GlueCrawler(crawler_name, crawler_s3_path, crawler_database_name, crawler_iam_role)
-# glue_crawler.run()
-# print("Glue crawler created and started")
+# Create and start crawler
+glue_crawler = GlueCrawler(crawler_name, crawler_s3_path, crawler_database_name, crawler_iam_role)
+glue_crawler.run()
+print("Glue crawler created and started")
 
 # Create dynamic frame using crawler schema
 image_data_dyf = glueContext.create_dynamic_frame.from_catalog(
@@ -127,7 +117,7 @@ def interest_point_detection(record):
 mapped_results_dyf = image_data_dyf.map(interest_point_detection, transformation_ctx="map_interest_points")
 print("Interest point detection done")
 
-# View results
+# Load/View results
 result_df = mapped_results_dyf.toDF()
 result_df.show()
 
@@ -182,7 +172,7 @@ job.commit()
     # pip3 install /Rhapso-0.1.0-py3-none-any.whl
 
 # COPY RUN SCRIPT IN DOCKER CONTAINER
-# docker cp /Users/seanfite/Desktop/Rhapso/Rhapso/spark_etl_pipeline.py spark-etl:/app/spark_etl/rhapso_pipeline.py
+# docker cp /Users/seanfite/Desktop/Allen-Rhapso/Rhapso/pipelines/ipd_dev/spark_etl_pipeline.py spark-etl:/app/spark_etl/rhapso_pipeline.py
 
 # EXECUTE RUN SCRIPT IN DOCKER CONTAINER 
 # docker exec -it spark-etl python3 /app/spark_etl/rhapso_pipeline.py --JOB_NAME new_job

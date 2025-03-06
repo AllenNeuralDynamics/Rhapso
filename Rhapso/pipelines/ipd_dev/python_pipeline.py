@@ -1,48 +1,33 @@
-from data_preparation.xml_to_dataframe import XMLToDataFrame
-from detection.view_transform_models import ViewTransformModels
-from detection.overlap_detection import OverlapDetection
-from data_preparation.load_image_data import LoadImageData
-from detection.difference_of_gaussian import DifferenceOfGaussian
-from data_preparation.zarr_image_reader import ZarrImageReader
-# from interest_point_detection.advanced_refinement import AdvancedRefinement
-# from interest_point_detection.filtering_and_optimizing import FilteringAndOptimization
-# from interest_point_detection.save_interest_points import SaveInterestPoints
-# from data_preparation.dataframe_to_xml import DataFrameToXML
+from ...data_prep.xml_to_dataframe import XMLToDataFrame
+from ...detection.view_transform_models import ViewTransformModels
+from ...detection.overlap_detection import OverlapDetection
+from ...data_prep.load_image_data import LoadImageData
+from ...detection.difference_of_gaussian import DifferenceOfGaussian
+# from ...interest_point_detection.advanced_refinement import AdvancedRefinement
+# from ...interest_point_detection.filtering_and_optimizing import FilteringAndOptimization
+# from ...interest_point_detection.save_interest_points import SaveInterestPoints
+# from ...data_prep.dataframe_to_xml import DataFrameToXML
 import boto3
-import io
 from dask import delayed
 from dask import compute
-from pyspark.sql import SparkSession
-import base64
-import numpy as np
 
-# Development testing pipeline / deployment template
-
-# BUCKET NAME
-xml_bucket_name = "rhapso-tif-sample"
-# xml_bucket_name = "rhapso-zar-sample"
-image_bucket_name = "aind-open-data"
-
-# FILE KEY
-xml_file_path = "IP_TIFF_XML/dataset.xml"
-# xml_file_path = "dataset.xml"
-
-# FILE PREFIX
-prefix = '/Users/seanfite/Desktop/AllenInstitute/Rhapso/Data/IP_TIFF_XML/'
-# prefix = 's3://rhapso-tif-sample/IP_TIFF_XML/'
-# prefix = 's3://aind-open-data/exaSPIM_708365_2024-04-29_12-46-15/SPIM.ome.zarr/'
-# TODO - local_zarr_image_data_prefix
-
-# FILE TYPE
-file_type = 'tiff'
-# file_type = 'zarr'
-
-# STRATEGY
 strategy = 'python'
-
-# DOWNSAMPLING
 dsxy = 4
 dsz = 2
+
+# FILE TYPE - PICK ONE
+file_type = 'tiff'
+xml_bucket_name = "rhapso-tif-sample"
+xml_file_path = "IP_TIFF_XML/dataset.xml"
+prefix = '/Users/seanfite/Desktop/AllenInstitute/Rhapso/Data/IP_TIFF_XML/'
+# prefix = 's3://rhapso-tif-sample/IP_TIFF_XML/'
+
+# file_type = 'zarr'
+# xml_bucket_name = "rhapso-zar-sample"
+# image_bucket_name = "aind-open-data"
+# xml_file_path = "dataset.xml"
+# prefix = 's3://aind-open-data/exaSPIM_708365_2024-04-29_12-46-15/SPIM.ome.zarr/'
+# TODO - local_zarr_image_data_prefix
 
 # data input source
 s3 = boto3.client('s3')
@@ -106,22 +91,22 @@ for result, task in zip(computed_results, delayed_results):
 print(interest_points)
 print("Interest point detection is done")
 
-# filtering_and_optimizing = FilteringAndOptimizing(interest_points)
-# filtering_and_optimizing.run()
+# # filtering_and_optimizing = FilteringAndOptimizing(interest_points)
+# # filtering_and_optimizing.run()
 
-# advanced_refinement = AdvancedRefinement()
-# advanced_refinement.run()
+# # advanced_refinement = AdvancedRefinement()
+# # advanced_refinement.run()
 
-# save_interest_points = SaveInterestPoints()
-# save_interest_points.run()
+# # save_interest_points = SaveInterestPoints()
+# # save_interest_points.run()
 
-# INTEREST POINT MATCHING
-# --------------------------
+# # INTEREST POINT MATCHING
+# # --------------------------
 
-# SOLVE 
-# --------------------------
+# # SOLVE 
+# # --------------------------
 
-# FUSION
-# --------------------------
+# # FUSION
+# # --------------------------
 
-# TODO - Implement fetching of fused image data from s3
+# # TODO - Implement fetching of fused image data from s3
