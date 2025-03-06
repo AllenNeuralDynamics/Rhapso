@@ -1,6 +1,6 @@
 __version__ = "0.1.1"
 
-from Rhapso.data_preparation.xml_to_dataframe import XMLToDataFrame
+from Rhapso.data_prep.xml_to_dataframe import XMLToDataFrame
 from Rhapso.detection.overlap_detection import OverlapDetection
 from Rhapso.utils import xmlToDataframe as xmlToDataframeUtil
 

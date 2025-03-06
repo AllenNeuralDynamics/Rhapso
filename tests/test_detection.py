@@ -1,5 +1,5 @@
 import unittest
-from Rhapso.detection.interest_point_detection import main
+from Rhapso.detection.difference_of_gaussian import DifferenceOfGaussian
 
 class TestDetection(unittest.TestCase):
     def test_main(self):
@@ -10,7 +10,7 @@ class TestDetection(unittest.TestCase):
             threshold = 0.05
 
         args = Args()
-        main(args)
+        DifferenceOfGaussian(args)
         self.assertTrue(True)
 
 if __name__ == '__main__':

@@ -7,11 +7,11 @@ import matplotlib.pyplot as plt
 # This component loads tiff image data using bio-io library
 
 class TiffImageReader:
-
-    def __init__(self, dsxy, dsz, process_intervals, file_path):
+    def __init__(self, dsxy, dsz, process_intervals, file_path, view_id):
         self.dsxy, self.dsz = dsxy, dsz
         self.process_intervals = process_intervals
         self.file_path = file_path
+        self.view_id = view_id
         self.shape = None
         self.downsampled_dask_images = None
         self.image_data = {}
@@ -47,10 +47,7 @@ class TiffImageReader:
     def load_and_process_slices(self, file_path):
         img = BioImage(file_path, reader=bioio_tifffile.Reader)
         full_dask_stack = img.get_dask_stack()[0, 0, 0, :, :, :]
-        self.shape = full_dask_stack.shape
-
-        print("process intervals:")
-        print(self.process_intervals)
+        image_chunks = []
 
         # Process only the required slices
         for interval in self.process_intervals:
@@ -59,15 +56,24 @@ class TiffImageReader:
             x_start, x_stop = interval['lower_bound'][0], interval['upper_bound'][0] + 1
 
             image_chunk = full_dask_stack[z_start:z_stop, y_start:y_stop, x_start:x_stop]
-
-            # Apply downsampling 
             downsampled_image_chunk = self.downsample(image_chunk, self.dsxy, self.dsxy, self.dsz, axes=[0, 1, 2])
 
             # for slice in downsampled_image_chunk:
             #     self.visualize_slice(slice)
             
-            self.downsampled_slices.append(downsampled_image_chunk)
+            interval_key = (
+                self.view_id,
+                tuple(interval['lower_bound']),
+                tuple(interval['upper_bound']),
+                tuple([z_stop - z_start, y_stop - y_start, x_stop - x_start])  
+            )
+
+            image_chunks.append({
+                'interval_key': interval_key,
+                'image_chunk': downsampled_image_chunk,
+            })
+            
+        return image_chunks
 
     def run(self):
-        self.load_and_process_slices(self.file_path)
-        return (self.downsampled_slices, self.shape)
+        return self.load_and_process_slices(self.file_path)
