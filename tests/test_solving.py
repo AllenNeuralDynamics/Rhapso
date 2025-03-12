@@ -1,7 +1,7 @@
 import unittest
 from unittest.mock import patch
 import argparse
-from Rhapso.solving.solver import main
+from Rhapso.solver.solver import main
 
 class TestSolving(unittest.TestCase):
     @patch("builtins.print")

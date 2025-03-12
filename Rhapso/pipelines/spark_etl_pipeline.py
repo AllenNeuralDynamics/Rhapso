@@ -11,16 +11,15 @@ from Rhapso.data_prep.xml_to_dataframe import XMLToDataFrame
 from Rhapso.detection.view_transform_models import ViewTransformModels
 from Rhapso.detection.overlap_detection import OverlapDetection
 from Rhapso.data_prep.load_image_data import LoadImageData
-from Rhapso.detection.difference_of_gaussian import DifferenceOfGaussian
+from Rhapso.data_prep.glue_crawler import GlueCrawler
 from Rhapso.data_prep.serialize_image_chunks import SerializeImageChunks
 from Rhapso.data_prep.deserialize_image_chunks import DeserializeImageChunks
-from Rhapso.data_prep.glue_crawler import GlueCrawler
+from Rhapso.detection.difference_of_gaussian import DifferenceOfGaussian
+from Rhapso.detection.advanced_refinement import AdvancedRefinement
 import boto3
-import base64
-import numpy as np
-import io
+import ast
 
-# Spark ETL testing pipeline - this script runs in AWS Glue
+# Spark ETL testing pipeline - this script runs in AWS Glue or in a AWS Glue Docker Container (dev only)
 
 s3 = boto3.client('s3')
 
@@ -34,17 +33,18 @@ job.init(args['JOB_NAME'], args)
 
 # DOWNSAMPLING
 dsxy = 4
-dsz = 2
+dsz = 4
 strategy = 'spark-etl'
 
-# SPARK ETL PARAMS 
-parquet_bucket_path = 's3://interest-point-detection/ipd-staging/'
-crawler_name = "InterestPointDetectionCrawler"
-crawler_s3_path = "s3://interest-point-detection/ipd-staging/"
-crawler_database_name = "interest_point_detection"
+# SPARK ETL PARAMS
+parquet_bucket_path = 's3://interest-point-detection/ipd-staging-v2/'
+crawler_name = "NewestIPD"
+crawler_s3_path = "s3://interest-point-detection/ipd-staging-v2/"
+crawler_database_name = "NewestIPD"
 crawler_iam_role = "arn:aws:iam::443370675126:role/rhapso-s3"
-glue_database = 'interest_point_detection'
-glue_table_name = 'ipd_staging'
+
+glue_database = 'newestipd'
+glue_table_name = 'ipd_staging_v2'
 
 # FILE TYPE - PICK ONE
 file_type = 'tiff'
@@ -90,7 +90,7 @@ print("Image data has loaded")
 
 # Flatten and serialize images to parquet
 serialize_image_chunks = SerializeImageChunks(all_image_data, parquet_bucket_path)
-serialize_image_chunks.run()
+serialized_images_dyf = serialize_image_chunks.run()
 print("Serialized image data")
 
 # Create and start crawler
@@ -110,22 +110,47 @@ print("Dynamic frame loaded")
 difference_of_gaussian = DifferenceOfGaussian()
 deserialize_image_chunks = DeserializeImageChunks()
 def interest_point_detection(record):
-    image_chunk = deserialize_image_chunks.run(record)
-    interest_points = difference_of_gaussian.run(image_chunk)
-    interest_points_as_strings = [str(point) for point in interest_points]
-    return {'interest_points': interest_points_as_strings}
+    try:
+        view_id, interval, image_chunk = deserialize_image_chunks.run(record)     
+        dog_results = difference_of_gaussian.run(image_chunk, dsxy, dsz)
+        interest_points = dog_results['interest_points']
+        intensities = dog_results['intensities']
+        interest_points_as_strings = [str(point) for point in interest_points]
+        results_dict = {
+            'view_id': str(view_id),
+            'interval_key': str(interval),
+            'interest_points': interest_points_as_strings,
+            'intensities': intensities.tolist() 
+        }
+        return results_dict
+    except Exception as e:
+        print("Error processing record:", str(e))
+        return {}
 mapped_results_dyf = image_data_dyf.map(interest_point_detection, transformation_ctx="map_interest_points")
 print("Interest point detection done")
 
-# View results
+# Format results out of dynamic frame for advanced refinement
 result_df = mapped_results_dyf.toDF()
-result_df.show()
+interest_points_list = []
+for row in result_df.collect():
+    view_id = row['view_id']
+    interval_key = row['interval_key']
+    interest_points = [ast.literal_eval(point) for point in row['interest_points']]
+    intensities = row['intensities']
+    interest_points_list.append({
+        'view_id': view_id,
+        'interval_key': interval_key,
+        'interest_points': interest_points,
+        'intensities': intensities
+    })
+print("Results formatted and ready for advanced refinement")
 
-# filtering_and_optimizing = FilteringAndOptimizing(interest_points)
-# filtering_and_optimizing.run()
+# Use kdtree algorithm to filter out duplicated points of interest
+advanced_refinement = AdvancedRefinement(interest_points_list)
+final_interest_points = advanced_refinement.run()
+print("Advanced refinement is complete.")
 
-# advanced_refinement = AdvancedRefinement()
-# advanced_refinement.run()
+print("Final interest points:", final_interest_points)
 
 # save_interest_points = SaveInterestPoints()
 # save_interest_points.run()
