@@ -2,8 +2,10 @@ from scipy.ndimage import gaussian_filter
 from skimage.feature import peak_local_max
 from scipy.optimize import curve_fit
 import numpy as np
+from scipy.ndimage import map_coordinates
 
 # This component implements the difference of gaussian algorithm on image chunks
+# We need to return output of: array [[[viewID],[Interval], [interestpoints],[intensities]]]
 
 class DifferenceOfGaussian:
     def __init__(self):
@@ -22,6 +24,8 @@ class DifferenceOfGaussian:
         return g.ravel()
 
     def refine_peaks(self, peaks, image):
+        if peaks is None:
+            return []
         refined_peaks = []
         window_size = 5
 
@@ -104,8 +108,7 @@ class DifferenceOfGaussian:
         return normalized_image
 
     def compute_difference_of_gaussian(self, image):
-        shape = len(image.shape)
-        # shape = 3
+        shape = 3
         initial_sigma = self.sigma
         min_peak_value = self.threshold
         min_initial_peak_value = min_peak_value / 3.0
@@ -114,7 +117,8 @@ class DifferenceOfGaussian:
         input_float = self.normalize_image(image)                                              
 
         # calculate gaussian blur levels 
-        sigma_1, sigma_2 = self.compute_sigmas(initial_sigma, shape)                            
+        sigma_1, sigma_2 = self.compute_sigmas(initial_sigma, shape) 
+        # print("we just got sigmas", sigma_1 + sigma_2)                           
 
         # apply gaussian blur
         blurred_image_1 = self.apply_gaussian_blur(input_float, sigma_1, shape)                
@@ -126,10 +130,36 @@ class DifferenceOfGaussian:
         # detect peaks
         peaks = peak_local_max(dog, threshold_rel=min_initial_peak_value)
 
+        # print("we just got peaks:", peaks)
+
         # refine localization 
         final_peaks = self.refine_peaks(peaks, image) 
+
+        # print("we just got final peaks: ", final_peaks)
          
         return final_peaks 
     
-    def run(self, image):
-        return self.compute_difference_of_gaussian(image)
+    def interpolation(self, image, interest_points):
+        if interest_points is None or len(interest_points) == 0:
+            return np.array([]) 
+
+        points = np.array(interest_points).T
+        intensities = map_coordinates(image, points, order=1, mode='nearest')
+        return intensities
+    
+    def upsample_coordinates(self, points, dsxy, dsz):
+        if points is None:
+            return []
+        return [(point[0] * dsxy, point[1] * dsxy, point[2] * dsz) for point in points]
+    
+    def run(self, image_chunk, dsxy, dsz):
+        final_peaks = self.compute_difference_of_gaussian(image_chunk)
+        # print("we just got final peaks")
+        intensities = self.interpolation(image_chunk, final_peaks)
+        # print("our new intensities", intensities)
+        upsampled_final_peaks = self.upsample_coordinates(final_peaks, dsxy, dsz)
+
+        return {
+            'interest_points': upsampled_final_peaks,
+            'intensities': intensities
+        }
