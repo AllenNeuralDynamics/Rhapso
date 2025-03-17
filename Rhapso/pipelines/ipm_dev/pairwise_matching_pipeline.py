@@ -13,12 +13,18 @@ def parse_xml(xml_file):
     view_paths = {}
     for vip in root.findall(".//ViewInterestPointsFile"):
         setup_id = vip.attrib['setup']
+        timepoint = int(vip.attrib['timepoint'])
         path = vip.text.strip()
         # Normalize the path: if it ends with "/beads", remove it so we add it only once later.
         if path.endswith("/beads"):
             print(f"🔄 Normalizing path for setup {setup_id}: Removing trailing '/beads'")
             path = path[:-len("/beads")]
-        view_paths[setup_id] = path
+        # If a view already exists, choose the one with the smaller timepoint.
+        if setup_id in view_paths:
+            if timepoint < view_paths[setup_id]['timepoint']:
+                view_paths[setup_id] = {'timepoint': timepoint, 'path': path}
+        else:
+            view_paths[setup_id] = {'timepoint': timepoint, 'path': path}
     print("✅ Successfully parsed XML file.")
     return view_paths
 
@@ -45,7 +51,6 @@ def print_dataset_info(dataset, label):
     try:
         num_items = dataset.shape[0]
         shape = dataset.shape
-        first_var = dataset[0]
         print(f"\n📊 Dataset Info ({label}):")
         print(f"   Number of items: {num_items}")
         print(f"   Shape: {shape}")
@@ -65,7 +70,7 @@ def parse_and_read_datasets(xml_file, n5_folder_base):
     for idx, view in enumerate(view_paths, start=1):
         print(f"\n🔗 Processing view {idx}/{len(view_paths)}: {view}")
         # Build the full path: join base, normalized view path, then "beads/interestpoints/loc"
-        full_path = os.path.join(n5_folder_base, view_paths[view], "beads", "interestpoints", "loc")
+        full_path = os.path.join(n5_folder_base, view_paths[view]['path'], "beads", "interestpoints", "loc")
         print(f"🛠  Loading dataset from: {full_path}")
         dataset = open_n5_dataset(full_path)
         if not dataset:
@@ -117,7 +122,6 @@ def ransac_filter_matches(pointsA, pointsB, matches, num_iterations=1000, thresh
     for _ in range(num_iterations):
         rand_idx = np.random.randint(0, len(matches_arr))
         t_candidate = diff_vectors[rand_idx]
-        # Compute the Euclidean error for each match with respect to the candidate translation.
         errors = np.linalg.norm(diff_vectors - t_candidate, axis=1)
         inlier_indices = np.where(errors < threshold)[0]
         if len(inlier_indices) > len(best_inliers):
@@ -139,7 +143,7 @@ def ransac_filter_matches(pointsA, pointsB, matches, num_iterations=1000, thresh
     print(f"✅ RANSAC filtering retained {len(filtered_matches)} matches after outlier removal.")
     return filtered_matches.tolist(), refined_translation
 
-def perform_pairwise_matching(interest_point_info, view_paths):
+def perform_pairwise_matching(interest_point_info, view_paths, all_matches):
     print("\n🔗 Starting pairwise matching across views:")
     views = list(interest_point_info.keys())
     for i in range(len(views)):
@@ -155,15 +159,100 @@ def perform_pairwise_matching(interest_point_info, view_paths):
             print("🔍 Computing initial matches using nearest neighbors...")
             initial_matches = compute_matches(pointsA, pointsB, float('inf'), 3.0)
             print(f"⚙️ Found {len(initial_matches)} initial matches.")
-            # Now perform RANSAC to remove outliers.
             filtered_matches, t_refined = ransac_filter_matches(pointsA, pointsB, initial_matches, num_iterations=1000, threshold=5.0)
             if filtered_matches:
                 for match in filtered_matches:
                     ptA = pointsA[match[0]]
                     ptB = pointsB[match[1]]
-                    print(f"Matched Points (Global Coordinates): [ViewSetupId: {viewA}, TimePointId: 18, x: {ptA[0]:.2f}, y: {ptA[1]:.2f}, z: {ptA[2]:.2f}] <=> [ViewSetupId: {viewB}, TimePointId: 18, x: {ptB[0]:.2f}, y: {ptB[1]:.2f}, z: {ptB[2]:.2f}]")
+                    print(f"Matched Points (Global Coordinates): [ViewSetupId: {viewA}, TimePointId: {view_paths[viewA]['timepoint']}, x: {ptA[0]:.2f}, y: {ptA[1]:.2f}, z: {ptA[2]:.2f}] <=> [ViewSetupId: {viewB}, TimePointId: {view_paths[viewB]['timepoint']}, x: {ptB[0]:.2f}, y: {ptB[1]:.2f}, z: {ptB[2]:.2f}]")
+                    all_matches.append((viewA, viewB, match[0], match[1]))
             else:
                 print("⚠️ No inlier matches found after RANSAC filtering.")
+
+def save_matches_as_n5(all_matches, view_paths, n5_base_path):
+    # Added print statement to indicate saving matches
+    print("\n💾 Saving matches as correspondences into N5 folders...")
+
+    # Determine the common timepoint (using the minimum timepoint among views)
+    timepoint = min(vp['timepoint'] for vp in view_paths.values())
+    
+    # Build idMap: keys are of the form "timepoint,view,beads" mapped to a unique integer.
+    sorted_views = sorted(view_paths.keys(), key=lambda x: int(x))
+    idMap = {}
+    for i, view in enumerate(sorted_views):
+        key = f"{timepoint},{view},beads"
+        idMap[key] = i
+
+    # Build the global matches array.
+    match_list = []
+    unique_id = 0
+    for (viewA, viewB, idxA, idxB) in all_matches:
+        keyA = f"{timepoint},{viewA},beads"
+        keyB = f"{timepoint},{viewB},beads"
+        if idMap[keyA] < idMap[keyB]:
+            match_list.append([idxA, idxB, unique_id])
+        else:
+            match_list.append([idxB, idxA, unique_id])
+        unique_id += 1
+
+    if not match_list:
+        print("No matches to save.")
+        return
+
+    matches_array = np.array(match_list, dtype=np.uint64).T  # shape (3, N)
+    total_matches = matches_array.shape[1]
+
+    # Prepare the data attributes (using raw compression to write uncompressed binary)
+    data_attributes = {
+        "dataType": "uint64",
+        "compression": {
+            "type": "raw"
+        },
+        "blockSize": [1, 300000],
+        "dimensions": [3, total_matches]
+    }
+
+    # For each view, create a correspondences folder inside its beads folder and write the files.
+    for view in sorted_views:
+        # Construct the full path to the correspondences folder in this view.
+        correspondences_folder = os.path.join(n5_base_path, view_paths[view]['path'], "beads", "correspondences")
+        # Add extra line breaks and an emoji to clarify the view folder being processed.
+        print(f"\n\n📁 Saving correspondences for view: {view}\n    Folder: {correspondences_folder}\n{'-'*60}")
+        os.makedirs(correspondences_folder, exist_ok=True)
+        
+        # Write the correspondences attributes.json (includes version and idMap).
+        corr_attributes = {
+            "correspondences": "1.0.0",
+            "idMap": idMap
+        }
+        attributes_path = os.path.join(correspondences_folder, "attributes.json")
+        with open(attributes_path, "w") as f:
+            json.dump(corr_attributes, f, indent=4)
+        print(f"Saved correspondences attributes.json to {attributes_path}")
+
+        # Create the data folder structure inside correspondences.
+        data_folder = os.path.join(correspondences_folder, "data")
+        os.makedirs(data_folder, exist_ok=True)
+        for i in range(3):
+            subfolder = os.path.join(data_folder, str(i))
+            os.makedirs(subfolder, exist_ok=True)
+        
+        # Write data/attributes.json with N5 dataset properties.
+        data_attributes_path = os.path.join(data_folder, "attributes.json")
+        with open(data_attributes_path, "w") as f:
+            json.dump(data_attributes, f, indent=4)
+        print(f"Saved data attributes.json to {data_attributes_path}")
+
+        # Write each row of the matches array as raw binary data (no compression).
+        for i in range(3):
+            row_data = matches_array[i, :]
+            byte_data = row_data.tobytes()
+            output_file = os.path.join(data_folder, str(i), "0")
+            with open(output_file, "wb") as f:
+                f.write(byte_data)
+            print(f"Saved row {i} data to {output_file} (raw binary)")
+
+        print(f"Saved matches N5 dataset with dimensions [3, {total_matches}] in folder: {correspondences_folder}")
 
 def main(xml_file, n5_folder_base):
     interest_point_info, view_paths = parse_and_read_datasets(xml_file, n5_folder_base)
@@ -175,7 +264,10 @@ def main(xml_file, n5_folder_base):
                 print(f"  {subfolder}: num_items: {details['num_items']}, shape: {details['shape']}")
             else:
                 print(f"  {subfolder}: {details}")
-    perform_pairwise_matching(interest_point_info, view_paths)
+    all_matches = []
+    perform_pairwise_matching(interest_point_info, view_paths, all_matches)
+    # Save the matches as correspondences inside each view folder.
+    save_matches_as_n5(all_matches, view_paths, n5_folder_base)
 
 if __name__ == "__main__":
     xml_input_file = "/home/martin/Documents/Allen/BigStitcherSpark Example Datasets/Interest Points (unaligned)/Just Two Tiff/IP_TIFF_XML (original) - Just Two Tiff Files - After Matching/dataset.xml"
