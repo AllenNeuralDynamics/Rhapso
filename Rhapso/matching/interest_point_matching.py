@@ -1,11 +1,11 @@
 import xml.etree.ElementTree as ET
 import cv2
 import numpy as np
+import boto3
 import os
 import json
 from sklearn.neighbors import NearestNeighbors
 import tensorstore as ts
-import argparse
 
 def matchViews(stuff):
     print("matching views")
@@ -52,6 +52,25 @@ def buildLabelMap(xml_root):
             label_map_global[view_id][label] = label_weights[label]
 
     return label_map_global, label_weights
+
+def fetch_from_s3(s3, bucket_name, input_file):
+    response = s3.get_object(Bucket=bucket_name, Key=input_file)
+    return response['Body'].read().decode('utf-8')
+
+def fetch_from_local(file_path):
+    with open(file_path, 'r') as file:
+        return file.read()
+
+def fetch_xml_file(file_location):
+    if file_location.startswith("s3://"):
+        s3 = boto3.client('s3')
+        parsed_url = urlparse(file_location)
+        bucket_name = parsed_url.netloc
+        input_file = parsed_url.path.lstrip('/')
+        xml_content = fetch_from_s3(s3, bucket_name, input_file)
+    else:
+        xml_content = fetch_from_local(file_location)
+    return xml_content
 
 
 '''

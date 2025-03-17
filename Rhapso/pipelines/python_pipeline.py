@@ -1,21 +1,17 @@
-from ..data_prep.xml_to_dataframe import XMLToDataFrame
-from ..detection.view_transform_models import ViewTransformModels
-from ..detection.overlap_detection import OverlapDetection
-from ..data_prep.load_image_data import LoadImageData
-from ..detection.difference_of_gaussian import DifferenceOfGaussian
-# from ..interest_point_detection.advanced_refinement import AdvancedRefinement
-# from ..interest_point_detection.filtering_and_optimizing import FilteringAndOptimization
-# from ..interest_point_detection.save_interest_points import SaveInterestPoints
-# from ..data_prep.dataframe_to_xml import DataFrameToXML
+from Rhapso.data_prep.xml_to_dataframe import XMLToDataFrame
+from Rhapso.detection.view_transform_models import ViewTransformModels
+from Rhapso.detection.overlap_detection import OverlapDetection
+from Rhapso.data_prep.load_image_data import LoadImageData
+from Rhapso.detection.difference_of_gaussian import DifferenceOfGaussian
+from Rhapso.detection.advanced_refinement import AdvancedRefinement
+# from Rhapso.detection.save_interest_points import SaveInterestPoints
 import boto3
 from dask import delayed
 from dask import compute
 
-# Development testing pipeline / deployment template
-
 strategy = 'python'
 dsxy = 4
-dsz = 2
+dsz = 4
 
 # FILE TYPE - PICK ONE
 file_type = 'tiff'
@@ -29,7 +25,6 @@ prefix = '/Users/seanfite/Desktop/AllenInstitute/Rhapso/Data/IP_TIFF_XML/'
 # image_bucket_name = "aind-open-data"
 # xml_file_path = "dataset.xml"
 # prefix = 's3://aind-open-data/exaSPIM_708365_2024-04-29_12-46-15/SPIM.ome.zarr/'
-# TODO - local_zarr_image_data_prefix
 
 # data input source
 s3 = boto3.client('s3')
@@ -58,7 +53,7 @@ overlap_detection = OverlapDetection(view_transform_matrices, dataframes, dsxy, 
 overlapping_area = overlap_detection.run()
 print("Overlap detection is done")
 
-# Load images
+# Load images 
 images_loader = LoadImageData(dataframes, overlapping_area, dsxy, dsz, prefix, file_type)
 all_image_data = images_loader.run()
 print("Loaded image data")
@@ -66,41 +61,39 @@ print("Loaded image data")
 # Detect interest points using DoG algorithm
 difference_of_gaussian = DifferenceOfGaussian()
 
-# BASE PYTHON VERSION - SLOWEST RUN TIME
-# def interest_point_detection(image_data):
-#     interval_key = image_data['interval_key']
-#     image_chunk = image_data['image_chunk']
-#     interest_points = difference_of_gaussian.run(image_chunk)
-#     return interval_key, interest_points
-# mapped_results = map(interest_point_detection, all_image_data)
-# interest_points = list(mapped_results)
-
-# DASK MAP VERSION (SINGLE THREAD INTERPRETER ONLY) - 10X FASTER
-interest_points = {}
+# DASK MAP VERSION (SINGLE THREAD INTERPRETER ONLY)
+final_peaks = []
 delayed_results = []
 delayed_keys = {} 
 for image_data in all_image_data:
+    view_id = image_data['view_id']
     interval_key = image_data['interval_key']
     image_chunk = image_data['image_chunk']
-    dog_result = delayed(difference_of_gaussian.run)(image_chunk)
+    dog_result = delayed(difference_of_gaussian.run)(image_chunk, dsxy, dsz)
     delayed_results.append(dog_result)
-    delayed_keys[dog_result] = interval_key
+    delayed_keys[dog_result] = (view_id, interval_key)  
 computed_results = compute(*delayed_results) 
 for result, task in zip(computed_results, delayed_results):
-    interval_key = delayed_keys[task]
-    interest_points[interval_key] = result 
-
-print(interest_points)
+    view_id, interval_key = delayed_keys[task]
+    final_peaks.append({
+        'view_id': view_id,
+        'interval_key': interval_key,
+        'interest_points': result['interest_points'],
+        'intensities': result['intensities']
+    })
 print("Interest point detection is done")
 
-# filtering_and_optimizing = FilteringAndOptimizing(interest_points)
-# filtering_and_optimizing.run()
+advanced_refinement = AdvancedRefinement(final_peaks)
+final_interest_points = advanced_refinement.run()
+print("Advanced refinement is done")
 
-# advanced_refinement = AdvancedRefinement()
-# advanced_refinement.run()
+print("Final interest points: ", final_interest_points)
 
-# save_interest_points = SaveInterestPoints()
+# save_interest_points = SaveInterestPoints(final_interest_points)
 # save_interest_points.run()
+# print("Interest points saved")
+
+# print("Interest point detection is done")
 
 # INTEREST POINT MATCHING
 # --------------------------
@@ -110,5 +103,3 @@ print("Interest point detection is done")
 
 # FUSION
 # --------------------------
-
-# TODO - Implement fetching of fused image data from s3

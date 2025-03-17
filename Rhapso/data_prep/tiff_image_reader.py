@@ -47,6 +47,7 @@ class TiffImageReader:
     def load_and_process_slices(self, file_path):
         img = BioImage(file_path, reader=bioio_tifffile.Reader)
         full_dask_stack = img.get_dask_stack()[0, 0, 0, :, :, :]
+        downsampled_stack = self.downsample(full_dask_stack, self.dsxy, self.dsxy, self.dsz, axes=[0, 1, 2])
         image_chunks = []
 
         # Process only the required slices
@@ -55,22 +56,18 @@ class TiffImageReader:
             y_start, y_stop = interval['lower_bound'][1], interval['upper_bound'][1] + 1
             x_start, x_stop = interval['lower_bound'][0], interval['upper_bound'][0] + 1
 
-            image_chunk = full_dask_stack[z_start:z_stop, y_start:y_stop, x_start:x_stop]
-            downsampled_image_chunk = self.downsample(image_chunk, self.dsxy, self.dsxy, self.dsz, axes=[0, 1, 2])
-
-            # for slice in downsampled_image_chunk:
-            #     self.visualize_slice(slice)
-            
+            downsampled_image_chunk = downsampled_stack[z_start:z_stop, y_start:y_stop, x_start:x_stop]
+       
             interval_key = (
-                self.view_id,
                 tuple(interval['lower_bound']),
                 tuple(interval['upper_bound']),
-                tuple([z_stop - z_start, y_stop - y_start, x_stop - x_start])  
+                tuple([x_stop - x_start, y_stop - y_start, z_stop - z_start])  
             )
 
             image_chunks.append({
+                'view_id': self.view_id,
                 'interval_key': interval_key,
-                'image_chunk': downsampled_image_chunk,
+                'image_chunk': downsampled_image_chunk
             })
             
         return image_chunks
