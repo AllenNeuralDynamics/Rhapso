@@ -1,6 +1,11 @@
 import xml.etree.ElementTree as ET
 import cv2
 import numpy as np
+import os
+import json
+from sklearn.neighbors import NearestNeighbors
+import tensorstore as ts
+import argparse
 
 def matchViews(stuff):
     print("matching views")
@@ -139,44 +144,6 @@ def save_results(correspondences, output_path):
         for corr in correspondences:
             f.write(f"{corr[0]} {corr[1]}\n")
 
-# Example usage
-# xml_path = "/path/to/dataset.xml"
-# views = parse_xml(xml_path)
-# interest_points = load_interest_points(views)
-# filtered_points = filter_interest_points(interest_points)
-# grouped_views = group_views(views)
-# pairs = setup_pairwise_matching(grouped_views)
-# params = ransac_parameters()
-# matcher = create_matcher('FAST_ROTATION', params)
-
-# for pair in pairs:
-#     points1 = filtered_points[pair[0]]
-#     points2 = filtered_points[pair[1]]
-#     matches = compute_pairwise_match(matcher, points1, points2)
-#     correspondences = add_correspondences(matches, interest_points)
-#     save_results(correspondences, "output.txt")
-
-# import sys
-# from awsglue.transforms import *
-# from awsglue.utils import getResolvedOptions
-# from pyspark.context import SparkContext
-# from awsglue.context import GlueContext
-# from awsglue.job import Job
-# from awsglue.utils import getResolvedOptions
-# from awsglue.dynamicframe import DynamicFrame
-# from pyspark.sql import SparkSession
-# from Rhapso.data_prep.xml_to_dataframe import XMLToDataFrame
-# from Rhapso.detection.view_transform_models import ViewTransformModels
-# from Rhapso.detection.overlap_detection import OverlapDetection
-# from Rhapso.data_prep.load_image_data import LoadImageData
-# from Rhapso.detection.difference_of_gaussian import DifferenceOfGaussian
-# from Rhapso.data_prep.serialize_image_chunks import SerializeImageChunks
-# from Rhapso.data_prep.deserialize_image_chunks import DeserializeImageChunks
-# from Rhapso.data_prep.glue_crawler import GlueCrawler
-# import boto3
-# import base64
-# import numpy as np
-# import io
 def build_label_map(data, view_ids, label_weights):
     """
     Build a global label map for all views using the provided data and view IDs.
@@ -204,123 +171,253 @@ def build_label_map(data, view_ids, label_weights):
         label_map_global[view_id] = label_weights
 
     return label_map_global
-# # Spark ETL testing pipeline - this script runs in AWS Glue
 
-# s3 = boto3.client('s3')
+def parse_xml(xml_file):
+    print(f"\n📂 Parsing XML file: {xml_file}")
+    tree = ET.parse(xml_file)
+    root = tree.getroot()
+    view_paths = {}
+    for vip in root.findall(".//ViewInterestPointsFile"):
+        setup_id = vip.attrib['setup']
+        timepoint = int(vip.attrib['timepoint'])
+        path = vip.text.strip()
+        if path.endswith("/beads"):
+            print(f"🔄 Normalizing path for setup {setup_id}: Removing trailing '/beads'")
+            path = path[:-len("/beads")]
+        if setup_id in view_paths:
+            if timepoint < view_paths[setup_id]['timepoint']:
+                view_paths[setup_id] = {'timepoint': timepoint, 'path': path}
+        else:
+            view_paths[setup_id] = {'timepoint': timepoint, 'path': path}
+    print("✅ Successfully parsed XML file.")
+    return view_paths
 
-# ## @params: [JOB_NAME]
-# args = getResolvedOptions(sys.argv, ['JOB_NAME'])
-# sc = SparkContext.getOrCreate() 
-# glueContext = GlueContext(sc)
-# spark = SparkSession.builder.appName("Interest Point Detection").getOrCreate()
-# job = Job(glueContext)
-# job.init(args['JOB_NAME'], args)
+def open_n5_dataset(n5_path):
+    attributes_path = os.path.join(n5_path, 'attributes.json')
+    print(f"\n🔍 Checking for attributes.json at: {attributes_path}")
+    if os.path.exists(attributes_path):
+        print("✅ attributes.json found, attempting to open dataset.")
+        try:
+            dataset = ts.open({
+                'driver': 'n5',
+                'kvstore': {'driver': 'file', 'path': n5_path}
+            }).result()
+            print("✅ Successfully opened N5 dataset.")
+            return dataset
+        except Exception as e:
+            print(f"❌ Error opening N5 dataset: {e}")
+            return None
+    else:
+        print(f"❌ No valid N5 dataset found at {n5_path} (missing attributes.json)")
+        return None
 
-# # DOWNSAMPLING
-# dsxy = 4
-# dsz = 2
-# strategy = 'spark-etl'
+def print_dataset_info(dataset, label):
+    try:
+        num_items = dataset.shape[0]
+        shape = dataset.shape
+        print(f"\n📊 Dataset Info ({label}):")
+        print(f"   Number of items: {num_items}")
+        print(f"   Shape: {shape}")
+        print(f"   Dataset Domain: {dataset.domain}")
+        print("   Dataset Properties:")
+        print(f"     Data Type: {dataset.dtype}")
+        print(f"     Shape: {dataset.shape}")
+        data = dataset.read().result()
+        print("   🟢 Raw Data (NumPy Array):\n", data)
+    except Exception as e:
+        print(f"❌ Error retrieving dataset info: {e}")
 
-# # SPARK ETL PARAMS
-# parquet_bucket_path = 's3://interest-point-detection/ipd-staging/'
-# crawler_name = "InterestPointDetectionCrawler"
-# crawler_s3_path = "s3://interest-point-detection/ipd-staging/"
-# crawler_database_name = "interest_point_detection"
-# crawler_iam_role = "arn:aws:iam::443370675126:role/rhapso-s3"
-# glue_database = 'interest_point_detection'
-# glue_table_name = 'ipd_staging'
+def parse_and_read_datasets(xml_file, n5_folder_base):
+    view_paths = parse_xml(xml_file)
+    print(f"\n🔍 Found {len(view_paths)} view ID interest point folders to analyze.")
+    interest_point_info = {}
+    for idx, view in enumerate(view_paths, start=1):
+        print(f"\n🔗 Processing view {idx}/{len(view_paths)}: {view}")
+        full_path = os.path.join(n5_folder_base, view_paths[view]['path'], "beads", "interestpoints", "loc")
+        print(f"🛠  Loading dataset from: {full_path}")
+        dataset = open_n5_dataset(full_path)
+        if not dataset:
+            print(f"⚠️ Skipping view {view} due to failed dataset loading.")
+            continue
+        relative_path = os.path.relpath(full_path, os.path.dirname(xml_file))
+        print_dataset_info(dataset, relative_path)
+        try:
+            data = dataset.read().result()
+        except Exception as e:
+            print(f"❌ Error reading dataset data: {e}")
+            continue
+        interest_point_info[view] = {'loc': {'num_items': dataset.shape[0],
+                                              'shape': dataset.shape,
+                                              'data': data}}
+    return interest_point_info, view_paths
 
-# # FILE TYPE - PICK ONE
-# file_type = 'tiff'
-# xml_bucket_name = "rhapso-tif-sample"
-# image_bucket_name = "tiff-sample"
-# prefix = 's3://rhapso-tif-sample/IP_TIFF_XML/'
-# xml_file_path = "IP_TIFF_XML/dataset.xml"
+def compute_matches(pointsA, pointsB, difference_threshold, ratio_of_distance):
+    if pointsA is None or pointsB is None:
+        print("Invalid points data provided for matching.")
+        return []
+    nn = NearestNeighbors(n_neighbors=2).fit(pointsB)
+    distances, indices = nn.kneighbors(pointsA)
+    matches = []
+    for i, (dist, idx) in enumerate(zip(distances, indices)):
+        if dist[0] < difference_threshold and dist[0] * ratio_of_distance <= dist[1]:
+            matches.append((i, idx[0]))
+    return matches
 
-# # file_type_zarr = 'zarr'
-# # xml_bucket_name = "rhapso-zar-sample"
-# # image_bucket_name = "aind-open-data"
-# # prefix = 's3://aind-open-data/exaSPIM_708365_2024-04-29_12-46-15/SPIM.ome.zarr'
-# # xml_file_path = "dataset.xml"
+def ransac_filter_matches(pointsA, pointsB, matches, num_iterations=1000, threshold=5.0):
+    if len(matches) == 0:
+        return matches, None
 
-# def fetch_from_s3(s3, bucket_name, input_file):
-#     response = s3.get_object(Bucket=bucket_name, Key=input_file)
-#     return response['Body'].read().decode('utf-8')
+    matches_arr = np.array(matches)
+    diff_vectors = []
+    for (i, j) in matches_arr:
+        diff = pointsB[j] - pointsA[i]
+        diff_vectors.append(diff)
+    diff_vectors = np.array(diff_vectors)
 
-# # INTEREST POINT DETECTION
-# # --------------------------
+    best_inliers = []
+    best_translation = None
 
-# xml_file = fetch_from_s3(s3, xml_bucket_name, xml_file_path) 
+    for _ in range(num_iterations):
+        rand_idx = np.random.randint(0, len(matches_arr))
+        t_candidate = diff_vectors[rand_idx]
+        errors = np.linalg.norm(diff_vectors - t_candidate, axis=1)
+        inlier_indices = np.where(errors < threshold)[0]
+        if len(inlier_indices) > len(best_inliers):
+            best_inliers = inlier_indices
+            best_translation = t_candidate
+            if len(best_inliers) > 0.8 * len(matches_arr):
+                break
 
-# # Load XML data into dataframes
-# processor = XMLToDataFrame(xml_file)
-# dataframes = processor.run()
-# print("XML loaded")
+    if best_translation is None or len(best_inliers) == 0:
+        print("⚠️ RANSAC failed to find a valid model; returning original matches.")
+        return matches, None
 
-# # Create view transform matrices 
-# create_models = ViewTransformModels(dataframes)
-# view_transform_matrices = create_models.run()
-# print("Transforms Models have been created")
+    refined_translation = np.mean(diff_vectors[best_inliers], axis=0)
+    print(f"🔎 RANSAC estimated translation: {refined_translation} with {len(best_inliers)} inliers out of {len(matches_arr)} matches.")
+    
+    errors = np.linalg.norm(diff_vectors - refined_translation, axis=1)
+    final_inlier_indices = np.where(errors < threshold)[0]
+    filtered_matches = matches_arr[final_inlier_indices]
+    print(f"✅ RANSAC filtering retained {len(filtered_matches)} matches after outlier removal.")
+    return filtered_matches.tolist(), refined_translation
 
-# # Use view transform matrices to find areas of overlap
-# overlap_detection = OverlapDetection(view_transform_matrices, dataframes, dsxy, dsz, prefix, file_type)
-# overlapping_area = overlap_detection.run()
-# print("Overlap Detection is done")
+def perform_pairwise_matching(interest_point_info, view_paths, all_matches, labels, method):
+    print("\n🔗 Starting pairwise matching across views:")
+    views = list(interest_point_info.keys())
+    for i in range(len(views)):
+        for j in range(i+1, len(views)):
+            viewA = views[i]
+            viewB = views[j]
+            print(f"\n💥 Matching view {viewA} with view {viewB}")
+            dataA = interest_point_info[viewA]['loc']['data']
+            dataB = interest_point_info[viewB]['loc']['data']
+            pointsA = dataA.T
+            pointsB = dataB.T
+            print("🔍 Computing initial matches using nearest neighbors...")
+            initial_matches = compute_matches(pointsA, pointsB, float('inf'), 3.0)
+            print(f"⚙️ Found {len(initial_matches)} initial matches.")
+            filtered_matches, t_refined = ransac_filter_matches(pointsA, pointsB, initial_matches, num_iterations=1000, threshold=5.0)
+            if filtered_matches:
+                for match in filtered_matches:
+                    ptA = pointsA[match[0]]
+                    ptB = pointsB[match[1]]
+                    print(f"Matched Points (Global Coordinates): [ViewSetupId: {viewA}, TimePointId: {view_paths[viewA]['timepoint']}, x: {ptA[0]:.2f}, y: {ptA[1]:.2f}, z: {ptA[2]:.2f}] <=> [ViewSetupId: {viewB}, TimePointId: {view_paths[viewB]['timepoint']}, x: {ptB[0]:.2f}, y: {ptB[1]:.2f}, z: {ptB[2]:.2f}]")
+                    all_matches.append((viewA, viewB, match[0], match[1]))
+            else:
+                print("⚠️ No inlier matches found after RANSAC filtering.")
 
-# # Load images
-# images_loader = LoadImageData(dataframes, overlapping_area, dsxy, dsz, prefix, file_type)
-# all_image_data = images_loader.run()
-# print("Image data has loaded")
+def save_matches_as_n5(all_matches, view_paths, n5_base_path, clear_correspondences):
+    print("\n💾 Saving matches as correspondences into N5 folders...")
+    timepoint = min(vp['timepoint'] for vp in view_paths.values())
+    sorted_views = sorted(view_paths.keys(), key=lambda x: int(x))
+    idMap = {}
+    for i, view in enumerate(sorted_views):
+        key = f"{timepoint},{view},beads"
+        idMap[key] = i
 
-# # Flatten and serialize images to parquet
-# serialize_image_chunks = SerializeImageChunks(all_image_data, parquet_bucket_path)
-# serialized_images_dyf = serialize_image_chunks.run()
-# print("Serialized image data")
+    match_list = []
+    unique_id = 0
+    for (viewA, viewB, idxA, idxB) in all_matches:
+        keyA = f"{timepoint},{viewA},beads"
+        keyB = f"{timepoint},{viewB},beads"
+        if idMap[keyA] < idMap[keyB]:
+            match_list.append([idxA, idxB, unique_id])
+        else:
+            match_list.append([idxB, idxA, unique_id])
+        unique_id += 1
 
-# # Create and start crawler
-# glue_crawler = GlueCrawler(crawler_name, crawler_s3_path, crawler_database_name, crawler_iam_role)
-# glue_crawler.run()
-# print("Glue crawler created and started")
+    if not match_list:
+        print("No matches to save.")
+        return
 
-# # Create dynamic frame using crawler schema
-# image_data_dyf = glueContext.create_dynamic_frame.from_catalog(
-#     database = glue_database,
-#     table_name = glue_table_name,
-#     transformation_ctx = "dynamic_frame"
-# )
-# print("Dynamic frame loaded")
+    matches_array = np.array(match_list, dtype=np.uint64).T
+    total_matches = matches_array.shape[1]
 
-# # Detect interest points using DoG algorithm - custom transform
-# difference_of_gaussian = DifferenceOfGaussian()
-# deserialize_image_chunks = DeserializeImageChunks()
-# def interest_point_detection(record):
-#     image_chunk = deserialize_image_chunks.run(record)
-#     interest_points = difference_of_gaussian.run(image_chunk)
-#     interest_points_as_strings = [str(point) for point in interest_points]
-#     return {'interest_points': interest_points_as_strings}
-# mapped_results_dyf = image_data_dyf.map(interest_point_detection, transformation_ctx="map_interest_points")
-# print("Interest point detection done")
+    data_attributes = {
+        "dataType": "uint64",
+        "compression": {
+            "type": "raw"
+        },
+        "blockSize": [1, 300000],
+        "dimensions": [3, total_matches]
+    }
 
-# # View results
-# result_df = mapped_results_dyf.toDF()
-# result_df.show()
+    for view in sorted_views:
+        correspondences_folder = os.path.join(n5_base_path, view_paths[view]['path'], "beads", "correspondences")
+        print(f"\n\n📁 Saving correspondences for view: {view}\n    Folder: {correspondences_folder}\n{'-'*60}")
+        os.makedirs(correspondences_folder, exist_ok=True)
+        
+        corr_attributes = {
+            "correspondences": "1.0.0",
+            "idMap": idMap
+        }
+        attributes_path = os.path.join(correspondences_folder, "attributes.json")
+        with open(attributes_path, "w") as f:
+            json.dump(corr_attributes, f, indent=4)
+        print(f"Saved correspondences attributes.json to {attributes_path}")
 
-# # filtering_and_optimizing = FilteringAndOptimizing(interest_points)
-# # filtering_and_optimizing.run()
+        data_folder = os.path.join(correspondences_folder, "data")
+        os.makedirs(data_folder, exist_ok=True)
+        for i in range(3):
+            subfolder = os.path.join(data_folder, str(i))
+            os.makedirs(subfolder, exist_ok=True)
+        
+        data_attributes_path = os.path.join(data_folder, "attributes.json")
+        with open(data_attributes_path, "w") as f:
+            json.dump(data_attributes, f, indent=4)
+        print(f"Saved data attributes.json to {data_attributes_path}")
 
-# # advanced_refinement = AdvancedRefinement()
-# # advanced_refinement.run()
+        for i in range(3):
+            row_data = matches_array[i, :]
+            byte_data = row_data.tobytes()
+            output_file = os.path.join(data_folder, str(i), "0")
+            with open(output_file, "wb") as f:
+                f.write(byte_data)
+            print(f"Saved row {i} data to {output_file} (raw binary)")
 
-# # save_interest_points = SaveInterestPoints()
-# # save_interest_points.run()
+        print(f"Saved matches N5 dataset with dimensions [3, {total_matches}] in folder: {correspondences_folder}")
 
-# # INTEREST POINT MATCHING
-# # --------------------------
+def main(xml_file, n5_folder_base, labels, method, clear_correspondences):
+    interest_point_info, view_paths = parse_and_read_datasets(xml_file, n5_folder_base)
+    print("\n📦 Collected Interest Point Info:")
+    for view, info in interest_point_info.items():
+        print(f"View {view}:")
+        for subfolder, details in info.items():
+            if subfolder == 'loc':
+                print(f"  {subfolder}: num_items: {details['num_items']}, shape: {details['shape']}")
+            else:
+                print(f"  {subfolder}: {details}")
+    all_matches = []
+    perform_pairwise_matching(interest_point_info, view_paths, all_matches, labels, method)
+    save_matches_as_n5(all_matches, view_paths, n5_folder_base, clear_correspondences)
 
-# # SOLVE 
-# # --------------------------
+if __name__ == "__main__":
+    parser = argparse.ArgumentParser(description="Pairwise Matching Pipeline")
+    parser.add_argument("xml_file", type=str, help="Path to the XML file")
+    parser.add_argument("n5_folder_base", type=str, help="Base path to the N5 folder")
+    parser.add_argument("-l", "--label", action="append", required=True, help="Label(s) of the interest points used for registration (e.g. -l beads -l nuclei)")
+    parser.add_argument("-m", "--method", required=True, choices=["FAST_ROTATION", "FAST_TRANSLATION", "PRECISE_TRANSLATION", "ICP"], help="The matching method")
+    parser.add_argument("--clearCorrespondences", action="store_true", help="Clear existing corresponding interest points for processed ViewIds and label before adding new ones (default: false)")
+    args = parser.parse_args()
 
-# # FUSION
-# # --------------------------
-
-# job.commit()
+    main(args.xml_file, args.n5_folder_base, args.label, args.method, args.clearCorrespondences)
