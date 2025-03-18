@@ -25,6 +25,7 @@ prefix = '/Users/seanfite/Desktop/AllenInstitute/Rhapso/Data/IP_TIFF_XML/'
 # image_bucket_name = "aind-open-data"
 # xml_file_path = "dataset.xml"
 # prefix = 's3://aind-open-data/exaSPIM_708365_2024-04-29_12-46-15/SPIM.ome.zarr/'
+# xml_path = "/Users/seanfite/Desktop/AllenInstitute/Rhapso/Data/aind-open-data:exaSPIM_708365_2024-04-29_12-46-15:SPIM.ome.zarr/dataset.xml"
 
 # data input source
 s3 = boto3.client('s3')
@@ -33,10 +34,15 @@ def fetch_from_s3(s3, bucket_name, input_file):
     response = s3.get_object(Bucket=bucket_name, Key=input_file)
     return response['Body'].read().decode('utf-8')
 
+def fetch_local_xml(file_path):
+    with open(file_path, 'r', encoding='utf-8') as file:
+        return file.read()
+
 # INTEREST POINT DETECTION
 # --------------------------
 
 xml_file = fetch_from_s3(s3, xml_bucket_name, xml_file_path) 
+# xml_file = fetch_local_xml(xml_path)
 
 # Load XML data into dataframes         
 processor = XMLToDataFrame(xml_file)
@@ -61,7 +67,7 @@ print("Loaded image data")
 # Detect interest points using DoG algorithm
 difference_of_gaussian = DifferenceOfGaussian()
 
-# BASE PYTHON VERSION - SLOWEST RUN TIME (DEV ONLY)
+# # BASE PYTHON VERSION - SLOWEST RUN TIME (DEV ONLY)
 # final_peaks = []
 # for image_data in all_image_data:
 #     view_id = image_data['view_id']
@@ -70,7 +76,6 @@ difference_of_gaussian = DifferenceOfGaussian()
 #     points = difference_of_gaussian.run(image_chunk, dsxy, dsz)
 #     interest_points = points['interest_points']
 #     intensities = points['intensities']
-#     # final_peaks.append(interest_points)
 #     final_peaks.append({
 #         'view_id': view_id,
 #         'interval_key': interval_key,

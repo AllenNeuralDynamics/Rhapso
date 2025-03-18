@@ -14,17 +14,18 @@ dsxy = 4
 dsz = 4
 
 # FILE TYPE - PICK ONE
-file_type = 'tiff'
-xml_bucket_name = "rhapso-tif-sample"
-xml_file_path = "IP_TIFF_XML/dataset.xml"
-prefix = '/Users/seanfite/Desktop/AllenInstitute/Rhapso/Data/IP_TIFF_XML/'
+# file_type = 'tiff'
+# xml_bucket_name = "rhapso-tif-sample"
+# xml_file_path = "IP_TIFF_XML/dataset.xml"
+# prefix = '/Users/seanfite/Desktop/AllenInstitute/Rhapso/Data/IP_TIFF_XML/'
 # prefix = 's3://rhapso-tif-sample/IP_TIFF_XML/'
 
-# file_type = 'zarr'
-# xml_bucket_name = "rhapso-zar-sample"
-# image_bucket_name = "aind-open-data"
-# xml_file_path = "dataset.xml"
-# prefix = 's3://aind-open-data/exaSPIM_708365_2024-04-29_12-46-15/SPIM.ome.zarr/'
+file_type = 'zarr'
+xml_bucket_name = "rhapso-zar-sample"
+image_bucket_name = "aind-open-data"
+xml_file_path = "dataset.xml"
+prefix = 's3://aind-open-data/exaSPIM_708365_2024-04-29_12-46-15/SPIM.ome.zarr/'
+xml_path = "/Users/seanfite/Desktop/AllenInstitute/Rhapso/Data/aind-open-data:exaSPIM_708365_2024-04-29_12-46-15:SPIM.ome.zarr/dataset.xml"
 
 # data input source
 s3 = boto3.client('s3')
@@ -33,10 +34,15 @@ def fetch_from_s3(s3, bucket_name, input_file):
     response = s3.get_object(Bucket=bucket_name, Key=input_file)
     return response['Body'].read().decode('utf-8')
 
+def fetch_local_xml(file_path):
+    with open(file_path, 'r', encoding='utf-8') as file:
+        return file.read()
+
 # INTEREST POINT DETECTION
 # --------------------------
 
-xml_file = fetch_from_s3(s3, xml_bucket_name, xml_file_path) 
+# xml_file = fetch_from_s3(s3, xml_bucket_name, xml_file_path) 
+xml_file = fetch_local_xml(xml_path)
 
 # Load XML data into dataframes         
 processor = XMLToDataFrame(xml_file)
@@ -60,6 +66,41 @@ print("Loaded image data")
 
 # Detect interest points using DoG algorithm
 difference_of_gaussian = DifferenceOfGaussian()
+
+# # BASE PYTHON VERSION - SLOWEST RUN TIME (DEV ONLY)
+# final_peaks = []
+# for image_data in all_image_data:
+#     view_id = image_data['view_id']
+#     interval_key = image_data['interval_key']
+#     image_chunk = image_data['image_chunk']
+#     points = difference_of_gaussian.run(image_chunk, dsxy, dsz)
+#     interest_points = points['interest_points']
+#     intensities = points['intensities']
+#     final_peaks.append({
+#         'view_id': view_id,
+#         'interval_key': interval_key,
+#         'interest_points': interest_points, 
+#         'interval': intensities 
+#     })
+# print("Interest point detection is done")
+
+# BASE PYTHON MAP VERSION - SLOWER RUN TIME (COULD OPTIMIZE WITH PYTHON THREADING)
+# def interest_point_detection(image_data):
+#     view_id = image_data['view_id']
+#     interval_key = image_data['interval_key']
+#     image_chunk = image_data['image_chunk']
+#     points = difference_of_gaussian.run(image_chunk, dsxy, dsz)
+#     interest_points = points['interest_points']
+#     intensities = points['intensities']
+#     return {
+#         'view_id': view_id,
+#         'interval_key': interval_key,
+#         'interest_points': interest_points,
+#         'intensities': intensities
+#     }
+# mapped_results = map(interest_point_detection, all_image_data)
+# final_peaks = list(mapped_results)
+# print("Interest point detection is done")
 
 # DASK MAP VERSION (SINGLE THREAD INTERPRETER ONLY)
 final_peaks = []

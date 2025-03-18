@@ -22,6 +22,7 @@ class OverlapDetection():
             return self.image_shape_cache[file_path]
         
         if self.file_type == 'zarr':
+            print(file_path)
             s3 = s3fs.S3FileSystem(anon=False)
             store = s3fs.S3Map(root=file_path, s3=s3)
             zarr_array = zarr.open(store, mode='r')
@@ -32,7 +33,7 @@ class OverlapDetection():
         elif self.file_type == 'tiff':
             img = BioImage(file_path, reader=bioio_tifffile.Reader)
             data = img.get_dask_stack()
-            # (1, 1, 1, 91, 1040, 1388)
+            # TODO - (1, 1, 1, z, y, x) ? or ?
             shape = data.shape
             self.image_shape_cache[file_path] = shape
         
@@ -82,7 +83,7 @@ class OverlapDetection():
             print("Matrix cannot be inverted.")
             return None
         
-        return inverse_scale_matrix
+        return inverse_scale_matrix    
     
     def estimate_bounds(self, a, interval):
         assert len(interval) >= 6, "Interval dimensions do not match." 
@@ -92,9 +93,9 @@ class OverlapDetection():
         
         # set upper bounds
         if self.file_type == 'zarr':
-            s0 = interval[4] - t0
-            s1 = interval[3] - t1
-            s2 = interval[2] - t2 
+            s0 = interval[5] - t0
+            s1 = interval[4] - t1
+            s2 = interval[3] - t2 
         elif self.file_type == 'tiff':
             s0 = interval[5] - t0
             s1 = interval[4] - t1
@@ -143,13 +144,15 @@ class OverlapDetection():
 
     def find_overlapping_area(self):
         # iterate through each view_id
+        start = None
         for i, row_i in self.image_loader_df.iterrows():
             view_id = f"timepoint: {row_i['timepoint']}, setup: {row_i['view_setup']}"
+            
             all_intervals = []
             
             # get inverted matrice of downsampling
             if self.file_type == 'zarr':
-                dim_base = self.load_image_metadata(self.prefix + row_i['file_path'] + f'/{4}')
+                dim_base = self.load_image_metadata(self.prefix + row_i['file_path'] + f'/{0}')
             elif self.file_type == 'tiff':
                 dim_base = self.load_image_metadata(self.prefix + row_i['file_path'])
 
@@ -163,7 +166,7 @@ class OverlapDetection():
                 view_id_other = f"timepoint: {row_j['timepoint']}, setup: {row_j['view_setup']}"
 
                 if self.file_type == 'zarr':
-                    dim_other = self.load_image_metadata(self.prefix + row_j['file_path'] + f'/{4}')
+                    dim_other = self.load_image_metadata(self.prefix + row_j['file_path'] + f'/{0}')
                 elif self.file_type == 'tiff':
                     dim_other = self.load_image_metadata(self.prefix + row_j['file_path'])
                 
