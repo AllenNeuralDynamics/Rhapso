@@ -1,0 +1,290 @@
+from Rhapso.matching.interest_point_matching import build_label_map
+
+
+# # serialVersionUID = "5220898723968914742L"
+# IP = None
+# STITCHING = None
+# # Technically an enum- should either be IP OR STITCHING
+# solver_source = {} # "IP", "STITCHING"
+# source_points = None
+# labels = None
+# fixed_views = None
+# label_weights = None
+
+# registration_TP = None
+# reference_TP = None
+# # data_global = {
+# #     "base_path_uri": "base_path_uri",
+# #     "bounding_boxes": "bounding_boxes",
+# #     "grid_move_requested": "Bool",
+# #     "intensity_adjustments": "intensity_adjustments",
+# #     "PointSpreadFunctions": "PointSpreadFunctions",
+# # "sequence_discription": {}, <----- get sequence desctiption is necessary
+# #     "stitching_results": {},
+# #     "view_registrations": {},
+# #     "view_interest_points": {},
+# # }
+
+# data_global = {
+#     "base_path_uri": "base_path_uri",
+#     "grid_move_requested": "Bool",
+#     "intensity_adjustments": "intensity_adjustments",
+#     "PointSpreadFunctions": "PointSpreadFunctions",
+#     "sequence_discription": {},
+#     "stitching_results": {},
+#     "view_registrations": {},
+#     "view_interest_points": {},
+# }
+# view_ids_global = None
+# disable_fixed_views = False
+# fixed_view_ids = {1: 1}
+
+# TO_REFERENCE_TIMEPOINT,
+# TIMEPOINTS_INDIVIDUALLY, List of nums- not sure where they are derived from
+
+# image_loader_data = {
+#     {
+#         "view_setup": "view_setup",
+#         "timepoint": "timepoint",
+#         "series": "series",
+#         "channel": "channel",
+#         "file_path": "file_path",
+#     },
+#     {
+#         "view_setup": "view_setup",
+#         "timepoint": "timepoint",
+#         "series": "series",
+#         "channel": "channel",
+#         "file_path": "file_path",
+#     },
+# }
+
+
+class inputValidation:
+
+    def __init__(
+        self,
+        data_global,
+        reference_tp,
+        registration_tp,
+        labels,
+        label_weights,
+        fixed_views,
+        group_illums,
+        group_channels,
+        group_tiles,
+        split_timepoints,
+        disable_fixed_views,
+        solver_source,
+        image_loader_data,
+    ):
+        self.data_global = data_global
+        self.reference_tp = reference_tp
+        self.labels = labels
+        self.label_weights = label_weights
+        self.fixed_views = fixed_views
+        self.view_ids_global = {}
+        self.fixed_view_ids = {}
+        self.group_illums = group_illums
+        self.group_channels = group_channels
+        self.group_tiles = group_tiles
+        self.split_timepoints = split_timepoints
+        self.registration_tp = registration_tp
+        self.disable_fixed_views = disable_fixed_views
+        self.source_points = None
+        self.solver_source = solver_source
+        self.image_loader_data  # Data_global and image loader are likely the same and may be able to be eliminated.
+
+    def input_validation(self):
+
+        self.init_registration_parameters()
+
+        if not self.setup_parameters(self.data_global, self.view_ids_global):
+            return None
+
+        label_map_global = {}
+        # If solver_source == IP set up variables for Interestpoints as source
+        if self.source_points == self.solver_source["IP"]:
+            if self.labels == None or len(self.labels) == 0:
+                print("No labels specified. Stopping.")
+                return None
+            # Map step may be able to be consolidated here
+            if self.label_weights == None or len(self.label_weights) == 0:
+                self.label_weights = [1.0] * len(self.labels)
+            if len(self.label_weights) != len(self.labels):
+                print(
+                    "You need to specify as many weights as labels, or do not specify weights at all"
+                )
+                return None
+
+            # String and float
+            map = {}
+
+            for i in range(len(self.labels)):
+                map[self.labels[i]] = self.label_weights[i]
+            print(f"labels & weights: {map}")
+
+            label_map_global = build_label_map(
+                self.data_global, self.view_ids_global, map
+            )
+            # This section of conditionals may be able to be removed.
+            if not self.group_illums:
+                self.group_illums = False
+
+            if not self.group_channels:
+                self.group_channels = False
+
+            if not self.group_tiles:
+                self.group_tiles = False
+
+            if not self.split_timepoints:
+                self.split_timepoints = False
+        else:
+            print("Using stitching results as source for solve.")
+
+            labelMapGlobal = None
+
+            if not self.group_illums:
+                self.group_illums = True
+
+            if not self.group_channels:
+                self.group_channels = True
+
+            if not self.group_tiles:
+                self.group_tiles = False
+
+            if not self.split_timepoints:
+                self.split_timepoints = False
+
+        print("The following grouping/splitting modes are set:")
+        print(f"groupIllums: {self.group_illums}")
+        print(f"groupChannels: {self.group_channels}")
+        print(f"groupTiles: {self.group_tiles}")
+        print(f"splitTimepoints: {self.split_timepoints}")
+
+        if not self.fixed_view_ids or len(self.fixed_view_ids) == 0:
+            # fix this - Not sure if needed
+            self.fixed_view_ids = self.assemble_fixed_auto(
+                self.view_ids_global, self.registration_tp, self.reference_TP
+            )
+        else:
+            self.fixed_view_ids  # reset to data
+
+        print("The following ViewIds are used as fixed views:")
+        print(
+            ", ".join(
+                f"tpId={vid["timepoint"]} setupId={vid["setup"]}"
+                for vid in self.fixed_view_ids
+            )
+        )
+
+    def setup_parameters(self, data_global, view_ids_global):
+        # fixed views and mapping back to original view
+        if self.disable_fixed_views:
+            self.fixed_view_ids = None
+        else:
+            # set/load fixed views
+            if not self.fixed_views:
+                print(
+                    "First ViewId(s) will be used as fixed for each respective registration subset (e.g. timepoint) ..."
+                )
+                self.fixed_view_ids = None
+            else:
+                print("Parsing fixed ViewIds ...")
+                # Todo fix
+                parsed_views = self.fixed_views  # all views
+
+                # Assuming view ids are in a list of dictionaries
+                self.fixed_view_ids = data_global[view_ids_global]
+
+                # add the rest of the dictionaries
+                for view in parsed_views:
+                    self.fixed_view_ids.append(view)
+
+                if len(parsed_views) != len(self.fixed_view_ids):
+                    print(
+                        f"Warning: only {len(self.fixed_view_ids)} of {len(parsed_views)} that you specified as fixed views exist and are present."
+                    )
+
+                if not self.fixed_view_ids:
+                    raise ValueError(
+                        "Fixed views couldn't be parsed. Please provide a valid fixed view."
+                    )
+
+                print("The following ViewIds are fixed: ")
+                for vid in self.fixed_view_ids:
+                    # todo fix
+                    print(f"tpId={vid["timepoint"]} setupId={vid["setup"]}")
+
+        return True
+
+    # Check if reference timepoint
+    # sd doesnt get used
+    # We might be able to trim this down to always just have the first view be the fixed point.
+    def assemble_fixed_auto(self, all_view_ids, registration_tp, reference_tp):
+        fixed = set()
+
+        all_view_ids.sort()
+
+        #  double check registrations types --> list of Ints
+        if registration_tp == self.TO_REFERENCE_TIMEPOINT:
+            for view_id in all_view_ids:
+                if view_id["timepoint"] == reference_tp:
+                    fixed.add(view_id)
+                    break
+        elif registration_tp == self.TIMEPOINTS_INDIVIDUALLY:
+            # it is sorted by timepoint
+            fixed.add(all_view_ids[0])
+            current_tp = all_view_ids[0]["timepoint"]
+
+            for view_id in all_view_ids:
+                # next timepoint
+                if view_id["timepoint"] != current_tp:
+                    fixed.add(view_id)
+                    current_tp = view_id["timepoint"]
+        else:
+            fixed.add(all_view_ids[0])  # always the first view is fixed
+
+        return fixed
+
+    def init_registration_parameters():
+        # Retrieves data_global object
+        data_global = self.image_loader_data
+
+        if not data_global:
+            raise ValueError("Couldn't load SpimData XML project.")
+
+        # Should have timepoint and set up
+        view_ids_global = data_global["view_ids"]
+        # retrieves just viewIds
+
+        if not view_ids_global or len(view_ids_global) == 0:
+            raise ValueError("No ViewIds found.")
+
+        reference_tp = None  # Assuming referenceTP is initially None
+        registration_tp = (
+            "TO_REFERENCE_TIMEPOINT"  # Assuming registrationTP is set to this value
+        )
+
+        if not reference_tp:
+            # Get the timepoint of the first viewId in the list
+            reference_tp = view_ids_global[0]["timepoint"]
+        else:
+            # Retrieve and sort all timepoints
+            timepoint_to_process_list = []
+
+            for view_id in data_global:
+                # This could be viewId[0]
+                timepoint_to_process_list.append(view_id["timepoint"])
+            for view_id in view_ids_global:
+                timepoint_to_process_list.append(view_id["timepoint"])
+
+            timepoint_to_process_set = set(sorted(timepoint_to_process_list))
+
+            if reference_tp not in timepoint_to_process_set:
+                raise ValueError(
+                    "Specified reference timepoint is not part of the ViewIds that are processed."
+                )
+        # I don't think this gets hit since it gets set to null in this case. May need to follow up about params.
+        if registration_tp == "TO_REFERENCE_TIMEPOINT":
+            print("Reference timepoint =", reference_tp)
