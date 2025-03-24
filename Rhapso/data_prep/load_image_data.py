@@ -25,10 +25,11 @@ class LoadImageData:
             view_id = f"timepoint: {row['timepoint']}, setup: {row['view_setup']}"
             process_intervals = self.overlapping_area[view_id]
             if self.file_type == 'zarr':
-                file_path = self.prefix + row['file_path'] + f'/{4}'
+                file_path = self.prefix + row['file_path'] + f'/{0}'
             elif self.file_type == 'tiff':
                 file_path = self.prefix + row['file_path'] 
             images.extend(self.load_image_data(process_intervals, file_path, view_id))
+            break
 
         return images
     
