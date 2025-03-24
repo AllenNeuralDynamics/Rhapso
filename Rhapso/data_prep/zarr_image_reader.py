@@ -61,6 +61,7 @@ class ZarrImageReader():
                 'interval_key': interval_key,
                 'image_chunk': downsampled_image_chunk
             })
+            break
         
         return image_chunks
 

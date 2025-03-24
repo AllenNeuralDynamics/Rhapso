@@ -1,20 +1,23 @@
-from scipy.ndimage import gaussian_filter
+from scipy.ndimage import gaussian_filter 
 from skimage.feature import peak_local_max
 from scipy.optimize import curve_fit
 import numpy as np
 from scipy.ndimage import map_coordinates
+import gc
+import dask.array as da
+from memory_profiler import profile
+import dask
 
 # This component implements the difference of gaussian algorithm on image chunks
-# We need to return output of: array [[[viewID],[Interval], [interestpoints],[intensities]]]
 
 class DifferenceOfGaussian:
-    def __init__(self):
-        self.min_intensity = 0.0
-        self.max_intensity = 2048.0
-        self.sigma = 1.8
-        self.threshold = 0.008
+    def __init__(self, min_intensity, max_intensity, sigma, threshold):
+        self.min_intensity = min_intensity
+        self.max_intensity = max_intensity
+        self.sigma = sigma
+        self.threshold = threshold
     
-    def gaussian_3d(self, xyz, amplitude, xo, yo, zo, sigma_x, sigma_y, sigma_z, offset):
+    def gaussian_3d(self, xyz, amplitude, zo, yo, xo, sigma_x, sigma_y, sigma_z, offset):
         x, y, z = xyz
         g = offset + amplitude * np.exp(
             -(((x - xo) ** 2) / (2 * sigma_x ** 2) +
@@ -29,39 +32,52 @@ class DifferenceOfGaussian:
         refined_peaks = []
         window_size = 5
 
+        z_grid, y_grid, x_grid = np.mgrid[
+            -window_size:window_size+1,
+            -window_size:window_size+1,
+            -window_size:window_size+1]
+
         for peak in peaks:
-            x, y, z = peak
+            z, y, x = peak
 
             # Check if the peak is too close to any border
-            if (x < window_size or x >= image.shape[0] - window_size or
+            if (z < window_size or z >= image.shape[0] - window_size or
                 y < window_size or y >= image.shape[1] - window_size or
-                z < window_size or z >= image.shape[2] - window_size):
+                x < window_size or x >= image.shape[2] - window_size):
                 continue
 
             # Extract a volume around the peak
-            patch = image[x-window_size:x+window_size+1,
-                        y-window_size:y+window_size+1,
-                        z-window_size:z+window_size+1]
-
+            patch = image[z-window_size:z+window_size+1,
+                      y-window_size:y+window_size+1,
+                      x-window_size:x+window_size+1]
+            
             # Prepare the data for fitting
-            x_grid, y_grid, z_grid = np.mgrid[
-                -window_size:window_size+1,
-                -window_size:window_size+1,
-                -window_size:window_size+1]
-            initial_guess = (patch.max(), 0, 0, 0, 1, 1, 1, 0)  # Amplitude, x0, y0, z0, sigma_x, sigma_y, sigma_z, offset
+            initial_guess = (patch.max(), 0, 0, 0, 1, 1, 1, 0)  # Amplitude, z0, y0, x0, sigma_z, sigma_y, sigma_x, offset
             try:
                 popt, _ = curve_fit(
-                    self.gaussian_3d, (x_grid, y_grid, z_grid), patch.ravel(),
+                    self.gaussian_3d, (z_grid, y_grid, x_grid), patch.ravel(),
                     p0=initial_guess)
-                refined_x = x + popt[1]
+                refined_z = z + popt[1]
                 refined_y = y + popt[2]
-                refined_z = z + popt[3]
-                refined_peaks.append((refined_x, refined_y, refined_z))
+                refined_x = x + popt[3]
+                refined_peaks.append((refined_z, refined_y, refined_x))
             except Exception as e:
-                refined_peaks.append((x, y, z))
+                refined_peaks.append((z, y, x))
 
         return refined_peaks
     
+    # def apply_gaussian_blur(self, input_float, sigma):
+    #     blurred_image = input_float
+        
+    #     for i in range(len(sigma)):
+    #         # blurred_image = gaussian_filter(blurred_image, sigma=sigma[i], mode='reflect')
+    #         if isinstance(blurred_image, da.Array):
+    #             blurred_image = dask_gaussian_filter(blurred_image, sigma=sigma[i], mode='reflect')
+    #         else:
+    #             blurred_image = scipy_gaussian_filter(blurred_image, sigma=sigma[i], mode='reflect')
+        
+    #     return blurred_image
+
     def apply_gaussian_blur(self, input_float, sigma, shape):
         blurred_image = input_float
         
@@ -107,6 +123,7 @@ class DifferenceOfGaussian:
         normalized_image = (image - self.min_intensity) / (self.max_intensity - self.min_intensity)
         return normalized_image
 
+    # @profile
     def compute_difference_of_gaussian(self, image):
         shape = 3
         initial_sigma = self.sigma
@@ -117,8 +134,7 @@ class DifferenceOfGaussian:
         input_float = self.normalize_image(image)                                              
 
         # calculate gaussian blur levels 
-        sigma_1, sigma_2 = self.compute_sigmas(initial_sigma, shape) 
-        # print("we just got sigmas", sigma_1 + sigma_2)                           
+        sigma_1, sigma_2 = self.compute_sigmas(initial_sigma, shape)                    
 
         # apply gaussian blur
         blurred_image_1 = self.apply_gaussian_blur(input_float, sigma_1, shape)                
@@ -127,17 +143,11 @@ class DifferenceOfGaussian:
         # subtract blurred images
         dog = blurred_image_1 - blurred_image_2
 
-        # detect peaks
         peaks = peak_local_max(dog, threshold_rel=min_initial_peak_value)
-
-        # print("we just got peaks:", peaks)
-
-        # refine localization 
-        final_peaks = self.refine_peaks(peaks, image) 
-
-        # print("we just got final peaks: ", final_peaks)
+        
+        # final_peaks = self.refine_peaks(peaks, image)
          
-        return final_peaks 
+        return peaks 
     
     def interpolation(self, image, interest_points):
         if interest_points is None or len(interest_points) == 0:
@@ -150,13 +160,11 @@ class DifferenceOfGaussian:
     def upsample_coordinates(self, points, dsxy, dsz):
         if points is None:
             return []
-        return [(point[0] * dsxy, point[1] * dsxy, point[2] * dsz) for point in points]
+        return [(point[2] * dsxy, point[1] * dsxy, point[0] * dsz) for point in points]
     
     def run(self, image_chunk, dsxy, dsz):
         final_peaks = self.compute_difference_of_gaussian(image_chunk)
-        # print("we just got final peaks")
         intensities = self.interpolation(image_chunk, final_peaks)
-        # print("our new intensities", intensities)
         upsampled_final_peaks = self.upsample_coordinates(final_peaks, dsxy, dsz)
 
         return {
