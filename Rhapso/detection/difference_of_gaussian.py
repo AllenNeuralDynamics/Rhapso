@@ -65,18 +65,6 @@ class DifferenceOfGaussian:
                 refined_peaks.append((z, y, x))
 
         return refined_peaks
-    
-    # def apply_gaussian_blur(self, input_float, sigma):
-    #     blurred_image = input_float
-        
-    #     for i in range(len(sigma)):
-    #         # blurred_image = gaussian_filter(blurred_image, sigma=sigma[i], mode='reflect')
-    #         if isinstance(blurred_image, da.Array):
-    #             blurred_image = dask_gaussian_filter(blurred_image, sigma=sigma[i], mode='reflect')
-    #         else:
-    #             blurred_image = scipy_gaussian_filter(blurred_image, sigma=sigma[i], mode='reflect')
-        
-    #     return blurred_image
 
     def apply_gaussian_blur(self, input_float, sigma, shape):
         blurred_image = input_float

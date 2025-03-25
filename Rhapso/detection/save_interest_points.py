@@ -8,11 +8,10 @@ from io import BytesIO
 import io
 
 class SaveInterestPoints:
-    def __init__(self, dataframes, consolidated_data, prefix, xml_file_path, xml_bucket_name, output_bucket_name, output_file_path,
+    def __init__(self, dataframes, consolidated_data, xml_file_path, xml_bucket_name, output_bucket_name, output_file_path,
                  downsample_xy, downsample_z, min_intensity, max_intensity, sigma, threshold, file_source):
         self.consolidated_data = consolidated_data
         self.image_loader_df = dataframes['image_loader']
-        self.prefix = prefix
         self.xml_file_path = xml_file_path
         self.xml_bucket_name = xml_bucket_name
         self.output_bucket_name = output_bucket_name
@@ -127,7 +126,7 @@ class SaveInterestPoints:
 
     def save_interest_points_to_n5(self, view_id, n5_path, root): 
         dataset_path = n5_path + '/interestpoints' 
-        corresponding_path = n5_path + '/corresponding'   
+        corresponding_path = n5_path + '/correspondences'   
 
         if dataset_path in root:
             del root[dataset_path]

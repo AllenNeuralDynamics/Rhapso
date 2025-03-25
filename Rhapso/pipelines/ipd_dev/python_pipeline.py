@@ -30,16 +30,6 @@ threshold = 0.008
 # output_file_path = "output"
 # output_bucket_name = 'interest-point-detection'
 
-# Tiff - local
-file_type = 'tiff'
-file_source = 'local'
-xml_file_path = '/Users/seanfite/Desktop/AllenInstitute/Rhapso/Data/IP_TIFF_XML/dataset.xml'
-image_file_path =  '/Users/seanfite/Desktop/AllenInstitute/Rhapso/Data/IP_TIFF_XML/'
-output_file_path = '/Users/seanfite/Desktop/AllenInstitute/Rhapso/Data/IP_TIFF_XML/output'
-xml_bucket_name = None
-image_bucket_name = None
-output_bucket_name = None
-
 # Zarr - s3
 # file_type = 'zarr'
 # file_source = 's3'
@@ -49,6 +39,16 @@ output_bucket_name = None
 # image_bucket_name = "aind-open-data"
 # output_file_path = "output"
 # output_bucket_name = 'interest-point-detection'
+
+# Tiff - local
+file_type = 'tiff'
+file_source = 'local'
+xml_file_path = '/Users/seanfite/Desktop/AllenInstitute/Rhapso/Data/IP_TIFF_XML/dataset.xml'
+image_file_path =  '/Users/seanfite/Desktop/AllenInstitute/Rhapso/Data/IP_TIFF_XML/'
+output_file_path = '/Users/seanfite/Desktop/AllenInstitute/Rhapso/Data/IP_TIFF_XML/output'
+xml_bucket_name = None
+image_bucket_name = None
+output_bucket_name = None
 
 # data input source
 s3 = boto3.client('s3')
@@ -64,6 +64,7 @@ def fetch_local_xml(file_path):
 # INTEREST POINT DETECTION
 # --------------------------
 
+# Fetch xml data
 if file_source == 's3':
     xml_file = fetch_from_s3(s3, xml_bucket_name, xml_file_path) 
 elif file_source == 'local':
@@ -153,19 +154,10 @@ advanced_refinement = AdvancedRefinement(final_peaks)
 consolidated_data = advanced_refinement.run()
 print("Advanced refinement is done")
 
-save_interest_points = SaveInterestPoints(dataframes, consolidated_data, image_file_path, xml_file_path, xml_bucket_name, 
+save_interest_points = SaveInterestPoints(dataframes, consolidated_data, xml_file_path, xml_bucket_name, 
                                           output_bucket_name, output_file_path, dsxy, dsz, min_intensity, 
                                           max_intensity, sigma, threshold, file_source)
 save_interest_points.run()
 print("Interest points saved")
 
 print("Interest point detection is done")
-
-# INTEREST POINT MATCHING
-# --------------------------
-
-# SOLVE 
-# --------------------------
-
-# FUSION
-# --------------------------
