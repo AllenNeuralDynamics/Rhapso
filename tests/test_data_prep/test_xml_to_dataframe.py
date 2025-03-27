@@ -1,8 +1,8 @@
+from Rhapso.pipelines.utils import fetch_local_xml
+from Rhapso.data_prep.xml_to_dataframe import XMLToDataFrame
 import unittest
 import pandas as pd
 import xml.etree.ElementTree as ET
-from Rhapso.data_prep.xml_to_dataframe import XMLToDataFrame
-from Rhapso.pipelines.python_pipeline import fetch_local_xml
 
 
 class TestXMLToDataFrame(unittest.TestCase):

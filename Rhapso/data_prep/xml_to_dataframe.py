@@ -2,8 +2,6 @@ from idna import check_label
 import pandas as pd
 import xml.etree.ElementTree as ET
 
-from Rhapso.pipelines.python_pipeline import fetch_local_xml
-
 # This component recieves an XML file containing Tiff or Zarr image metadata and converts
 # it into several Dataframes
 
