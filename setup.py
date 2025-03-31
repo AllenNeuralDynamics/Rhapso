@@ -10,18 +10,9 @@ from setuptools import setup, find_packages
 
 setup(
     name="Rhapso",
-    version="0.1.0",
+    version="0.1.4",
     packages=find_packages(),
-    install_requires=[
-        'dask[array]',  
-        'zarr',
-        'scipy',
-        'scikit-image',
-        'bioio',
-        'bioio-tifffile',
-        'tifffile==2025.1.10',
-        'opencv-python',
-    ],
+    install_requires=[],
     entry_points={
         "console_scripts": [
             "Rhapso = Rhapso.cli:main",
