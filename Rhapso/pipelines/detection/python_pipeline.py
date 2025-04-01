@@ -21,14 +21,14 @@ threshold = 0.008
 # TODO - we should be able to get image_file_path from the xml
 
 # Tiff - s3
-# file_type = 'tiff'
-# file_source = 's3'
-# xml_file_path = "IP_TIFF_XML/dataset.xml"
-# xml_bucket_name = "rhapso-tif-sample"
-# image_file_path = 's3://rhapso-tif-sample/IP_TIFF_XML/'
-# image_bucket_name = "rhapso-tif-sample"
-# output_file_path = "output"
-# output_bucket_name = 'interest-point-detection'
+file_type = 'tiff'
+file_source = 's3'
+xml_file_path = "IP_TIFF_XML/dataset.xml"
+xml_bucket_name = "rhapso-tif-sample"
+image_file_path = 's3://rhapso-tif-sample/IP_TIFF_XML/'
+image_bucket_name = "rhapso-tif-sample"
+output_file_path = "output"
+output_bucket_name = 'interest-point-detection'
 
 # Zarr - s3
 # file_type = 'zarr'
@@ -41,14 +41,14 @@ threshold = 0.008
 # output_bucket_name = 'interest-point-detection'
 
 # Tiff - local
-file_type = 'tiff'
-file_source = 'local'
-xml_file_path = '/Users/seanfite/Desktop/AllenInstitute/Rhapso/Data/IP_TIFF_XML/dataset.xml'
-image_file_path =  '/Users/seanfite/Desktop/AllenInstitute/Rhapso/Data/IP_TIFF_XML/'
-output_file_path = '/Users/seanfite/Desktop/AllenInstitute/Rhapso/Data/IP_TIFF_XML/output'
-xml_bucket_name = None
-image_bucket_name = None
-output_bucket_name = None
+# file_type = 'tiff'
+# file_source = 'local'
+# xml_file_path = '/Users/seanfite/Desktop/AllenInstitute/Rhapso/Data/IP_TIFF_XML/dataset.xml'
+# image_file_path =  '/Users/seanfite/Desktop/AllenInstitute/Rhapso/Data/IP_TIFF_XML/'
+# output_file_path = '/Users/seanfite/Desktop/AllenInstitute/Rhapso/Data/IP_TIFF_XML/output'
+# xml_bucket_name = None
+# image_bucket_name = None
+# output_bucket_name = None
 
 # data input source
 s3 = boto3.client('s3')

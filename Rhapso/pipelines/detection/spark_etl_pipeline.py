@@ -81,29 +81,29 @@ dataframes = processor.run()
 print("XML loaded")
 
 # Create view transform matrices 
-# create_models = ViewTransformModels(dataframes)
-# view_transform_matrices = create_models.run()
-# print("Transforms Models have been created")
+create_models = ViewTransformModels(dataframes)
+view_transform_matrices = create_models.run()
+print("Transforms Models have been created")
 
-# # Use view transform matrices to find areas of overlap
-# overlap_detection = OverlapDetection(view_transform_matrices, dataframes, dsxy, dsz, image_file_path, file_type)
-# overlapping_area = overlap_detection.run()
-# print("Overlap Detection is done")
+# Use view transform matrices to find areas of overlap
+overlap_detection = OverlapDetection(view_transform_matrices, dataframes, dsxy, dsz, image_file_path, file_type)
+overlapping_area = overlap_detection.run()
+print("Overlap Detection is done")
 
-# # Load images
-# images_loader = LoadImageData(dataframes, overlapping_area, dsxy, dsz, image_file_path, file_type)
-# all_image_data = images_loader.run()
-# print("Image data has loaded")
+# Load images
+images_loader = LoadImageData(dataframes, overlapping_area, dsxy, dsz, image_file_path, file_type)
+all_image_data = images_loader.run()
+print("Image data has loaded")
 
-# # Flatten and serialize images to parquet
-# serialize_image_chunks = SerializeImageChunks(all_image_data, parquet_bucket_path)
-# serialized_images_dyf = serialize_image_chunks.run()
-# print("Serialized image data")
+# Flatten and serialize images to parquet
+serialize_image_chunks = SerializeImageChunks(all_image_data, parquet_bucket_path)
+serialized_images_dyf = serialize_image_chunks.run()
+print("Serialized image data")
 
-# # Create and start crawler
-# glue_crawler = GlueCrawler(crawler_name, crawler_s3_path, crawler_database_name, crawler_iam_role)
-# glue_crawler.run()
-# print("Glue crawler created and started")
+# Create and start crawler
+glue_crawler = GlueCrawler(crawler_name, crawler_s3_path, crawler_database_name, crawler_iam_role)
+glue_crawler.run()
+print("Glue crawler created and started")
 
 # Create dynamic frame using crawler schema
 image_data_dyf = glueContext.create_dynamic_frame.from_catalog(
@@ -214,22 +214,3 @@ job.commit()
 
 # REMOVE ALL DOCKER CONTAINERS
 # docker rm $(docker ps -aq)
-
-# DYNAMIC FRAME LOADER DEV VERSION ---
-# The docker container can only handle a few image chunks at a time. If doing local dev work in the docker 
-# container, use this version to create the dynamic frame and set limit to a max 3 image chunks.
-# specific_files = [
-#     "s3://interest-point-detection/ipd-staging-v2/1.parquet/partition_key=12/9aa52395caba4e6582089464b2287c60-0.parquet"
-#     "s3://interest-point-detection/ipd-staging-v2/1.parquet/partition_key=11/9aa52395caba4e6582089464b2287c60-0.parquet",
-#     "s3://interest-point-detection/ipd-staging-v2/1.parquet/partition_key=15/9aa52395caba4e6582089464b2287c60-0.parquet"
-# ]
-# image_data_dyf = glueContext.create_dynamic_frame.from_options(
-#     connection_type="s3",  
-#     format="parquet",     
-#     connection_options={"paths": specific_files}, 
-#     transformation_ctx="dynamic_frame"
-# )
-# spark_df = image_data_dyf.toDF()
-# limited_spark_df = spark_df.limit(2)
-# limited_dyf = DynamicFrame.fromDF(limited_spark_df, glueContext, "limited_dyf")
-# END DYNAMIC FRAME LOADER DEV VERSION ---

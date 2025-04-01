@@ -3,10 +3,6 @@ from skimage.feature import peak_local_max
 from scipy.optimize import curve_fit
 import numpy as np
 from scipy.ndimage import map_coordinates
-import gc
-import dask.array as da
-from memory_profiler import profile
-import dask
 
 # This component implements the difference of gaussian algorithm on image chunks
 
@@ -111,7 +107,6 @@ class DifferenceOfGaussian:
         normalized_image = (image - self.min_intensity) / (self.max_intensity - self.min_intensity)
         return normalized_image
 
-    # @profile
     def compute_difference_of_gaussian(self, image):
         shape = 3
         initial_sigma = self.sigma
@@ -131,8 +126,10 @@ class DifferenceOfGaussian:
         # subtract blurred images
         dog = blurred_image_1 - blurred_image_2
 
+        # find peaks
         peaks = peak_local_max(dog, threshold_rel=min_initial_peak_value)
         
+        # compare peaks with image data 
         # final_peaks = self.refine_peaks(peaks, image)
          
         return peaks 
@@ -145,6 +142,7 @@ class DifferenceOfGaussian:
         intensities = map_coordinates(image, points, order=1, mode='nearest')
         return intensities
     
+    # return points to original sample level
     def upsample_coordinates(self, points, dsxy, dsz):
         if points is None:
             return []
