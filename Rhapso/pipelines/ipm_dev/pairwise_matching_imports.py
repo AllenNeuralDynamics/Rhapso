@@ -1,10 +1,4 @@
-'''
-Run in glue 5.0 with:
---additional-python-modules s3://PATH-TO-RHAPSO.whl,bioio==1.3.0,bioio-tifffile==1.0.0,tifffile==2025.1.10,opencv-python,scikit-learn,tensorstore==0.1.56
-'''
-#!/usr/bin/env python3
-import sys
-from Rhapso.matching.interest_point_matching import start_fusion, fetch_xml_file, parse_xml, parse_and_read_datasets, perform_pairwise_matching, save_matches_as_n5
+
 
 if __name__ == "__main__":
     try:

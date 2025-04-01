@@ -5,12 +5,6 @@ import numpy as np
 
 # This component flattens 3D images into 2D and parquets into S3
 
-# Current Parquet Strategy
-# Partition size: 128 mb
-# Images per partition: 6
-# Parquet file: 512MB-1GB
-# Partitions per parquet: 4-8
-
 class SerializeImageChunks:
     def __init__(self, image_chunks, parquet_bucket_path):
         self.image_chunks = image_chunks
@@ -49,13 +43,12 @@ class SerializeImageChunks:
     def process_chunks_to_parquet(self):
         for image in self.image_chunks:
             
-            # TODO - we could grab more metadata here - optimization?
             chunk_table = self.serialize_image_chunk_as_table(image['image_chunk'])
             self.columns.append(chunk_table)
             
             self.current_chunk_count += 1
 
-            # 6 image chunks = 1 partition (128mb)
+            # 6 image chunks = 1 partition 
             if self.current_chunk_count >= 6:
                 
                 # stack the 6 image chunk tables
@@ -73,14 +66,13 @@ class SerializeImageChunks:
                 self.partition_count_per_file += 1
                 self.partition_key += 1
 
-                # 8 partitions = 1 parquet file (1gb)
+                # 8 partitions = 1 parquet file 
                 if self.partition_count_per_file >= 8: 
 
                     # combine partitions into 1 table
                     final_table = pa.concat_tables(self.partitions, promote=True)
                     filename = f'{self.file_count}.parquet'
                     
-                    # write to parquet with partition group key # TODO - do we need metadata here?
                     pq.write_to_dataset(
                         final_table, 
                         self.parquet_bucket_path + filename,

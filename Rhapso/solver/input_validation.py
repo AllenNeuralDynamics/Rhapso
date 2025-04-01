@@ -60,8 +60,7 @@ from Rhapso.matching.interest_point_matching import build_label_map
 # }
 
 
-class inputValidation:
-
+class InputValidation:
     def __init__(
         self,
         data_global,
@@ -288,3 +287,6 @@ class inputValidation:
         # I don't think this gets hit since it gets set to null in this case. May need to follow up about params.
         if registration_tp == "TO_REFERENCE_TIMEPOINT":
             print("Reference timepoint =", reference_tp)
+
+    def run(self):
+        self.input_validation()
