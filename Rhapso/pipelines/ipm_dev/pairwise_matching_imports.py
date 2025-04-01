@@ -1,3 +1,7 @@
+'''
+Run in glue 5.0 with:
+--additional-python-modules s3://rhapso-dev/rhapso-whl-package/branch=main/Rhapso-0.1.5-py3-none-any.whl,bioio==1.3.0,bioio-tifffile==1.0.0,tifffile==2025.1.10,opencv-python,scikit-learn,tensorstore==0.1.56
+'''
 #!/usr/bin/env python3
 import sys
 from Rhapso.matching.interest_point_matching import fetch_xml_file, parse_xml, parse_and_read_datasets, perform_pairwise_matching, save_matches_as_n5
@@ -77,13 +81,13 @@ def main(xml_file, n5_folder_base, output_s3_path=None):
 if __name__ == "__main__":
     try:
         # # S3
-        # xml_s3_path = "s3://rhapso-fused-zarr-output-data/matching_input_sample/dataset.xml"
-        # n5_base_path = "s3://rhapso-fused-zarr-output-data/matching_input_sample/interestpoints.n5"
-        # output_path = n5_base_path  # Set output path to be the same as input n5 data
+        xml_s3_path = "s3://rhapso-fused-zarr-output-data/matching_input_sample/dataset.xml"
+        n5_base_path = "s3://rhapso-fused-zarr-output-data/matching_input_sample/interestpoints.n5"
+        output_path = n5_base_path  # Set output path to be the same as input n5 data
 
-        xml_s3_path = "/home/martin/Documents/Allen/BigStitcherSpark Example Datasets/Interest Points (unaligned)/Just Two Tiff/IP_TIFF_XML (original) - Just Two Tiff Files - After Matching/dataset.xml"
-        n5_base_path = "/home/martin/Documents/Allen/BigStitcherSpark Example Datasets/Interest Points (unaligned)/Just Two Tiff/IP_TIFF_XML (original) - Just Two Tiff Files - After Matching/interestpoints.n5"
-        output_path = "/home/martin/Documents/Allen/BigStitcherSpark Example Datasets/Interest Points (unaligned)/Just Two Tiff/IP_TIFF_XML (original) - Just Two Tiff Files - After Matching/matchingOutput/interestpoints.n5"
+        #xml_s3_path = "/home/martin/Documents/Allen/BigStitcherSpark Example Datasets/Interest Points (unaligned)/Just Two Tiff/IP_TIFF_XML (original) - Just Two Tiff Files - After Matching/dataset.xml"
+        #n5_base_path = "/home/martin/Documents/Allen/BigStitcherSpark Example Datasets/Interest Points (unaligned)/Just Two Tiff/IP_TIFF_XML (original) - Just Two Tiff Files - After Matching/interestpoints.n5"
+        #output_path = "/home/martin/Documents/Allen/BigStitcherSpark Example Datasets/Interest Points (unaligned)/Just Two Tiff/IP_TIFF_XML (original) - Just Two Tiff Files - After Matching/matchingOutput/interestpoints.n5"
 
         main(xml_s3_path, n5_base_path, output_path)
     except Exception as e:
