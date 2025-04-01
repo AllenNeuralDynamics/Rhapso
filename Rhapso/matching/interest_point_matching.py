@@ -6,7 +6,7 @@ import os
 import json
 from sklearn.neighbors import NearestNeighbors
 import tensorstore as ts
-from urllib.parse import urlparse  # Add this import
+from urllib.parse import urlparse 
 
 def matchViews(stuff):
     print("matching views")
