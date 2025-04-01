@@ -202,14 +202,14 @@ def parse_xml(xml_file):
         timepoint = int(vip.attrib['timepoint'])
         path = vip.text.strip()
         if path.endswith("/beads"):
-            print(f"🔄 Normalizing path for setup {setup_id}: Removing trailing '/beads'")
+            print(f"🔄 Normalizing path for setup {setup_id} at timepoint {timepoint}: Removing trailing '/beads'")
             path = path[:-len("/beads")]
-        if setup_id in view_paths:
-            if timepoint < view_paths[setup_id]['timepoint']:
-                view_paths[setup_id] = {'timepoint': timepoint, 'path': path}
-        else:
-            view_paths[setup_id] = {'timepoint': timepoint, 'path': path}
-    print("✅ Successfully parsed XML file.")
+        
+        # Use tuple of (timepoint, setup_id) as key to handle multiple timepoints
+        key = (timepoint, setup_id)
+        view_paths[key] = {'timepoint': timepoint, 'path': path, 'setup': setup_id}
+    
+    print(f"✅ Successfully parsed XML file. Found {len(view_paths)} view/timepoint combinations.")
     return view_paths
 
 def open_n5_dataset(n5_path):
@@ -299,15 +299,17 @@ def print_dataset_info(dataset, label):
 
 def parse_and_read_datasets(xml_file, n5_folder_base):
     view_paths = parse_xml(xml_file)
-    print(f"\n🔍 Found {len(view_paths)} view ID interest point folders to analyze.")
+    print(f"\n🔍 Found {len(view_paths)} view ID/timepoint interest point folders to analyze.")
     interest_point_info = {}
-    for idx, view in enumerate(view_paths, start=1):
-        print(f"\n🔗 Processing view {idx}/{len(view_paths)}: {view}")
-        full_path = os.path.join(n5_folder_base, view_paths[view]['path'], "beads", "interestpoints", "loc")
+    for idx, view_key in enumerate(view_paths, start=1):
+        timepoint, setup_id = view_key
+        view_info = view_paths[view_key]
+        print(f"\n🔗 Processing view {idx}/{len(view_paths)}: Setup {setup_id}, Timepoint {timepoint}")
+        full_path = os.path.join(n5_folder_base, view_info['path'], "beads", "interestpoints", "loc")
         print(f"🛠  Loading dataset from: {full_path}")
         dataset = open_n5_dataset(full_path)
         if not dataset:
-            print(f"⚠️ Skipping view {view} due to failed dataset loading.")
+            print(f"⚠️ Skipping view {setup_id} at timepoint {timepoint} due to failed dataset loading.")
             continue
         relative_path = os.path.relpath(full_path, os.path.dirname(xml_file))
         print_dataset_info(dataset, relative_path)
@@ -316,9 +318,9 @@ def parse_and_read_datasets(xml_file, n5_folder_base):
         except Exception as e:
             print(f"❌ Error reading dataset data: {e}")
             continue
-        interest_point_info[view] = {'loc': {'num_items': dataset.shape[0],
-                                              'shape': dataset.shape,
-                                              'data': data}}
+        interest_point_info[view_key] = {'loc': {'num_items': dataset.shape[0],
+                                          'shape': dataset.shape,
+                                          'data': data}}
     return interest_point_info, view_paths
 
 def compute_matches(pointsA, pointsB, difference_threshold, ratio_of_distance):
@@ -373,99 +375,142 @@ def ransac_filter_matches(pointsA, pointsB, matches, num_iterations=1000, thresh
 
 def perform_pairwise_matching(interest_point_info, view_paths, all_matches, labels, method):
     print("\n🔗 Starting pairwise matching across views:")
-    views = list(interest_point_info.keys())
-    for i in range(len(views)):
-        for j in range(i+1, len(views)):
-            viewA = views[i]
-            viewB = views[j]
-            print(f"\n💥 Matching view {viewA} with view {viewB}")
-            dataA = interest_point_info[viewA]['loc']['data']
-            dataB = interest_point_info[viewB]['loc']['data']
-            pointsA = dataA.T
-            pointsB = dataB.T
-            print("🔍 Computing initial matches using nearest neighbors...")
-            initial_matches = compute_matches(pointsA, pointsB, float('inf'), 3.0)
-            print(f"⚙️ Found {len(initial_matches)} initial matches.")
-            filtered_matches, t_refined = ransac_filter_matches(pointsA, pointsB, initial_matches, num_iterations=1000, threshold=5.0)
-            if filtered_matches:
-                for match in filtered_matches:
-                    ptA = pointsA[match[0]]
-                    ptB = pointsB[match[1]]
-                    print(f"Matched Points (Global Coordinates): [ViewSetupId: {viewA}, TimePointId: {view_paths[viewA]['timepoint']}, x: {ptA[0]:.2f}, y: {ptA[1]:.2f}, z: {ptA[2]:.2f}] <=> [ViewSetupId: {viewB}, TimePointId: {view_paths[viewB]['timepoint']}, x: {ptB[0]:.2f}, y: {ptB[1]:.2f}, z: {ptB[2]:.2f}]")
-                    all_matches.append((viewA, viewB, match[0], match[1]))
-            else:
-                print("⚠️ No inlier matches found after RANSAC filtering.")
+    
+    # Group views by timepoint
+    timepoint_groups = {}
+    for view_key in interest_point_info.keys():
+        timepoint, setup_id = view_key
+        if timepoint not in timepoint_groups:
+            timepoint_groups[timepoint] = []
+        timepoint_groups[timepoint].append(view_key)
+    
+    # Process each timepoint separately
+    for timepoint, views in timepoint_groups.items():
+        print(f"\n⏱️  Processing timepoint {timepoint} with {len(views)} views")
+        for i in range(len(views)):
+            for j in range(i+1, len(views)):
+                viewA = views[i]
+                viewB = views[j]
+                tp_A, setup_A = viewA
+                tp_B, setup_B = viewB
+                
+                print(f"\n💥 Matching view {setup_A} with view {setup_B} at timepoint {timepoint}")
+                dataA = interest_point_info[viewA]['loc']['data']
+                dataB = interest_point_info[viewB]['loc']['data']
+                pointsA = dataA.T
+                pointsB = dataB.T
+                print("🔍 Computing initial matches using nearest neighbors...")
+                initial_matches = compute_matches(pointsA, pointsB, float('inf'), 3.0)
+                print(f"⚙️ Found {len(initial_matches)} initial matches.")
+                filtered_matches, t_refined = ransac_filter_matches(pointsA, pointsB, initial_matches, num_iterations=1000, threshold=5.0)
+                if filtered_matches:
+                    for match in filtered_matches:
+                        ptA = pointsA[match[0]]
+                        ptB = pointsB[match[1]]
+                        print(f"Matched Points (Global Coordinates): [ViewSetupId: {setup_A}, TimePointId: {tp_A}, x: {ptA[0]:.2f}, y: {ptA[1]:.2f}, z: {ptA[2]:.2f}] <=> [ViewSetupId: {setup_B}, TimePointId: {tp_B}, x: {ptB[0]:.2f}, y: {ptB[1]:.2f}, z: {ptB[2]:.2f}]")
+                        all_matches.append((viewA, viewB, match[0], match[1]))
+                else:
+                    print("⚠️ No inlier matches found after RANSAC filtering.")
 
 def save_matches_as_n5(all_matches, view_paths, n5_base_path, clear_correspondences):
     print("\n💾 Saving matches as correspondences into N5 folders...")
-    timepoint = min(vp['timepoint'] for vp in view_paths.values())
-    sorted_views = sorted(view_paths.keys(), key=lambda x: int(x))
-    idMap = {}
-    for i, view in enumerate(sorted_views):
-        key = f"{timepoint},{view},beads"
-        idMap[key] = i
-
-    match_list = []
-    unique_id = 0
-    for (viewA, viewB, idxA, idxB) in all_matches:
-        keyA = f"{timepoint},{viewA},beads"
-        keyB = f"{timepoint},{viewB},beads"
-        if idMap[keyA] < idMap[keyB]:
-            match_list.append([idxA, idxB, unique_id])
-        else:
-            match_list.append([idxB, idxA, unique_id])
-        unique_id += 1
-
-    if not match_list:
-        print("No matches to save.")
-        return
-
-    matches_array = np.array(match_list, dtype=np.uint64).T
-    total_matches = matches_array.shape[1]
-
-    data_attributes = {
-        "dataType": "uint64",
-        "compression": {
-            "type": "raw"
-        },
-        "blockSize": [1, 300000],
-        "dimensions": [3, total_matches]
-    }
-
-    for view in sorted_views:
-        correspondences_folder = os.path.join(n5_base_path, view_paths[view]['path'], "beads", "correspondences")
-        print(f"\n\n📁 Saving correspondences for view: {view}\n    Folder: {correspondences_folder}\n{'-'*60}")
-        os.makedirs(correspondences_folder, exist_ok=True)
+    
+    # Group matches by timepoint
+    timepoint_matches = {}
+    for match in all_matches:
+        viewA, viewB, idxA, idxB = match
+        timepoint, _ = viewA  # Both viewA and viewB should have the same timepoint
         
-        corr_attributes = {
-            "correspondences": "1.0.0",
-            "idMap": idMap
+        if timepoint not in timepoint_matches:
+            timepoint_matches[timepoint] = []
+        timepoint_matches[timepoint].append(match)
+    
+    # Process each timepoint's matches separately
+    for timepoint, matches in timepoint_matches.items():
+        print(f"\n⏱️  Processing matches for timepoint {timepoint}")
+        
+        # Get all setup_ids for this timepoint
+        setups_in_timepoint = set()
+        for match in matches:
+            viewA, viewB, _, _ = match
+            _, setup_A = viewA
+            _, setup_B = viewB
+            setups_in_timepoint.add(setup_A)
+            setups_in_timepoint.add(setup_B)
+        
+        sorted_views = sorted(setups_in_timepoint, key=lambda x: int(x))
+        
+        # Create ID map for this timepoint
+        idMap = {}
+        for i, setup_id in enumerate(sorted_views):
+            key = f"{timepoint},{setup_id},beads"
+            idMap[key] = i
+        
+        match_list = []
+        unique_id = 0
+        for (viewA, viewB, idxA, idxB) in matches:
+            _, setup_A = viewA
+            _, setup_B = viewB
+            keyA = f"{timepoint},{setup_A},beads"
+            keyB = f"{timepoint},{setup_B},beads"
+            
+            if idMap[keyA] < idMap[keyB]:
+                match_list.append([idxA, idxB, unique_id])
+            else:
+                match_list.append([idxB, idxA, unique_id])
+            unique_id += 1
+        
+        if not match_list:
+            print(f"No matches to save for timepoint {timepoint}.")
+            continue
+        
+        matches_array = np.array(match_list, dtype=np.uint64).T
+        total_matches = matches_array.shape[1]
+        
+        data_attributes = {
+            "dataType": "uint64",
+            "compression": {
+                "type": "raw"
+            },
+            "blockSize": [1, 300000],
+            "dimensions": [3, total_matches]
         }
-        attributes_path = os.path.join(correspondences_folder, "attributes.json")
-        with open(attributes_path, "w") as f:
-            json.dump(corr_attributes, f, indent=4)
-        print(f"Saved correspondences attributes.json to {attributes_path}")
-
-        data_folder = os.path.join(correspondences_folder, "data")
-        os.makedirs(data_folder, exist_ok=True)
-        for i in range(3):
-            subfolder = os.path.join(data_folder, str(i))
-            os.makedirs(subfolder, exist_ok=True)
         
-        data_attributes_path = os.path.join(data_folder, "attributes.json")
-        with open(data_attributes_path, "w") as f:
-            json.dump(data_attributes, f, indent=4)
-        print(f"Saved data attributes.json to {data_attributes_path}")
-
-        for i in range(3):
-            row_data = matches_array[i, :]
-            byte_data = row_data.tobytes()
-            output_file = os.path.join(data_folder, str(i), "0")
-            with open(output_file, "wb") as f:
-                f.write(byte_data)
-            print(f"Saved row {i} data to {output_file} (raw binary)")
-
-        print(f"Saved matches N5 dataset with dimensions [3, {total_matches}] in folder: {correspondences_folder}")
+        for view_key in [key for key in view_paths.keys() if key[0] == timepoint]:
+            _, setup_id = view_key
+            correspondences_folder = os.path.join(n5_base_path, view_paths[view_key]['path'], "beads", "correspondences")
+            print(f"\n\n📁 Saving correspondences for timepoint {timepoint}, view: {setup_id}\n    Folder: {correspondences_folder}\n{'-'*60}")
+            os.makedirs(correspondences_folder, exist_ok=True)
+            
+            corr_attributes = {
+                "correspondences": "1.0.0",
+                "idMap": idMap
+            }
+            attributes_path = os.path.join(correspondences_folder, "attributes.json")
+            with open(attributes_path, "w") as f:
+                json.dump(corr_attributes, f, indent=4)
+            print(f"Saved correspondences attributes.json to {attributes_path}")
+            
+            data_folder = os.path.join(correspondences_folder, "data")
+            os.makedirs(data_folder, exist_ok=True)
+            for i in range(3):
+                subfolder = os.path.join(data_folder, str(i))
+                os.makedirs(subfolder, exist_ok=True)
+            
+            data_attributes_path = os.path.join(data_folder, "attributes.json")
+            with open(data_attributes_path, "w") as f:
+                json.dump(data_attributes, f, indent=4)
+            print(f"Saved data attributes.json to {data_attributes_path}")
+            
+            for i in range(3):
+                row_data = matches_array[i, :]
+                byte_data = row_data.tobytes()
+                output_file = os.path.join(data_folder, str(i), "0")
+                with open(output_file, "wb") as f:
+                    f.write(byte_data)
+                print(f"Saved row {i} data to {output_file} (raw binary)")
+            
+            print(f"Saved matches N5 dataset with dimensions [3, {total_matches}] in folder: {correspondences_folder}")
 
 def main(xml_file, n5_folder_base, labels, method, clear_correspondences):
     interest_point_info, view_paths = parse_and_read_datasets(xml_file, n5_folder_base)
@@ -480,6 +525,128 @@ def main(xml_file, n5_folder_base, labels, method, clear_correspondences):
     all_matches = []
     perform_pairwise_matching(interest_point_info, view_paths, all_matches, labels, method)
     save_matches_as_n5(all_matches, view_paths, n5_folder_base, clear_correspondences)
+
+def fetch_n5_folder(s3_path, local_temp_dir="/tmp/n5_temp"):
+    try:
+        if s3_path.startswith("s3://"):
+            print(f"📥 Fetching N5 folder from S3: {s3_path}")
+            s3 = boto3.client('s3')
+            parsed_url = urlparse(s3_path)
+            bucket_name = parsed_url.netloc
+            prefix = parsed_url.path.lstrip('/')
+            local_path = os.path.join(local_temp_dir, os.path.basename(prefix))
+            os.makedirs(local_path, exist_ok=True)
+            print(f"📂 Local directory for N5 folder: {local_path}")
+            paginator = s3.get_paginator('list_objects_v2')
+            for page in paginator.paginate(Bucket=bucket_name, Prefix=prefix):
+                for obj in page.get('Contents', []):
+                    key = obj['Key']
+                    local_file_path = os.path.join(local_temp_dir, key[len(prefix):].lstrip('/'))
+                    os.makedirs(os.path.dirname(local_file_path), exist_ok=True)
+                    s3.download_file(bucket_name, key, local_file_path)
+                    print(f"  📄 Downloaded: {local_file_path}")
+            print(f"✅ N5 folder downloaded to: {local_path}")
+            return local_path
+        else:
+            print(f"📂 Using local N5 folder: {s3_path}")
+            return s3_path
+    except Exception as e:
+        print(f"❌ Error fetching N5 folder: {e}")
+        sys.exit(1)
+
+
+def start_fusion(xml_file, n5_folder_base, output_s3_path=None):
+    try:
+        if xml_file.startswith("s3://"):
+            print(f"📥 Fetching XML file from S3: {xml_file}")
+            xml_file = fetch_xml_file(xml_file)
+            local_xml_path = "/tmp/xml_temp.xml"
+            with open(local_xml_path, "w") as f:
+                f.write(xml_file)
+            print(f"📂 Local XML file saved to: {local_xml_path}")
+            xml_file = local_xml_path
+        else:
+            print(f"📂 Using local XML file: {xml_file}")
+
+        # Parse the XML to get all defined timepoints
+        tree = ET.parse(xml_file)
+        root = tree.getroot()
+        
+        # Get all timepoints defined in the XML
+        all_timepoints = set()
+        
+        # First, try to find timepoints in a "list" type format
+        timepoints_list = root.find(".//Timepoints[@type='list']")
+        if timepoints_list is not None:
+            for timepoint in timepoints_list.findall("Timepoint"):
+                all_timepoints.add(int(timepoint.find("id").text))
+        
+        # If no timepoints found, try "range" format
+        if not all_timepoints:
+            timepoint_range = root.find(".//Timepoints[@type='range']")
+            if timepoint_range is not None:
+                first = int(timepoint_range.find("first").text)
+                last = int(timepoint_range.find("last").text)
+                all_timepoints = set(range(first, last + 1))
+        
+        # If still no timepoints found, try to get timepoints from ViewInterestPointsFile elements
+        if not all_timepoints:
+            for vip in root.findall(".//ViewInterestPointsFile"):
+                all_timepoints.add(int(vip.attrib['timepoint']))
+        
+        if all_timepoints:
+            print(f"📊 XML file contains {len(all_timepoints)} timepoints: {sorted(all_timepoints)}")
+        else:
+            print("⚠️ Warning: Could not find any timepoints defined in the XML file")
+            all_timepoints = {0}  # Default to avoid errors
+
+        if n5_folder_base.startswith("s3://"):
+            n5_folder_base = fetch_n5_folder(n5_folder_base)
+        
+        # If output path is not specified, use the same as input n5 folder
+        if output_s3_path is None:
+            output_s3_path = n5_folder_base
+
+        labels = ["beads"]
+        method = "FAST_ROTATION"
+        clear_correspondences = False
+
+        # Parse the XML and parse datasets using the updated functions that handle multiple timepoints
+        interest_point_info, view_paths = parse_and_read_datasets(xml_file, n5_folder_base)
+        print("\n📦 Collected Interest Point Info:")
+        
+        # Group by timepoint for better visualization
+        loaded_timepoints = set(tp for (tp, _) in interest_point_info.keys())
+        for timepoint in sorted(loaded_timepoints):
+            print(f"\n⏱️  Timepoint {timepoint}:")
+            for view_key, info in interest_point_info.items():
+                tp, setup = view_key
+                if tp == timepoint:
+                    print(f"  View {setup}:")
+                    for subfolder, details in info.items():
+                        if subfolder == 'loc':
+                            print(f"    {subfolder}: num_items: {details['num_items']}, shape: {details['shape']}")
+                        else:
+                            print(f"    {subfolder}: {details}")
+        
+        # Report on missing timepoints
+        missing_timepoints = all_timepoints - loaded_timepoints
+        if missing_timepoints:
+            print(f"\n⚠️ Warning: Could not load interest points for {len(missing_timepoints)} timepoints: {sorted(missing_timepoints)}")
+            print("   This could be because the interest point files don't exist or couldn't be accessed.")
+                            
+        all_matches = []
+        perform_pairwise_matching(interest_point_info, view_paths, all_matches, labels, method)
+        save_matches_as_n5(all_matches, view_paths, output_s3_path, clear_correspondences)
+        
+        # Print comprehensive summary
+        print(f"\n✅ Successfully processed XML file with {len(all_timepoints)} timepoints defined in XML")
+        print(f"✅ Successfully loaded interest points for {len(loaded_timepoints)} timepoints")
+        print(f"✅ Generated and saved {len(all_matches)} matches across all loaded timepoints")
+        print(f"✅ Output saved to: {output_s3_path}")
+    except Exception as e:
+        print(f"❌ Error in start_fusion function: {e}")
+        sys.exit(1)
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser(description="Pairwise Matching Pipeline")
