@@ -4,7 +4,7 @@ Run in glue 5.0 with:
 '''
 #!/usr/bin/env python3
 import sys
-from Rhapso.matching.interest_point_matching import start_fusion, fetch_xml_file, parse_xml, parse_and_read_datasets, perform_pairwise_matching, save_matches_as_n5
+from Rhapso.matching.interest_point_matching import start_matching, fetch_xml_file, parse_xml, parse_and_read_datasets, perform_pairwise_matching, save_matches_as_n5
 
 if __name__ == "__main__":
     try:
@@ -18,7 +18,7 @@ if __name__ == "__main__":
         #n5_base_path = "/home/martin/Documents/Allen/BigStitcherSpark Example Datasets/Interest Points (unaligned)/IP_TIFF_XML/2. IP_TIFF_XML (after matching)/interestpoints.n5"
         #output_path = "/home/martin/Documents/Allen/BigStitcherSpark Example Datasets/Interest Points (unaligned)/IP_TIFF_XML/2. IP_TIFF_XML (after matching)/interestpoints.n5"
         
-        start_fusion(xml_path, n5_base_path, output_path)
+        start_matching(xml_path, n5_base_path, output_path)
     except Exception as e:
         print(f"❌ Unexpected error in script execution: {e}")
         sys.exit(1)
