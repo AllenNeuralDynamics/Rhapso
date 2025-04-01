@@ -6,6 +6,7 @@ import os
 import json
 from sklearn.neighbors import NearestNeighbors
 import tensorstore as ts
+from urllib.parse import urlparse  # Add this import
 
 def matchViews(stuff):
     print("matching views")
@@ -212,14 +213,41 @@ def parse_xml(xml_file):
     return view_paths
 
 def open_n5_dataset(n5_path):
+    # Check if the direct path exists
     attributes_path = os.path.join(n5_path, 'attributes.json')
     print(f"\n🔍 Checking for attributes.json at: {attributes_path}")
+    
+    if not os.path.exists(attributes_path):
+        # Try the alternate path structure by removing 'interestpoints.n5' if it exists in the path
+        if 'interestpoints.n5' in n5_path:
+            alt_path = n5_path.replace('interestpoints.n5/', '')
+            alt_path = alt_path.replace('interestpoints.n5', '')
+            attributes_path = os.path.join(alt_path, 'attributes.json')
+            print(f"🔄 Path not found. Trying alternate path: {attributes_path}")
+        
+        # If path with 'tpId' doesn't use the base n5_folder_base structure, try the direct tpId path
+        if not os.path.exists(attributes_path) and '/tpId_' not in n5_path:
+            base_dir = os.path.dirname(n5_path)
+            for item in os.listdir(base_dir):
+                if item.startswith('tpId_'):
+                    view_id = item.split('_')[3]
+                    if f'viewSetupId_{view_id}' in n5_path:
+                        alt_path = os.path.join(base_dir, item, 'beads', 'interestpoints', 'loc')
+                        attributes_path = os.path.join(alt_path, 'attributes.json')
+                        print(f"🔄 Path not found. Trying tpId-based path: {attributes_path}")
+                        if os.path.exists(attributes_path):
+                            n5_path = alt_path
+                            break
+    
     if os.path.exists(attributes_path):
-        print("✅ attributes.json found, attempting to open dataset.")
+        print(f"✅ attributes.json found at: {attributes_path}")
         try:
             dataset = ts.open({
                 'driver': 'n5',
-                'kvstore': {'driver': 'file', 'path': n5_path}
+                'kvstore': {
+                    'driver': 'file', 
+                    'path': os.path.dirname(attributes_path)
+                }
             }).result()
             print("✅ Successfully opened N5 dataset.")
             return dataset
@@ -228,6 +256,29 @@ def open_n5_dataset(n5_path):
             return None
     else:
         print(f"❌ No valid N5 dataset found at {n5_path} (missing attributes.json)")
+        
+        # Debug info - list nearby directories to help troubleshoot
+        try:
+            base_dir = os.path.dirname(n5_path)
+            print(f"📁 Contents of parent directory {base_dir}:")
+            if os.path.exists(base_dir):
+                for item in os.listdir(base_dir):
+                    print(f"   - {item}")
+                    
+                # If parent directory contains tpId folders, print their structure
+                if any(i.startswith('tpId_') for i in os.listdir(base_dir)):
+                    for item in os.listdir(base_dir):
+                        if item.startswith('tpId_'):
+                            full_path = os.path.join(base_dir, item)
+                            print(f"   📂 {item} contents:")
+                            if os.path.isdir(full_path):
+                                for subitem in os.listdir(full_path):
+                                    print(f"      - {subitem}")
+            else:
+                print(f"   Directory does not exist")
+        except Exception as e:
+            print(f"   Error listing directory: {e}")
+            
         return None
 
 def print_dataset_info(dataset, label):
