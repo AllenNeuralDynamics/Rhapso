@@ -7,10 +7,45 @@ import json
 from sklearn.neighbors import NearestNeighbors
 import tensorstore as ts
 from urllib.parse import urlparse 
+import sys
+import zarr
+import s3fs
 
-def matchViews(stuff):
-    print("matching views")
-    return("apple")
+def print_dataset_info(store_path, dataset_prefix, print_data=False, num_points=30):
+    if store_path.startswith("s3://"):
+        s3 = s3fs.S3FileSystem(anon=False)
+        store = s3fs.S3Map(root=store_path, s3=s3)
+    else:
+        store = zarr.N5Store(store_path)
+    
+    root = zarr.open(store, mode='r')
+    dataset = root[dataset_prefix]
+ 
+    print(f"Information for dataset at {store_path} in prefix {dataset_prefix}:")
+    print("Data Type:", dataset.dtype)
+    print("Shape:", dataset.shape)
+    print("Chunks:", dataset.chunks)
+    print("Compression:", dataset.compressor)
+    if dataset.attrs:
+        print("Attributes:")
+        for attr, value in dataset.attrs.items():
+            print(f"  {attr}: {value}")
+ 
+    data_slice = dataset[:min(30, dataset.shape[1])]
+    print(data_slice)
+ 
+def list_files_under_prefix(node, path):
+    try:
+        for item in node[path]:
+            new_path = f"{path}/{item}"
+            if isinstance(node[new_path], zarr.hierarchy.Group):
+                print(f"Group: {new_path}")
+                list_files_under_prefix(node, new_path)
+            else:
+                print(f"Dataset: {new_path} - {node[new_path].shape}")
+    except KeyError:
+        print(f"No items found under the path {path}")
+ 
 
 def buildLabelMap(xml_root):
     """
@@ -283,6 +318,10 @@ def open_n5_dataset(n5_path):
 
 def print_dataset_info(dataset, label):
     try:
+        # Add a type check to ensure the dataset is valid
+        if not hasattr(dataset, 'shape'):
+            raise ValueError(f"Invalid dataset object for label '{label}'. Expected an object with a 'shape' attribute, got {type(dataset)}.")
+        
         num_items = dataset.shape[0]
         shape = dataset.shape
         print(f"\n📊 Dataset Info ({label}):")
