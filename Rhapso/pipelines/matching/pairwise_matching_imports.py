@@ -52,7 +52,7 @@ def print_dataset_info(store_path, dataset_prefix, print_data=False, num_points=
             else:
                 data_slice = dataset[:min(num_points, dataset.shape[0])]  # Retrieve up to num_points
             
-            print("\n🟢 Data:")
+            print("\n🟢 Data: (printing first {} rows)".format(len(data_slice)))
             print(data_slice)
 
             # Count occurrences of each unique value in the third column
@@ -80,19 +80,18 @@ def list_files_under_prefix(node, path):
     except KeyError:
         print(f"No items found under the path {path}")
  
-
 if __name__ == "__main__":
     try:
         # Run output detection sanity check on BSS matching output
         prefix = "tpId_18_viewSetupId_1/beads/correspondences/data/"
-        n5_bss= "/mnt/c/Users/marti/Documents/allen/data/April Dataset for Interest Points As TIFF XML (unaligned)/BSS after detection, matching IP_TIFF_XML/interestpoints.n5"
-        print_dataset_info(n5_bss, prefix, print_data=True, num_points='all') 
+        #n5_bss= "/mnt/c/Users/marti/Documents/allen/data/April Dataset for Interest Points As TIFF XML (unaligned)/BSS after detection, matching IP_TIFF_XML/interestpoints.n5"
+        #print_dataset_info(n5_bss, prefix, print_data=True, num_points='all') 
 
         # Run Rhapso matching on local data
         xml_path = "/mnt/c/Users/marti/Documents/allen/data/April Dataset for Interest Points As TIFF XML (unaligned)/BSS detection, rhapso matching/dataset.xml"
         n5_base_path = "/mnt/c/Users/marti/Documents/allen/data/April Dataset for Interest Points As TIFF XML (unaligned)/BSS detection, rhapso matching/interestpoints.n5"
         output_path = n5_base_path 
-        #start_matching(xml_path, n5_base_path, output_path)
+        start_matching(xml_path, n5_base_path, output_path)
         
         # Run Rhapso matching on S3 data
         #xml_path = "s3://rhapso-fused-zarr-output-data/matching_input_sample/dataset.xml"
@@ -101,7 +100,7 @@ if __name__ == "__main__":
         #start_matching(xml_path, n5_base_path, output_path)
 
         # Check our output dataset
-        print_dataset_info(n5_base_path, prefix, print_data=True, num_points='all') 
+        print_dataset_info(n5_base_path, prefix, print_data=True, num_points=30) 
 
     except Exception as e:
         print(f"❌ Unexpected error in script execution: {e}")
