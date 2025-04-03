@@ -14,29 +14,35 @@ def print_dataset_info(store_path, dataset_prefix, print_data=False, num_points=
     print("📂Checking dataset information")
     print("Store path:", store_path)
     print("Dataset prefix:", dataset_prefix)
-    if store_path.startswith("s3://"):
-        s3 = s3fs.S3FileSystem(anon=False)
-        store = s3fs.S3Map(root=store_path, s3=s3)
-    else:
-        store = zarr.N5Store(store_path)
-    
-    root = zarr.open(store, mode='r')
-    dataset = root[dataset_prefix]
- 
-    print(f"Information for dataset at {store_path} in prefix {dataset_prefix}:")
-    print("Data Type:", dataset.dtype)
-    print("Shape:", dataset.shape)
-    print("Chunks:", dataset.chunks)
-    print("Compression:", dataset.compressor)
-    if dataset.attrs:
-        print("Attributes:")
-        for attr, value in dataset.attrs.items():
-            print(f"  {attr}: {value}")
- 
-    data_slice = dataset[:min(30, dataset.shape[1])]
-    print(data_slice)
+    try:
+        if store_path.startswith("s3://"):
+            s3 = s3fs.S3FileSystem(anon=False)
+            store = s3fs.S3Map(root=store_path, s3=s3, check=False)  # Ensure check=False for S3 compatibility
+        else:
+            store = zarr.N5Store(store_path)
+
+        root = zarr.open(store, mode='r')
+        if dataset_prefix not in root:
+            raise KeyError(f"Dataset prefix '{dataset_prefix}' not found in the store.")
+
+        dataset = root[dataset_prefix]
+        print(f"Information for dataset at {store_path} in prefix {dataset_prefix}:")
+        print("Data Type:", dataset.dtype)
+        print("Shape:", dataset.shape)
+        print("Chunks:", dataset.chunks)
+        print("Compression:", dataset.compressor)
+        if dataset.attrs:
+            print("Attributes:")
+            for attr, value in dataset.attrs.items():
+                print(f"  {attr}: {value}")
+
+        if print_data:
+            data_slice = dataset[:min(num_points, dataset.shape[0])]
+            print(data_slice)
+    except Exception as e:
+        print(f"❌ Error accessing dataset: {e}")
     print("=====================================\n")
- 
+
 def list_files_under_prefix(node, path):
     try:
         for item in node[path]:
@@ -53,10 +59,10 @@ def list_files_under_prefix(node, path):
 if __name__ == "__main__":
     try:
         # Run Rhapso matching on local data
-        #xml_path = "/mnt/c/Users/marti/Documents/allen/data/April Dataset for Interest Points As TIFF XML (unaligned)/BSS detection, rhapso matching/dataset.xml"
-        #n5_base_path = "/mnt/c/Users/marti/Documents/allen/data/April Dataset for Interest Points As TIFF XML (unaligned)/BSS detection, rhapso matching/interestpoints.n5"
-        #output_path = n5_base_path 
-        #start_matching(xml_path, n5_base_path, output_path)
+        # xml_path = "/mnt/c/Users/marti/Documents/allen/data/April Dataset for Interest Points As TIFF XML (unaligned)/BSS detection, rhapso matching/dataset.xml"
+        # n5_base_path = "/mnt/c/Users/marti/Documents/allen/data/April Dataset for Interest Points As TIFF XML (unaligned)/BSS detection, rhapso matching/interestpoints.n5"
+        # output_path = n5_base_path 
+        # start_matching(xml_path, n5_base_path, output_path)
         
         # Run Rhapso matching on S3 data
         xml_path = "s3://rhapso-fused-zarr-output-data/matching_input_sample/dataset.xml"
@@ -66,7 +72,7 @@ if __name__ == "__main__":
 
         # Check our output dataset
         prefix = "tpId_18_viewSetupId_1/beads/correspondences/data/"
-        print_dataset_info(n5_base_path, prefix)
+        print_dataset_info(n5_base_path, prefix, print_data=True)  # Enable print_data for debugging
 
     except Exception as e:
         print(f"❌ Unexpected error in script execution: {e}")
