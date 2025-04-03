@@ -30,8 +30,16 @@ def print_dataset_info(store_path, dataset_prefix, print_data=False, num_points=
         print("Attributes:")
         for attr, value in dataset.attrs.items():
             print(f"  {attr}: {value}")
- 
-    data_slice = dataset[:min(30, dataset.shape[1])]
+    
+    # Adjust slicing logic based on num_points
+    if num_points == 'all':
+        data_slice = dataset[:]  # Retrieve all points
+        print(f"\nDisplaying all {dataset.shape[0]} points:")
+    else:
+        points_to_show = min(num_points, dataset.shape[0])
+        data_slice = dataset[:points_to_show]  # Retrieve up to num_points
+        print(f"\nDisplaying first {points_to_show} points out of {dataset.shape[0]} total points:")
+
     print(data_slice)
  
 def list_files_under_prefix(node, path):
@@ -392,7 +400,8 @@ def parse_and_read_datasets(xml_file, n5_folder_base):
                                           'data': data}}
     return interest_point_info, view_paths
 
-def compute_matches(pointsA, pointsB, difference_threshold, ratio_of_distance):
+def compute_matches(pointsA, pointsB, difference_threshold=100.0, ratio_of_distance=5.0):
+    """Relaxed matching criteria with higher threshold and ratio"""
     if pointsA is None or pointsB is None:
         print("Invalid points data provided for matching.")
         return []
@@ -400,11 +409,13 @@ def compute_matches(pointsA, pointsB, difference_threshold, ratio_of_distance):
     distances, indices = nn.kneighbors(pointsA)
     matches = []
     for i, (dist, idx) in enumerate(zip(distances, indices)):
+        # More lenient distance threshold and ratio check
         if dist[0] < difference_threshold and dist[0] * ratio_of_distance <= dist[1]:
             matches.append((i, idx[0]))
     return matches
 
-def ransac_filter_matches(pointsA, pointsB, matches, num_iterations=1000, threshold=5.0):
+def ransac_filter_matches(pointsA, pointsB, matches, num_iterations=1000, threshold=10.0):
+    """Relaxed RANSAC parameters with higher threshold"""
     if len(matches) == 0:
         return matches, None
 
@@ -422,11 +433,13 @@ def ransac_filter_matches(pointsA, pointsB, matches, num_iterations=1000, thresh
         rand_idx = np.random.randint(0, len(matches_arr))
         t_candidate = diff_vectors[rand_idx]
         errors = np.linalg.norm(diff_vectors - t_candidate, axis=1)
+        # More lenient inlier threshold
         inlier_indices = np.where(errors < threshold)[0]
         if len(inlier_indices) > len(best_inliers):
             best_inliers = inlier_indices
             best_translation = t_candidate
-            if len(best_inliers) > 0.8 * len(matches_arr):
+            # Relaxed early termination condition
+            if len(best_inliers) > 0.6 * len(matches_arr):  # Reduced from 0.8
                 break
 
     if best_translation is None or len(best_inliers) == 0:
@@ -436,8 +449,9 @@ def ransac_filter_matches(pointsA, pointsB, matches, num_iterations=1000, thresh
     refined_translation = np.mean(diff_vectors[best_inliers], axis=0)
     print(f"🔎 RANSAC estimated translation: {refined_translation} with {len(best_inliers)} inliers out of {len(matches_arr)} matches.")
     
+    # More lenient final filtering
     errors = np.linalg.norm(diff_vectors - refined_translation, axis=1)
-    final_inlier_indices = np.where(errors < threshold)[0]
+    final_inlier_indices = np.where(errors < threshold * 1.5)[0]  # Increased threshold
     filtered_matches = matches_arr[final_inlier_indices]
     print(f"✅ RANSAC filtering retained {len(filtered_matches)} matches after outlier removal.")
     return filtered_matches.tolist(), refined_translation
@@ -570,10 +584,16 @@ def save_matches_as_n5(all_matches, view_paths, n5_base_path, clear_corresponden
                 keyA = f"{timepoint},{setup_A},beads"
                 keyB = f"{timepoint},{setup_B},beads"
                 
+                # Dynamically determine matchId based on idMap
                 if idMap[keyA] < idMap[keyB]:
-                    match_data.append([idxA, idxB, len(match_data)])
+                    matchId = idMap[keyA]
                 else:
-                    match_data.append([idxB, idxA, len(match_data)])
+                    matchId = idMap[keyB]
+
+                if idMap[keyA] < idMap[keyB]:
+                    match_data.append([idxA, idxB, matchId])
+                else:
+                    match_data.append([idxB, idxA, matchId])
 
             # Convert to numpy array
             matches_array = np.array(match_data, dtype=np.uint64)
