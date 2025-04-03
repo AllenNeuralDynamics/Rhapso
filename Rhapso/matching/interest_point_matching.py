@@ -30,8 +30,13 @@ def print_dataset_info(store_path, dataset_prefix, print_data=False, num_points=
         print("Attributes:")
         for attr, value in dataset.attrs.items():
             print(f"  {attr}: {value}")
- 
-    data_slice = dataset[:min(30, dataset.shape[1])]
+    
+    # Adjust slicing logic based on num_points
+    if num_points == 'all':
+        data_slice = dataset[:]  # Retrieve all points
+    else:
+        data_slice = dataset[:min(num_points, dataset.shape[0])]  # Retrieve up to num_points
+
     print(data_slice)
  
 def list_files_under_prefix(node, path):
@@ -570,10 +575,16 @@ def save_matches_as_n5(all_matches, view_paths, n5_base_path, clear_corresponden
                 keyA = f"{timepoint},{setup_A},beads"
                 keyB = f"{timepoint},{setup_B},beads"
                 
+                # Dynamically determine matchId based on idMap
                 if idMap[keyA] < idMap[keyB]:
-                    match_data.append([idxA, idxB, len(match_data)])
+                    matchId = idMap[keyA]
                 else:
-                    match_data.append([idxB, idxA, len(match_data)])
+                    matchId = idMap[keyB]
+
+                if idMap[keyA] < idMap[keyB]:
+                    match_data.append([idxA, idxB, matchId])
+                else:
+                    match_data.append([idxB, idxA, matchId])
 
             # Convert to numpy array
             matches_array = np.array(match_data, dtype=np.uint64)

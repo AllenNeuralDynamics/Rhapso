@@ -7,6 +7,7 @@ import sys
 import zarr
 import s3fs
 import os
+import numpy as np
 from Rhapso.matching.interest_point_matching import print_dataset_info, start_matching, fetch_xml_file, parse_xml, parse_and_read_datasets, perform_pairwise_matching, save_matches_as_n5
 
 def print_dataset_info(store_path, dataset_prefix, print_data=False, num_points=30):
@@ -36,9 +37,33 @@ def print_dataset_info(store_path, dataset_prefix, print_data=False, num_points=
             for attr, value in dataset.attrs.items():
                 print(f"  {attr}: {value}")
 
+        # Add explanations for Shape and Chunks
+        print("\n🔍 Explanation:")
+        print(f"   - Shape: {dataset.shape} means the dataset contains {dataset.shape[0]} rows and {dataset.shape[1]} columns.")
+        print(f"     Each row represents a single data point, and each column represents a property of the data (e.g., indices, match ID).")
+        print(f"   - Chunks: {dataset.chunks} means the data is stored in chunks of {dataset.chunks[0]} rows and {dataset.chunks[1]} columns.")
+        print(f"     This chunking is used for efficient reading and writing of large datasets.")
+
         if print_data:
-            data_slice = dataset[:min(num_points, dataset.shape[0])]
+            # Adjust slicing logic based on num_points
+            if num_points == 'all':
+                np.set_printoptions(threshold=sys.maxsize)  # Disable truncation for large arrays
+                data_slice = dataset[:]  # Retrieve all points
+            else:
+                data_slice = dataset[:min(num_points, dataset.shape[0])]  # Retrieve up to num_points
+            
+            print("\n🟢 Data:")
             print(data_slice)
+
+            # Count occurrences of each unique value in the third column
+            if num_points == 'all' and data_slice.shape[1] >= 3:
+                third_col = data_slice[:, 2]
+                unique, counts = np.unique(third_col, return_counts=True)
+                total = len(third_col)
+                print("\n🔢 Third Column Value Counts:")
+                for value, count in zip(unique, counts):
+                    percentage = (count / total) * 100
+                    print(f"   {value}: appears {count} times out of a total of {total} ({percentage:.2f}%)")
     except Exception as e:
         print(f"❌ Error accessing dataset: {e}")
     print("=====================================\n")
@@ -58,21 +83,25 @@ def list_files_under_prefix(node, path):
 
 if __name__ == "__main__":
     try:
+        # Run output detection sanity check on BSS matching output
+        prefix = "tpId_18_viewSetupId_1/beads/correspondences/data/"
+        n5_bss= "/mnt/c/Users/marti/Documents/allen/data/April Dataset for Interest Points As TIFF XML (unaligned)/BSS after detection, matching IP_TIFF_XML/interestpoints.n5"
+        print_dataset_info(n5_bss, prefix, print_data=True, num_points='all') 
+
         # Run Rhapso matching on local data
-        # xml_path = "/mnt/c/Users/marti/Documents/allen/data/April Dataset for Interest Points As TIFF XML (unaligned)/BSS detection, rhapso matching/dataset.xml"
-        # n5_base_path = "/mnt/c/Users/marti/Documents/allen/data/April Dataset for Interest Points As TIFF XML (unaligned)/BSS detection, rhapso matching/interestpoints.n5"
-        # output_path = n5_base_path 
-        # start_matching(xml_path, n5_base_path, output_path)
+        xml_path = "/mnt/c/Users/marti/Documents/allen/data/April Dataset for Interest Points As TIFF XML (unaligned)/BSS detection, rhapso matching/dataset.xml"
+        n5_base_path = "/mnt/c/Users/marti/Documents/allen/data/April Dataset for Interest Points As TIFF XML (unaligned)/BSS detection, rhapso matching/interestpoints.n5"
+        output_path = n5_base_path 
+        #start_matching(xml_path, n5_base_path, output_path)
         
         # Run Rhapso matching on S3 data
-        xml_path = "s3://rhapso-fused-zarr-output-data/matching_input_sample/dataset.xml"
-        n5_base_path = "s3://rhapso-fused-zarr-output-data/matching_input_sample/interestpoints.n5"
-        output_path = n5_base_path  # Set output path to be the same as input n5 data
-        start_matching(xml_path, n5_base_path, output_path)
+        #xml_path = "s3://rhapso-fused-zarr-output-data/matching_input_sample/dataset.xml"
+        #n5_base_path = "s3://rhapso-fused-zarr-output-data/matching_input_sample/interestpoints.n5"
+        #output_path = n5_base_path  # Set output path to be the same as input n5 data
+        #start_matching(xml_path, n5_base_path, output_path)
 
         # Check our output dataset
-        prefix = "tpId_18_viewSetupId_1/beads/correspondences/data/"
-        print_dataset_info(n5_base_path, prefix, print_data=True)  # Enable print_data for debugging
+        print_dataset_info(n5_base_path, prefix, print_data=True, num_points='all') 
 
     except Exception as e:
         print(f"❌ Unexpected error in script execution: {e}")
