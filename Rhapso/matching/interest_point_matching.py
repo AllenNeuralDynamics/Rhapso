@@ -555,7 +555,7 @@ def fetch_n5_folder(s3_path, local_temp_dir="/tmp/n5_temp"):
         sys.exit(1)
 
 
-def start_fusion(xml_file, n5_folder_base, output_s3_path=None):
+def start_matching(xml_file, n5_folder_base, output_s3_path=None):
     try:
         if xml_file.startswith("s3://"):
             print(f"📥 Fetching XML file from S3: {xml_file}")
@@ -645,7 +645,7 @@ def start_fusion(xml_file, n5_folder_base, output_s3_path=None):
         print(f"✅ Generated and saved {len(all_matches)} matches across all loaded timepoints")
         print(f"✅ Output saved to: {output_s3_path}")
     except Exception as e:
-        print(f"❌ Error in start_fusion function: {e}")
+        print(f"❌ Error in start_matching function: {e}")
         sys.exit(1)
 
 if __name__ == "__main__":

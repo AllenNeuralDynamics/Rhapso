@@ -2,15 +2,18 @@ import zarr
 import json
 import os
 import numpy as np
+import s3fs
+import tensorstore as ts
 
 # This class fetches and preps data from n5
 
 class DataPrep():
-    def __init__(self, interest_points_df, view_transform_matrices, fixed_views, data_prefix):
+    def __init__(self, interest_points_df, view_transform_matrices, fixed_views, data_prefix, file_source):
         self.interest_points_df = interest_points_df
         self.view_transform_matrices = view_transform_matrices
         self.fixed_views = fixed_views
         self.data_prefix = data_prefix
+        self.file_source = file_source
         self.connected_views = {} 
         self.corresponding_interest_points = {}
         self.interest_points = {}
@@ -50,7 +53,7 @@ class DataPrep():
         corr_ip_world = corr_ip_world[:-1]  
 
         return ip_world, corr_ip_world
-    
+        
     def get_corresponding_data_from_n5(self):
         store = zarr.N5Store(self.data_prefix)
         root = zarr.open(store, mode='r')
@@ -60,46 +63,48 @@ class DataPrep():
             correspondences_prefix = f"{row['path']}/correspondences/data"
             attributes_path = self.data_prefix + f"/{row['path']}/correspondences/attributes.json"
 
-            print("current set")
-            dataset = root[correspondences_prefix]
-            print("Data shape:", dataset.shape)
-            print("Data type:", dataset.dtype)
-            print("Chunk size:", dataset.chunks)
-
             # Load JSON data for idMap
-            try:
-                id_map = self.load_json_data(attributes_path)['idMap']
-            except:
-                continue
-            try:
-                interest_points_index_map = root[correspondences_prefix][:]
-            except:
-                continue
+            id_map = self.load_json_data(attributes_path)['idMap']
+            interest_points_index_map = root[correspondences_prefix][:]
 
             # Load corresponding interest points data
             for ip_index, corr_index, corr_group_id in interest_points_index_map:
-
-                corresponding_view_id = next((k for k, v in id_map.items() if v == corr_group_id), None)
+                if corr_group_id == view_id:
+                    continue
+                corresponding_view_id = next((k for k, v in id_map.items() if v == int(corr_group_id)), None)
                 parts = corresponding_view_id.split(',')
                 timepoint, setup, label = parts[0], parts[1], parts[2]
                 corresponding_view_id = f"timepoint: {timepoint}, setup: {setup}"
 
-                ip, corr_ip = self.transform_points(view_id, corresponding_view_id, self.interest_points[view_id][ip_index], self.interest_points[corresponding_view_id][corr_index])
+                # corr = int(corr_index)
+                # ip = int(ip_index)
 
-                if view_id not in self.corresponding_interest_points:
-                    self.corresponding_interest_points[view_id] = [] 
+                # print(len(self.interest_points[view_id]))
+                # print(len(self.interest_points[corresponding_view_id]))
+
+                # print(len(self.interest_points[int(corr_index)]))
+
+                # ip, corr_ip = self.transform_points(view_id, corresponding_view_id, self.interest_points[view_id][int(ip_index)], self.interest_points[corresponding_view_id][int(corr_index)])
+
+                # if view_id not in self.corresponding_interest_points:
+                #     self.corresponding_interest_points[view_id] = [] 
                 
-                self.corresponding_interest_points[view_id].append({
-                    "detection_id": ip_index,
-                    "detection_p1": ip,
-                    "corresponding_detection_id":  corr_index,
-                    "corresponding_detection_p2": corr_ip,
-                    "corresponding_view_id": corresponding_view_id,
-                    "label": label
-                })
+                # self.corresponding_interest_points[view_id].append({
+                #     "detection_id": ip_index,
+                #     "detection_p1": ip,
+                #     "corresponding_detection_id":  corr_index,
+                #     "corresponding_detection_p2": corr_ip,
+                #     "corresponding_view_id": corresponding_view_id,
+                #     "label": label
+                # })
     
     def get_all_interest_points_from_n5(self):
-        store = zarr.N5Store(self.data_prefix)
+        if self.file_source == 's3':
+            s3 = s3fs.S3FileSystem(anon=False)
+            store = s3fs.S3Map(root=self.data_prefix, s3=s3)
+        elif self.file_source == 'local':
+            store = zarr.N5Store(self.data_prefix)
+
         root = zarr.open(store, mode='r')
 
         for _, row in self.interest_points_df.iterrows():

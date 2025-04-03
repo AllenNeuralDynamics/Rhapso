@@ -5,7 +5,7 @@
             "name": "Python: Module",
             "type": "debugpy",
             "request": "launch",
-            "module": "Rhapso.pipelines.solver.python_pipeline",
+            "module": "Rhapso.pipelines.fusion.fusion_test_pipeline",
             "cwd": "${workspaceFolder}",
             "python": "${command:python.interpreterPath}",
             "args": [],
