@@ -52,12 +52,6 @@ def list_files_under_prefix(node, path):
 
 if __name__ == "__main__":
     try:
-
-        # Check working dataset:
-        # sanity_n5_path = "/mnt/c/Users/marti/Documents/allen/data/April Dataset for Interest Points As TIFF XML (unaligned)/BSS after detection, matching IP_TIFF_XML/interestpoints.n5"
-        prefix = "tpId_18_viewSetupId_1/beads/correspondences/data/"
-        # print_dataset_info(sanity_n5_path, prefix)
-
         # Run Rhapso matching on local data
         #xml_path = "/mnt/c/Users/marti/Documents/allen/data/April Dataset for Interest Points As TIFF XML (unaligned)/BSS detection, rhapso matching/dataset.xml"
         #n5_base_path = "/mnt/c/Users/marti/Documents/allen/data/April Dataset for Interest Points As TIFF XML (unaligned)/BSS detection, rhapso matching/interestpoints.n5"
@@ -69,8 +63,9 @@ if __name__ == "__main__":
         n5_base_path = "s3://rhapso-fused-zarr-output-data/matching_input_sample/interestpoints.n5"
         output_path = n5_base_path  # Set output path to be the same as input n5 data
         start_matching(xml_path, n5_base_path, output_path)
-        # Check
+
         # Check our output dataset
+        prefix = "tpId_18_viewSetupId_1/beads/correspondences/data/"
         print_dataset_info(n5_base_path, prefix)
 
     except Exception as e:
