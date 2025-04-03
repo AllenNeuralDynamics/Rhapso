@@ -451,6 +451,8 @@ def perform_pairwise_matching(interest_point_info, view_paths, all_matches, labe
                 else:
                     print("⚠️ No inlier matches found after RANSAC filtering.")
 
+
+
 def save_matches_as_n5(all_matches, view_paths, n5_base_path, clear_correspondences):
     print("\n💾 Saving matches as correspondences into N5 folders...")
     
@@ -458,98 +460,102 @@ def save_matches_as_n5(all_matches, view_paths, n5_base_path, clear_corresponden
     timepoint_matches = {}
     for match in all_matches:
         viewA, viewB, idxA, idxB = match
-        timepoint, _ = viewA  # Both viewA and viewB should have the same timepoint
+        timepoint, _ = viewA  # `_` is used to ignore the second value (setup ID) in the tuple `viewA`
         
         if timepoint not in timepoint_matches:
             timepoint_matches[timepoint] = []
         timepoint_matches[timepoint].append(match)
-    
+
     # Process each timepoint's matches separately
     for timepoint, matches in timepoint_matches.items():
         print(f"\n⏱️  Processing matches for timepoint {timepoint}")
         
-        # Get all setup_ids for this timepoint
-        setups_in_timepoint = set()
-        for match in matches:
-            viewA, viewB, _, _ = match
-            _, setup_A = viewA
-            _, setup_B = viewB
-            setups_in_timepoint.add(setup_A)
-            setups_in_timepoint.add(setup_B)
+        # Get ALL views for this timepoint
+        all_views_for_timepoint = [view_key for view_key in view_paths.keys() 
+                                 if view_key[0] == timepoint]
+        all_setups = sorted({view_key[1] for view_key in all_views_for_timepoint}, 
+                          key=lambda x: int(x))
         
-        sorted_views = sorted(setups_in_timepoint, key=lambda x: int(x))
-        
-        # Create ID map for this timepoint
+        # Create comprehensive ID map
         idMap = {}
-        for i, setup_id in enumerate(sorted_views):
+        for i, setup_id in enumerate(all_setups):
             key = f"{timepoint},{setup_id},beads"
             idMap[key] = i
-        
-        match_list = []
+
+        if not matches:
+            print(f"No matches to save for timepoint {timepoint}.")
+            continue
+
+        # Prepare matches data - ensure proper array shape
+        match_data = []
         unique_id = 0
         for (viewA, viewB, idxA, idxB) in matches:
-            _, setup_A = viewA
-            _, setup_B = viewB
+            _, setup_A = viewA  # `_` is used to ignore the first value (timepoint) in the tuple `viewA`
+            _, setup_B = viewB  # `_` is used to ignore the first value (timepoint) in the tuple `viewB`
             keyA = f"{timepoint},{setup_A},beads"
             keyB = f"{timepoint},{setup_B},beads"
             
             if idMap[keyA] < idMap[keyB]:
-                match_list.append([idxA, idxB, unique_id])
+                match_data.append([idxA, idxB, unique_id])
             else:
-                match_list.append([idxB, idxA, unique_id])
+                match_data.append([idxB, idxA, unique_id])
             unique_id += 1
+
+        # Convert to numpy array with proper shape (N x 3)
+        matches_array = np.array(match_data, dtype=np.uint64)
         
-        if not match_list:
-            print(f"No matches to save for timepoint {timepoint}.")
-            continue
-        
-        matches_array = np.array(match_list, dtype=np.uint64).T
-        total_matches = matches_array.shape[1]
-        
-        data_attributes = {
-            "dataType": "uint64",
-            "compression": {
-                "type": "raw"
-            },
-            "blockSize": [1, 300000],
-            "dimensions": [3, total_matches]
-        }
-        
-        for view_key in [key for key in view_paths.keys() if key[0] == timepoint]:
-            _, setup_id = view_key
-            correspondences_folder = os.path.join(n5_base_path, view_paths[view_key]['path'], "beads", "correspondences")
-            print(f"\n\n📁 Saving correspondences for timepoint {timepoint}, view: {setup_id}\n    Folder: {correspondences_folder}\n{'-'*60}")
-            os.makedirs(correspondences_folder, exist_ok=True)
+        # Process each view
+        for view_key in all_views_for_timepoint:
+            _, setup_id = view_key  # `_` is used to ignore the first value (timepoint) in the tuple `view_key`
+            full_path = os.path.join(n5_base_path, view_paths[view_key]['path'], "beads")
+            print(f"\n📁 Processing view {setup_id} at path: {full_path}")
             
-            corr_attributes = {
-                "correspondences": "1.0.0",
-                "idMap": idMap
-            }
-            attributes_path = os.path.join(correspondences_folder, "attributes.json")
-            with open(attributes_path, "w") as f:
-                json.dump(corr_attributes, f, indent=4)
-            print(f"Saved correspondences attributes.json to {attributes_path}")
-            
-            data_folder = os.path.join(correspondences_folder, "data")
-            os.makedirs(data_folder, exist_ok=True)
-            for i in range(3):
-                subfolder = os.path.join(data_folder, str(i))
-                os.makedirs(subfolder, exist_ok=True)
-            
-            data_attributes_path = os.path.join(data_folder, "attributes.json")
-            with open(data_attributes_path, "w") as f:
-                json.dump(data_attributes, f, indent=4)
-            print(f"Saved data attributes.json to {data_attributes_path}")
-            
-            for i in range(3):
-                row_data = matches_array[i, :]
-                byte_data = row_data.tobytes()
-                output_file = os.path.join(data_folder, str(i), "0")
-                with open(output_file, "wb") as f:
-                    f.write(byte_data)
-                print(f"Saved row {i} data to {output_file} (raw binary)")
-            
-            print(f"Saved matches N5 dataset with dimensions [3, {total_matches}] in folder: {correspondences_folder}")
+            try:
+                # Create or open the N5 store
+                if n5_base_path.startswith("s3://"):
+                    s3 = s3fs.S3FileSystem(anon=False)
+                    store = s3fs.S3Map(root=full_path, s3=s3)
+                else:
+                    store = zarr.N5Store(full_path)
+                
+                root = zarr.group(store=store, overwrite=False)
+                root.attrs['n5'] = '4.0.0'
+                
+                # Handle correspondences group
+                dataset_path = "correspondences"
+                if dataset_path in root:
+                    if clear_correspondences:
+                        del root[dataset_path]
+                        dataset = root.create_group(dataset_path)
+                    else:
+                        dataset = root[dataset_path]
+                else:
+                    dataset = root.create_group(dataset_path)
+                
+                # Set attributes
+                dataset.attrs["pointcloud"] = "1.0.0"
+                dataset.attrs["type"] = "list"
+                dataset.attrs["list version"] = "1.0.0"
+                dataset.attrs["idMap"] = idMap
+                dataset.attrs["timepoint"] = timepoint
+                
+                # Save matches data
+                data_path = "data"
+                if data_path in dataset:
+                    del dataset[data_path]
+                dataset.create_dataset(
+                    data_path,
+                    data=matches_array,
+                    dtype='uint64',
+                    chunks=(min(300000, matches_array.shape[0]), matches_array.shape[1]),
+                    compressor=zarr.GZip()
+                )
+                
+                print(f"✅ Saved {matches_array.shape[0]} matches for view {setup_id}")
+                
+            except Exception as e:
+                print(f"❌ Error processing view {setup_id}: {str(e)}")
+                continue
 
 def main(xml_file, n5_folder_base, labels, method, clear_correspondences):
     interest_point_info, view_paths = parse_and_read_datasets(xml_file, n5_folder_base)
