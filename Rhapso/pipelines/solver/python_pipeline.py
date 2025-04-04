@@ -11,8 +11,8 @@ import boto3
 file_source = 'local'
 xml_file_path_output = "IP_TIFF_XML/dataset.xml"
 xml_bucket_name = "rhapso-tif-sample"
-xml_file_path = "/Users/seanfite/Desktop/IP_TIFF_XML-rhapso/output/dataset-detection.xml"
-data_prefix = "/Users/seanfite/Desktop/IP_TIFF_XML/output/interestpoints.n5/" 
+xml_file_path = "/mnt/c/Users/marti/Documents/allen/data/April Dataset for Interest Points As TIFF XML (unaligned)/BSS detection, rhapso matching/dataset.xml"
+data_prefix = "/mnt/c/Users/marti/Documents/allen/data/April Dataset for Interest Points As TIFF XML (unaligned)/BSS detection, rhapso matching/interestpoints.n5/" 
 fixed_views = [ 'timepoint: 18, setup: 0', 'timepoint: 30, setup: 0']
 model = "affine"
 alignment_option = 1
@@ -50,7 +50,7 @@ view_transform_matrices = create_models.run()
 print("Transforms models have been created")
 
 # Get data from n5 folders
-data_prep = DataPrep(dataframes['view_interest_points'], view_transform_matrices, fixed_views, data_prefix)
+data_prep = DataPrep(dataframes['view_interest_points'], view_transform_matrices, fixed_views, data_prefix, file_source)
 connected_views, corresponding_interest_points, interest_points, label_map_global, view_id_set = data_prep.run()
 print("Data prep is complete")
 

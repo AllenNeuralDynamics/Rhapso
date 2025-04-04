@@ -560,50 +560,50 @@ def save_matches_as_n5(all_matches, view_paths, n5_base_path, clear_corresponden
 
         # Process each timepoint's matches
         for timepoint, matches in timepoint_matches.items():
-            print(f"\n⏱️  Processing matches for timepoint {timepoint}")
             
             # Get all views for this timepoint
             all_views_for_timepoint = [view_key for view_key in view_paths.keys() 
                                      if view_key[0] == timepoint]
             all_setups = sorted({view_key[1] for view_key in all_views_for_timepoint}, 
                               key=lambda x: int(x))
-            
-            # Create ID map
-            idMap = {f"{timepoint},{setup_id},beads": i 
-                    for i, setup_id in enumerate(all_setups)}
 
-            if not matches:
-                print(f"No matches to save for timepoint {timepoint}.")
-                continue
-
-            # Prepare match data
-            match_data = []
-            for (viewA, viewB, idxA, idxB) in matches:
-                _, setup_A = viewA
-                _, setup_B = viewB
-                keyA = f"{timepoint},{setup_A},beads"
-                keyB = f"{timepoint},{setup_B},beads"
-                
-                # Dynamically determine matchId based on idMap
-                if idMap[keyA] < idMap[keyB]:
-                    matchId = idMap[keyA]
-                else:
-                    matchId = idMap[keyB]
-
-                if idMap[keyA] < idMap[keyB]:
-                    match_data.append([idxA, idxB, matchId])
-                else:
-                    match_data.append([idxB, idxA, matchId])
-
-            # Convert to numpy array
-            matches_array = np.array(match_data, dtype=np.uint64)
-            
-            # Save for each view
+            # Process each view separately with its own idMap
             for view_key in all_views_for_timepoint:
-                _, setup_id = view_key
-                group_path = f"tpId_{timepoint}_viewSetupId_{setup_id}/beads"
-                print(f"\n📁 Processing view {setup_id} at path: {group_path}")
+                _, current_setup = view_key
+                # Get all other setups except the current one for this view's idMap
+                other_setups = [s for s in all_setups if s != current_setup]
+                other_setups = sorted(other_setups, key=lambda x: int(x))
                 
+                # Create ID map without the base view for this specific view
+                idMap = {f"{timepoint},{setup_id},beads": i 
+                        for i, setup_id in enumerate(other_setups)}
+
+                group_path = f"tpId_{timepoint}_viewSetupId_{current_setup}/beads"
+                print(f"\n📁 Processing view {current_setup} at path: {group_path}")
+                print(f"🔍 ID Map for timepoint {timepoint}, setup {current_setup}:")
+                for k, v in idMap.items():
+                    print(f"   {k} -> {v}")
+
+                # Filter matches for current view
+                current_matches = []
+                for viewA, viewB, idxA, idxB in matches:
+                    _, setupA = viewA
+                    _, setupB = viewB
+                    if setupA == current_setup or setupB == current_setup:
+                        if setupA == current_setup:
+                            keyA = f"{timepoint},{setupB},beads"
+                            current_matches.append([idxA, idxB, idMap[keyA]])
+                        else:  # setupB == current_setup
+                            keyB = f"{timepoint},{setupA},beads"
+                            current_matches.append([idxB, idxA, idMap[keyB]])
+
+                if not current_matches:
+                    print(f"No matches to save for view {current_setup}")
+                    continue
+
+                # Convert to numpy array
+                matches_array = np.array(current_matches, dtype=np.uint64)
+
                 try:
                     # Create groups
                     if group_path in root:
@@ -641,10 +641,10 @@ def save_matches_as_n5(all_matches, view_paths, n5_base_path, clear_corresponden
                         compressor=zarr.GZip()
                     )
                     
-                    print(f"✅ Saved {matches_array.shape[0]} matches for view {setup_id}")
+                    print(f"✅ Saved {matches_array.shape[0]} matches for view {current_setup}")
                     
                 except Exception as e:
-                    print(f"❌ Error processing view {setup_id}: {str(e)}")
+                    print(f"❌ Error processing view {current_setup}: {str(e)}")
                     continue
 
         # Upload to S3 if needed

@@ -52,8 +52,18 @@ def print_dataset_info(store_path, dataset_prefix, print_data=False, num_points=
             else:
                 data_slice = dataset[:min(num_points, dataset.shape[0])]  # Retrieve up to num_points
             
-            print("\n🟢 Data: (printing first {} rows)".format(len(data_slice)))
+            print("\n🟢 Data:")
             print(data_slice)
+
+            # Print out id map if this is a correspondence dataset
+            if "correspondences" in dataset_prefix:
+                try:
+                    id_map = dataset.attrs.get("idMap", {})
+                    print("\n🔍 ID Map:")
+                    for key, value in id_map.items():
+                        print(f"   {key} -> {value}")
+                except Exception as e:
+                    print(f"\n⚠️ Could not retrieve ID map: {e}")
 
             # Count occurrences of each unique value in the third column
             if num_points == 'all' and data_slice.shape[1] >= 3:
