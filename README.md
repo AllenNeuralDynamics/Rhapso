@@ -93,6 +93,7 @@ This pipeline provides a local execution environment for Rhapso, utilizing its c
 ### Usage
 Follow the steps in the pipeline script to understand the sequence and integration of Rhapso components. Each step is an opportunity to tweak and learn about the system’s flexibility in real-time applications.
 
+
 ### Spark ETL Pipeline Guide: Rhapso/pipelines/spark_etl_pipeline.py
 
 ### Overview
@@ -159,12 +160,14 @@ This guide offers a high-level overview of Rhapso components, explaining each co
 7.	**Save Results** - Saves the optimized results back to XML, documenting the new affine transformations for each view, thereby finalizing the process.
 
 ### Cloud Fusion
+To Do
 
 ## Sample Data
 To Do - add sample data sets for users to download
 
 ## Run Parameter Configurations
 To Do - add configurations
+
 
 ## Command Line Usage
 
