@@ -81,7 +81,7 @@ class Solver:
         print("Global optimization complete")
 
         # Save results to xml - one new affine matrix per view registration
-        save_results = SaveResults(tiles, xml_file, self.xml_bucket_name, self.xml_file_path_output, self.fixed_views)
+        save_results = SaveResults(tiles, xml_file, self.xml_bucket_name, self.xml_file_path_output, self.fixed_views, self.file_source)
         save_results.run()
         print("Results have been saved")
 

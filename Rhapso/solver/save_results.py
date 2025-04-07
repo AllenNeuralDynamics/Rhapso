@@ -3,19 +3,27 @@ import boto3
 import io
 
 class SaveResults:
-    def __init__(self, tiles, xml_file, xml_bucket_name, xml_file_path, fixed_views):
+    def __init__(self, tiles, xml_file, xml_bucket_name, xml_file_path, fixed_views, file_source):
         self.tiles = tiles
         self.xml_file = xml_file
         self.xml_bucket_name = xml_bucket_name
         self.xml_file_path = xml_file_path
         self.fixed_views = fixed_views
+        self.file_source = file_source
     
-    def save_to_s3(self):
-        xml_bytes = io.BytesIO()
-        self.tree.write(xml_bytes, encoding='utf-8', xml_declaration=True)
-        xml_bytes.seek(0)
-        s3 = boto3.client('s3')
-        s3.upload_fileobj(xml_bytes, self.xml_bucket_name, self.xml_file_path)
+    def save_xml(self):
+        if self.file_source == 's3':
+            xml_bytes = io.BytesIO()
+            self.tree.write(xml_bytes, encoding='utf-8', xml_declaration=True)
+            xml_bytes.seek(0)
+            s3 = boto3.client('s3')
+            s3.upload_fileobj(xml_bytes, self.xml_bucket_name, self.xml_file_path)
+        elif self.file_source == 'local':
+            with open(self.xml_file_path, 'wb') as file:
+                self.tree.write(file, encoding='utf-8', xml_declaration=True)
+        else:
+            print("Invalid file source")
+            return
     
     def add_new_view_transform(self):
         for view_registration in self.root.findall('.//ViewRegistration'):
@@ -42,4 +50,4 @@ class SaveResults:
     def run(self):
         self.load_xml()
         self.add_new_view_transform()
-        self.save_to_s3()
+        self.save_xml()
