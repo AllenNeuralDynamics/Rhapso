@@ -93,6 +93,8 @@ This pipeline provides a local execution environment for Rhapso, utilizing its c
 ### Monitoring
 Follow the steps in the pipeline script to understand the sequence and integration of Rhapso components. Each step is an opportunity to tweak and learn about the system’s flexibility in real-time applications.
 
+<br>
+
 ### Spark ETL Pipeline Guide: Rhapso/pipelines/spark_etl_pipeline.py
 
 ### Overview
@@ -124,6 +126,7 @@ This pipeline enables the execution of Rhapso on production data using AWS Glue'
 ### Monitoring
 Watch the execution in real-time and make any necessary adjustments based on the job performance and outputs.
 
+---
 
 ## Components Walkthrough
 
@@ -161,8 +164,12 @@ This guide offers a high-level overview of Rhapso components, explaining each co
 ### Cloud Fusion
 To Do
 
+---
+
 ## Sample Data
 To Do - add sample data sets for users to download
+
+---
 
 ## Run Parameter Configurations
 To Do - add configurations
