@@ -90,6 +90,10 @@ This pipeline provides a local execution environment for Rhapso, utilizing its c
 - Parameters: The pipeline requires setting parameters that vary based on your dataset size. These parameters are crucial for optimizing the execution of your pipeline.
 -	Optimization: For detailed guidance on setting up optimization parameters, check out [Run Parameter Configurations](#run-parameter-configurations).
 
+### Running the Job
+1. Follow [Setup Instructions](#setup-instructions).
+2. Navigate your terminal to the root folder of Rhapso. In your terminal, run python Rhapso/pipelines/python_pipeline.py.
+
 ### Monitoring
 Follow the steps in the pipeline script to understand the sequence and integration of Rhapso components. Each step is an opportunity to tweak and learn about the system’s flexibility in real-time applications.
 
