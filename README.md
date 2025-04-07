@@ -86,9 +86,9 @@ This pipeline provides a local execution environment for Rhapso, utilizing its c
 3.	Customization: Discover how to modify and tailor Rhapso to meet specific needs by experimenting with the components within this pipeline.
 
 ### Configuration
-•	Sample Data: To get started with the sample data, visit [sample data](#sample-data).
-•	Parameters: The pipeline requires setting parameters that vary based on your dataset size. These parameters are crucial for optimizing the execution of your pipeline.
-•	Optimization: For detailed guidance on setting up optimization parameters, check out [Run Parameter Configurations](#run-parameter-configurations).
+- Sample Data: To get started with the sample data, visit [sample data](#sample-data).
+- Parameters: The pipeline requires setting parameters that vary based on your dataset size. These parameters are crucial for optimizing the execution of your pipeline.
+-	Optimization: For detailed guidance on setting up optimization parameters, check out [Run Parameter Configurations](#run-parameter-configurations).
 
 ### Usage
 Follow the steps in the pipeline script to understand the sequence and integration of Rhapso components. Each step is an opportunity to tweak and learn about the system’s flexibility in real-time applications.
@@ -104,22 +104,22 @@ This pipeline enables the execution of Rhapso on production data using AWS Glue'
 
 ### Setup
 1.	Access ETL Jobs:
-o	In AWS Glue, select "ETL Jobs" from the left sidebar.
-o	Click on "Add Job" to start a new ETL job setup.
+-	In AWS Glue, select "ETL Jobs" from the left sidebar.
+-	Click on "Add Job" to start a new ETL job setup.
 2.	Configure the Job:
-o	Choose "Spark" as the ETL engine and select "Start Fresh" in the script editor.
-o	In the script editor, paste the contents of Rhapso/pipelines/spark_etl_pipeline.py.
+-	Choose "Spark" as the ETL engine and select "Start Fresh" in the script editor.
+-	In the script editor, paste the contents of Rhapso/pipelines/spark_etl_pipeline.py.
 3.	Import Rhapso Library:
-o	Navigate to "Job Details", then scroll to "Advanced Properties".
-o	Under "Job Parameters", add --additional-python-modules as the key.
-o	For the value, input the full S3 path to the .whl file containing the Rhapso project.
+-	Navigate to "Job Details", then scroll to "Advanced Properties".
+-	Under "Job Parameters", add --additional-python-modules as the key.
+-	For the value, input the full S3 path to the .whl file containing the Rhapso project.
 
 ### Running the Job
 1.	Adjust Job Settings for Your Data:
-o	Review guidelines on dataset sizes and optimal worker types [Run Parameter Configurations](#run-parameter-configurations) to ensure the Glue engine is configured correctly for your data.
+-	Review guidelines on dataset sizes and optimal worker types [Run Parameter Configurations](#run-parameter-configurations) to ensure the Glue engine is configured correctly for your data.
 2.	Save and Run:
-o	Save your configurations and initiate the job by clicking "Run".
-o	Monitor the job's progress in the "Runs" tab.
+-	Save your configurations and initiate the job by clicking "Run".
+-	Monitor the job's progress in the "Runs" tab.
 
 ### Monitoring
 Watch the execution in real-time and make any necessary adjustments based on the job performance and outputs.
@@ -131,55 +131,55 @@ This guide offers a high-level overview of Rhapso components, explaining each co
 
 ### Interest Point Detection
 1.	XML to DataFrame
-o	Converts XML metadata into structured DataFrames to facilitate data manipulation.
+-	Converts XML metadata into structured DataFrames to facilitate data manipulation.
 2.	View Transform Models
-o	Generates transformation matrices from XML data to align multiple views in a dataset.
+-	Generates transformation matrices from XML data to align multiple views in a dataset.
 3.	Overlap Detection
-o	Identifies overlapping areas between different views using the transformation matrices.
+-	Identifies overlapping areas between different views using the transformation matrices.
 4.	Load Image Data
-o	Loads and preprocesses image data based on detected overlaps, preparing it for feature detection.
+-	Loads and preprocesses image data based on detected overlaps, preparing it for feature detection.
 5.	Difference of Gaussian
-o	Applies the Difference of Gaussian (DoG) method to identify potential interest points in the image data.
+-	Applies the Difference of Gaussian (DoG) method to identify potential interest points in the image data.
 6.	Advanced Refinement
-o	Refines detected points using a KD-tree structure to ensure accuracy and relevance of features.
+-	Refines detected points using a KD-tree structure to ensure accuracy and relevance of features.
 7.	Save Interest Points
-o	Saves the refined interest points and associated metadata for further analysis or usage.
+-	Saves the refined interest points and associated metadata for further analysis or usage.
 
 ### Interest Point Matching
 1.	XML Parsing
-o	Extracts necessary metadata such as view IDs and setup information from an XML file, crucial for correlating different datasets.
+-	Extracts necessary metadata such as view IDs and setup information from an XML file, crucial for correlating different datasets.
 2.	Data Retrieval
-o	Fetches data from specified sources (local or cloud storage) based on the XML configuration, ensuring that all relevant image data is accessible for processing.
+-	Fetches data from specified sources (local or cloud storage) based on the XML configuration, ensuring that all relevant image data is accessible for processing.
 3.	Interest Points Loading
-o	Loads interest points data, which contains critical features extracted from images. This step is essential for subsequent matching procedures.
+-	Loads interest points data, which contains critical features extracted from images. This step is essential for subsequent matching procedures.
 4.	Interest Points Filtering
-o	Filters out irrelevant or less significant points based on predefined criteria, refining the dataset for more accurate matching.
+-	Filters out irrelevant or less significant points based on predefined criteria, refining the dataset for more accurate matching.
 5.	View Grouping
-o	Organizes views into logical groups, facilitating efficient and systematic pairing for the matching process.
+-	Organizes views into logical groups, facilitating efficient and systematic pairing for the matching process.
 6.	Pairwise Matching Setup
-o	Prepares and configures the conditions and parameters for pairwise matching between the grouped views.
+-	Prepares and configures the conditions and parameters for pairwise matching between the grouped views.
 7.	RANSAC for Matching
-o	Applies the RANSAC algorithm to find the best match between pairs, using geometric constraints to validate the correspondences.
+-	Applies the RANSAC algorithm to find the best match between pairs, using geometric constraints to validate the correspondences.
 8.	Match Refinement
-o	Refines the matches to ensure high accuracy, discarding outliers and confirming valid correspondences based on robust statistical methods.
+-	Refines the matches to ensure high accuracy, discarding outliers and confirming valid correspondences based on robust statistical methods.
 9.	Results Compilation and Storage
-o	Aggregates all matching results and stores them in a designated format and location for further analysis or use in downstream processes.
+-	Aggregates all matching results and stores them in a designated format and location for further analysis or use in downstream processes.
 
 ### Solver
 1.	XML to DataFrame
-o	Converts XML metadata into structured DataFrames to facilitate data manipulation and subsequent operations.
+-	Converts XML metadata into structured DataFrames to facilitate data manipulation and subsequent operations.
 2.	View Transform Models
-o	Generates affine transformation matrices from the DataFrames, essential for aligning multiple views in a coherent manner.
+-	Generates affine transformation matrices from the DataFrames, essential for aligning multiple views in a coherent manner.
 3.	Data Preparation
-o	Prepares and organizes data retrieved from different sources, setting the stage for effective model generation and tile setup.
+-	Prepares and organizes data retrieved from different sources, setting the stage for effective model generation and tile setup.
 4.	Model and Tile Setup
-o	Creates models and configures tiles based on the prepared data and the transformation matrices, crucial for the optimization process.
+-	Creates models and configures tiles based on the prepared data and the transformation matrices, crucial for the optimization process.
 5.	Align Tiles
-o	Applies transformation models to tiles, aligning them according to the specified parameters and conditions.
+-	Applies transformation models to tiles, aligning them according to the specified parameters and conditions.
 6.	Global Optimization
-o	Performs a comprehensive optimization over all tiles to refine the alignment based on a global perspective, ensuring consistency and accuracy across the dataset.
+-	Performs a comprehensive optimization over all tiles to refine the alignment based on a global perspective, ensuring consistency and accuracy across the dataset.
 7.	Save Results
-o	Saves the optimized results back to XML, documenting the new affine transformations for each view, thereby finalizing the process.
+-	Saves the optimized results back to XML, documenting the new affine transformations for each view, thereby finalizing the process.
 
 ### Cloud Fusion
 
