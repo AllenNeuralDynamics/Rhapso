@@ -130,56 +130,33 @@ Watch the execution in real-time and make any necessary adjustments based on the
 This guide offers a high-level overview of Rhapso components, explaining each component's role in the process. It’s designed for users who want to understand or modify Rhapso’s process.
 
 ### Interest Point Detection
-1.	XML to DataFrame
--	Converts XML metadata into structured DataFrames to facilitate data manipulation.
-2.	View Transform Models
--	Generates transformation matrices from XML data to align multiple views in a dataset.
-3.	Overlap Detection
--	Identifies overlapping areas between different views using the transformation matrices.
-4.	Load Image Data
--	Loads and preprocesses image data based on detected overlaps, preparing it for feature detection.
-5.	Difference of Gaussian
--	Applies the Difference of Gaussian (DoG) method to identify potential interest points in the image data.
-6.	Advanced Refinement
--	Refines detected points using a KD-tree structure to ensure accuracy and relevance of features.
-7.	Save Interest Points
--	Saves the refined interest points and associated metadata for further analysis or usage.
+1.	**XML to DataFrame** -	Converts XML metadata into structured DataFrames to facilitate data manipulation.
+2.	**View Transform Models** -	Generates transformation matrices from XML data to align multiple views in a dataset.
+3.	**Overlap Detection** -	Identifies overlapping areas between different views using the transformation matrices.
+4.	**Load Image Data** -	Loads and preprocesses image data based on detected overlaps, preparing it for feature detection.
+5.	**Difference of Gaussian** - Applies the Difference of Gaussian (DoG) method to identify potential interest points in the image data.
+6.	**Advanced Refinement** -	Refines detected points using a KD-tree structure to ensure accuracy and relevance of features.
+7.	**Save Interest Points** - Saves the refined interest points and associated metadata for further analysis or usage.
 
 ### Interest Point Matching
-1.	XML Parsing
--	Extracts necessary metadata such as view IDs and setup information from an XML file, crucial for correlating different datasets.
-2.	Data Retrieval
--	Fetches data from specified sources (local or cloud storage) based on the XML configuration, ensuring that all relevant image data is accessible for processing.
-3.	Interest Points Loading
--	Loads interest points data, which contains critical features extracted from images. This step is essential for subsequent matching procedures.
-4.	Interest Points Filtering
--	Filters out irrelevant or less significant points based on predefined criteria, refining the dataset for more accurate matching.
-5.	View Grouping
--	Organizes views into logical groups, facilitating efficient and systematic pairing for the matching process.
-6.	Pairwise Matching Setup
--	Prepares and configures the conditions and parameters for pairwise matching between the grouped views.
-7.	RANSAC for Matching
--	Applies the RANSAC algorithm to find the best match between pairs, using geometric constraints to validate the correspondences.
-8.	Match Refinement
--	Refines the matches to ensure high accuracy, discarding outliers and confirming valid correspondences based on robust statistical methods.
-9.	Results Compilation and Storage
--	Aggregates all matching results and stores them in a designated format and location for further analysis or use in downstream processes.
+1.	**XML Parsing** -	Extracts necessary metadata such as view IDs and setup information from an XML file, crucial for correlating different datasets.
+2.	**Data Retrieval** - Fetches data from specified sources (local or cloud storage) based on the XML configuration, ensuring that all relevant image data is accessible for processing.
+3.	**Interest Points Loading** -	Loads interest points data, which contains critical features extracted from images. This step is essential for subsequent matching procedures.
+4.	**Interest Points Filtering** -	Filters out irrelevant or less significant points based on predefined criteria, refining the dataset for more accurate matching.
+5.	**View Grouping** -	Organizes views into logical groups, facilitating efficient and systematic pairing for the matching process.
+6.	**Pairwise Matching Setup** -	Prepares and configures the conditions and parameters for pairwise matching between the grouped views.
+7.	**RANSAC for Matching** -	Applies the RANSAC algorithm to find the best match between pairs, using geometric constraints to validate the correspondences.
+8.	**Match Refinement** - Refines the matches to ensure high accuracy, discarding outliers and confirming valid correspondences based on robust statistical methods.
+9.	**Results Compilation and Storage** -	Aggregates all matching results and stores them in a designated format and location for further analysis or use in downstream processes.
 
 ### Solver
-1.	XML to DataFrame
--	Converts XML metadata into structured DataFrames to facilitate data manipulation and subsequent operations.
-2.	View Transform Models
--	Generates affine transformation matrices from the DataFrames, essential for aligning multiple views in a coherent manner.
-3.	Data Preparation
--	Prepares and organizes data retrieved from different sources, setting the stage for effective model generation and tile setup.
-4.	Model and Tile Setup
--	Creates models and configures tiles based on the prepared data and the transformation matrices, crucial for the optimization process.
-5.	Align Tiles
--	Applies transformation models to tiles, aligning them according to the specified parameters and conditions.
-6.	Global Optimization
--	Performs a comprehensive optimization over all tiles to refine the alignment based on a global perspective, ensuring consistency and accuracy across the dataset.
-7.	Save Results
--	Saves the optimized results back to XML, documenting the new affine transformations for each view, thereby finalizing the process.
+1.	**XML to DataFrame** - Converts XML metadata into structured DataFrames to facilitate data manipulation and subsequent operations.
+2.	**View Transform Models** -	Generates affine transformation matrices from the DataFrames, essential for aligning multiple views in a coherent manner.
+3.	**Data Preparation** - Prepares and organizes data retrieved from different sources, setting the stage for effective model generation and tile setup.
+4.	**Model and Tile Setup** - Creates models and configures tiles based on the prepared data and the transformation matrices, crucial for the optimization process.
+5.	**Align Tiles** -	Applies transformation models to tiles, aligning them according to the specified parameters and conditions.
+6.	**Global Optimization** -	Performs a comprehensive optimization over all tiles to refine the alignment based on a global perspective, ensuring consistency and accuracy across the dataset.
+7.	**Save Results** - Saves the optimized results back to XML, documenting the new affine transformations for each view, thereby finalizing the process.
 
 ### Cloud Fusion
 
