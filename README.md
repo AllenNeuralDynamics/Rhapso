@@ -119,6 +119,7 @@ This pipeline enables the execution of Rhapso on production data using AWS Glue'
 -	Navigate to "Job Details", then scroll to "Advanced Properties".
 -	Under "Job Parameters", add --additional-python-modules as the key.
 -	For the value, input the full S3 path to the .whl file containing the Rhapso project.
+-	To create .whl file, navigate to [Build Package](#build-package)
 
 ### Running the Job
 1.	Adjust Job Settings for Your Data:
