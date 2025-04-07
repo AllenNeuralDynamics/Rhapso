@@ -22,19 +22,35 @@ class DataPrep():
     def get_connected_views_from_n5(self):
         for _, row in self.interest_points_df.iterrows():
             view_id = f"timepoint: {row['timepoint']}, setup: {row['setup']}"
-            correspondences_key = f"{row['path']}/correspondences/attributes.json"
-            full_path = os.path.join(self.data_prefix, correspondences_key)
 
-            if os.path.exists(full_path):
-                with open(full_path, 'r') as file:
-                    data = json.load(file)
-                    self.connected_views[view_id] = data.get('idMap', {})
-            else:
-                print(f"Attributes file not found for view {view_id}: {full_path}")
+            if self.file_source == 's3':
+                s3 = s3fs.S3FileSystem(anon=False)
+                store = s3fs.S3Map(root=self.data_prefix, s3=s3)
+                root = zarr.open(store, mode='r')
+                correspondences_key = f"{row['path']}/correspondences"
+
+                self.connected_views[view_id] = root[correspondences_key].attrs['idMap']
+
+            elif self.file_source == 'local':
+                correspondences_key = f"{row['path']}/correspondences/attributes.json"
+                full_path = os.path.join(self.data_prefix, correspondences_key)
+
+                if os.path.exists(full_path):
+                    with open(full_path, 'r') as file:
+                        data = json.load(file)
+                        self.connected_views[view_id] = data.get('idMap', {})
+                else:
+                    print(f"Attributes file not found for view {view_id}: {full_path}")
     
     def load_json_data(self, json_path):
-        with open(json_path, 'r') as file:
-            data = json.load(file)
+        if json_path.startswith('s3://'):
+            fs = s3fs.S3FileSystem(anon=False)  
+            with fs.open(json_path, 'r') as file:
+                data = json.load(file)
+        else:
+            with open(json_path, 'r') as file:
+                data = json.load(file)
+        
         return data
     
     def transform_points(self, view_id, corresponding_view_id, ip, corr_ip):
@@ -55,17 +71,26 @@ class DataPrep():
         return ip_world, corr_ip_world
         
     def get_corresponding_data_from_n5(self):
-        store = zarr.N5Store(self.data_prefix)
+        if self.file_source == 's3':
+            s3 = s3fs.S3FileSystem(anon=False)
+            store = s3fs.S3Map(root=self.data_prefix, s3=s3)
+        elif self.file_source == 'local':
+            store = zarr.N5Store(self.data_prefix)
+
         root = zarr.open(store, mode='r')
 
         for _, row in self.interest_points_df.iterrows():
             view_id = f"timepoint: {row['timepoint']}, setup: {row['setup']}"  
-            correspondences_prefix = f"{row['path']}/correspondences/data"
+            correspondences_prefix = f"{row['path']}/correspondences"
             attributes_path = self.data_prefix + f"/{row['path']}/correspondences/attributes.json"
 
             # Load JSON data for idMap
-            id_map = self.load_json_data(attributes_path)['idMap']
-            interest_points_index_map = root[correspondences_prefix][:]
+            if self.file_source == 's3':
+                id_map = root[correspondences_prefix].attrs['idMap']
+            elif self.file_source == 'local':
+                id_map = self.load_json_data(attributes_path)['idMap']
+                
+            interest_points_index_map = root[correspondences_prefix + '/data'][:]
 
             # Load corresponding interest points data
             for ip_index, corr_index, corr_group_id in interest_points_index_map:
@@ -76,27 +101,22 @@ class DataPrep():
                 timepoint, setup, label = parts[0], parts[1], parts[2]
                 corresponding_view_id = f"timepoint: {timepoint}, setup: {setup}"
 
-                # corr = int(corr_index)
-                # ip = int(ip_index)
+                corr = int(corr_index)
+                ip = int(ip_index)
 
-                # print(len(self.interest_points[view_id]))
-                # print(len(self.interest_points[corresponding_view_id]))
+                ip, corr_ip = self.transform_points(view_id, corresponding_view_id, self.interest_points[view_id][int(ip_index)], self.interest_points[corresponding_view_id][int(corr_index)])
 
-                # print(len(self.interest_points[int(corr_index)]))
-
-                # ip, corr_ip = self.transform_points(view_id, corresponding_view_id, self.interest_points[view_id][int(ip_index)], self.interest_points[corresponding_view_id][int(corr_index)])
-
-                # if view_id not in self.corresponding_interest_points:
-                #     self.corresponding_interest_points[view_id] = [] 
+                if view_id not in self.corresponding_interest_points:
+                    self.corresponding_interest_points[view_id] = [] 
                 
-                # self.corresponding_interest_points[view_id].append({
-                #     "detection_id": ip_index,
-                #     "detection_p1": ip,
-                #     "corresponding_detection_id":  corr_index,
-                #     "corresponding_detection_p2": corr_ip,
-                #     "corresponding_view_id": corresponding_view_id,
-                #     "label": label
-                # })
+                self.corresponding_interest_points[view_id].append({
+                    "detection_id": ip_index,
+                    "detection_p1": ip,
+                    "corresponding_detection_id":  corr_index,
+                    "corresponding_detection_p2": corr_ip,
+                    "corresponding_view_id": corresponding_view_id,
+                    "label": label
+                })
     
     def get_all_interest_points_from_n5(self):
         if self.file_source == 's3':

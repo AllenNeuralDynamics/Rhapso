@@ -285,74 +285,89 @@ def parse_xml(xml_file):
     return view_paths
 
 def open_n5_dataset(n5_path):
-    # Check if the direct path exists
-    attributes_path = os.path.join(n5_path, 'attributes.json')
-    print(f"\n🔍 Checking for attributes.json at: {attributes_path}")
-    
-    if not os.path.exists(attributes_path):
-        # Try the alternate path structure by removing 'interestpoints.n5' if it exists in the path
-        if 'interestpoints.n5' in n5_path:
-            alt_path = n5_path.replace('interestpoints.n5/', '')
-            alt_path = alt_path.replace('interestpoints.n5', '')
-            attributes_path = os.path.join(alt_path, 'attributes.json')
-            print(f"🔄 Path not found. Trying alternate path: {attributes_path}")
-        
-        # If path still doesn't exist and doesn't use the base n5_folder_base structure, try the direct tpId path
-        if not os.path.exists(attributes_path) and '/tpId_' not in n5_path:
-            base_dir = os.path.dirname(n5_path)
-            if os.path.exists(base_dir):
-                for item in os.listdir(base_dir):
-                    if item.startswith('tpId_'):
-                        view_id = item.split('_')[3]
-                        if f'viewSetupId_{view_id}' in n5_path:
-                            alt_path = os.path.join(base_dir, item, 'beads', 'interestpoints', 'loc')
-                            attributes_path = os.path.join(alt_path, 'attributes.json')
-                            print(f"🔄 Path not found. Trying tpId-based path: {attributes_path}")
-                            if os.path.exists(attributes_path):
-                                n5_path = alt_path
-                                break
-    
-    if os.path.exists(attributes_path):
-        print(f"✅ attributes.json found at: {attributes_path}")
-        try:
-            dataset = ts.open({
-                'driver': 'n5',
-                'kvstore': {
-                    'driver': 'file', 
-                    'path': os.path.dirname(attributes_path)
-                }
-            }).result()
-            print("✅ Successfully opened N5 dataset.")
-            return dataset
-        except Exception as e:
-            print(f"❌ Error opening N5 dataset: {e}")
-            return None
-    else:
-        print(f"❌ No valid N5 dataset found at {n5_path} (missing attributes.json)")
-        
-        # Debug info - list nearby directories to help troubleshoot
-        try:
-            base_dir = os.path.dirname(n5_path)
-            print(f"📁 Contents of parent directory {base_dir}:")
-            if os.path.exists(base_dir):
-                for item in os.listdir(base_dir):
-                    print(f"   - {item}")
-                    
-                # If parent directory contains tpId folders, print their structure
-                if any(i.startswith('tpId_') for i in os.listdir(base_dir)):
-                    for item in os.listdir(base_dir):
-                        if item.startswith('tpId_'):
-                            full_path = os.path.join(base_dir, item)
-                            print(f"   📂 {item} contents:")
-                            if os.path.isdir(full_path):
-                                for subitem in os.listdir(full_path):
-                                    print(f"      - {subitem}")
-            else:
-                print(f"   Directory does not exist")
-        except Exception as e:
-            print(f"   Error listing directory: {e}")
-            
+    try:
+        if n5_path.startswith("s3://"):
+            s3 = s3fs.S3FileSystem(anon=False) 
+            store = s3fs.S3Map(root=n5_path, s3=s3, check=False)
+        else:
+            store = zarr.N5Store(n5_path)
+
+        dataset = zarr.open(store, mode='r')
+        print(f"✅ Successfully opened N5 dataset at {n5_path}")
+        return dataset
+    except Exception as e:
+        print(f"❌ Error opening N5 dataset at {n5_path}: {e}")
         return None
+
+# def open_n5_dataset(n5_path):
+#     # Check if the direct path exists
+#     attributes_path = os.path.join(n5_path, 'attributes.json')
+#     print(f"\n🔍 Checking for attributes.json at: {attributes_path}")
+    
+#     if not os.path.exists(attributes_path):
+#         # Try the alternate path structure by removing 'interestpoints.n5' if it exists in the path
+#         if 'interestpoints.n5' in n5_path:
+#             alt_path = n5_path.replace('interestpoints.n5/', '')
+#             alt_path = alt_path.replace('interestpoints.n5', '')
+#             attributes_path = os.path.join(alt_path, 'attributes.json')
+#             print(f"🔄 Path not found. Trying alternate path: {attributes_path}")
+        
+#         # If path still doesn't exist and doesn't use the base n5_folder_base structure, try the direct tpId path
+#         if not os.path.exists(attributes_path) and '/tpId_' not in n5_path:
+#             base_dir = os.path.dirname(n5_path)
+#             if os.path.exists(base_dir):
+#                 for item in os.listdir(base_dir):
+#                     if item.startswith('tpId_'):
+#                         view_id = item.split('_')[3]
+#                         if f'viewSetupId_{view_id}' in n5_path:
+#                             alt_path = os.path.join(base_dir, item, 'beads', 'interestpoints', 'loc')
+#                             attributes_path = os.path.join(alt_path, 'attributes.json')
+#                             print(f"🔄 Path not found. Trying tpId-based path: {attributes_path}")
+#                             if os.path.exists(attributes_path):
+#                                 n5_path = alt_path
+#                                 break
+    
+#     if os.path.exists(attributes_path):
+#         print(f"✅ attributes.json found at: {attributes_path}")
+#         try:
+#             dataset = ts.open({
+#                 'driver': 'n5',
+#                 'kvstore': {
+#                     'driver': 'file', 
+#                     'path': os.path.dirname(attributes_path)
+#                 }
+#             }).result()
+#             print("✅ Successfully opened N5 dataset.")
+#             return dataset
+#         except Exception as e:
+#             print(f"❌ Error opening N5 dataset: {e}")
+#             return None
+#     else:
+#         print(f"❌ No valid N5 dataset found at {n5_path} (missing attributes.json)")
+        
+#         # Debug info - list nearby directories to help troubleshoot
+#         try:
+#             base_dir = os.path.dirname(n5_path)
+#             print(f"📁 Contents of parent directory {base_dir}:")
+#             if os.path.exists(base_dir):
+#                 for item in os.listdir(base_dir):
+#                     print(f"   - {item}")
+                    
+#                 # If parent directory contains tpId folders, print their structure
+#                 if any(i.startswith('tpId_') for i in os.listdir(base_dir)):
+#                     for item in os.listdir(base_dir):
+#                         if item.startswith('tpId_'):
+#                             full_path = os.path.join(base_dir, item)
+#                             print(f"   📂 {item} contents:")
+#                             if os.path.isdir(full_path):
+#                                 for subitem in os.listdir(full_path):
+#                                     print(f"      - {subitem}")
+#             else:
+#                 print(f"   Directory does not exist")
+#         except Exception as e:
+#             print(f"   Error listing directory: {e}")
+            
+#         return None
 
 def print_dataset_info(dataset, label):
     try:
@@ -378,26 +393,38 @@ def parse_and_read_datasets(xml_file, n5_folder_base):
     view_paths = parse_xml(xml_file)
     print(f"\n🔍 Found {len(view_paths)} view ID/timepoint interest point folders to analyze.")
     interest_point_info = {}
+
+    if n5_folder_base.startswith("s3://"):
+        s3 = s3fs.S3FileSystem(anon=False) 
+        store = s3fs.S3Map(root=n5_folder_base, s3=s3, check=False)
+    else:
+        store = zarr.N5Store(n5_folder_base)
+    root = zarr.open(store, mode='r')
+    
     for idx, view_key in enumerate(view_paths, start=1):
         timepoint, setup_id = view_key
         view_info = view_paths[view_key]
         print(f"\n🔗 Processing view {idx}/{len(view_paths)}: Setup {setup_id}, Timepoint {timepoint}")
         full_path = os.path.join(n5_folder_base, view_info['path'], "beads", "interestpoints", "loc")
         print(f"🛠  Loading dataset from: {full_path}")
-        dataset = open_n5_dataset(full_path)
-        if not dataset:
-            print(f"⚠️ Skipping view {setup_id} at timepoint {timepoint} due to failed dataset loading.")
-            continue
-        relative_path = os.path.relpath(full_path, os.path.dirname(xml_file))
-        print_dataset_info(dataset, relative_path)
-        try:
-            data = dataset.read().result()
-        except Exception as e:
-            print(f"❌ Error reading dataset data: {e}")
-            continue
+
+        # dataset = open_n5_dataset(full_path)
+        path = view_info['path'] + '/beads/interestpoints/loc'
+        dataset = root[path]
+
+        # if not dataset:
+        #     print(f"⚠️ Skipping view {setup_id} at timepoint {timepoint} due to failed dataset loading.")
+        #     continue
+        # relative_path = os.path.relpath(full_path, os.path.dirname(xml_file))
+        # print_dataset_info(dataset, relative_path)
+        # try:
+        #     data = dataset.read().result()
+        # except Exception as e:
+        #     print(f"❌ Error reading dataset data: {e}")
+        #     continue
         interest_point_info[view_key] = {'loc': {'num_items': dataset.shape[0],
                                           'shape': dataset.shape,
-                                          'data': data}}
+                                          'data': dataset}}
     return interest_point_info, view_paths
 
 def compute_matches(pointsA, pointsB, difference_threshold=100.0, ratio_of_distance=5.0):
@@ -480,8 +507,8 @@ def perform_pairwise_matching(interest_point_info, view_paths, all_matches, labe
                 print(f"\n💥 Matching view {setup_A} with view {setup_B} at timepoint {timepoint}")
                 dataA = interest_point_info[viewA]['loc']['data']
                 dataB = interest_point_info[viewB]['loc']['data']
-                pointsA = dataA.T
-                pointsB = dataB.T
+                pointsA = dataA
+                pointsB = dataB
                 print("🔍 Computing initial matches using nearest neighbors...")
                 initial_matches = compute_matches(pointsA, pointsB, float('inf'), 3.0)
                 print(f"⚙️ Found {len(initial_matches)} initial matches.")
@@ -528,26 +555,34 @@ def save_matches_as_n5(all_matches, view_paths, n5_base_path, clear_corresponden
     print("\n💾 Saving matches as correspondences into N5 folders...")
     
     # Determine if we're using S3
-    using_s3 = n5_base_path.startswith("s3://")
-    local_temp_dir = "/tmp/n5_temp_output"
-    
-    if using_s3:
-        # Parse S3 path
-        parsed_url = urlparse(n5_base_path)
-        bucket_name = parsed_url.netloc
-        s3_prefix = parsed_url.path.lstrip('/')
+    # using_s3 = n5_base_path.startswith("s3://")
+    # local_temp_dir = "/tmp/n5_temp_output"
+
+    # if using_s3:
+    #     # Parse S3 path
+    #     parsed_url = urlparse(n5_base_path)
+    #     bucket_name = parsed_url.netloc
+    #     s3_prefix = parsed_url.path.lstrip('/')
         
-        # Create local temp directory
-        os.makedirs(local_temp_dir, exist_ok=True)
-        local_n5_path = os.path.join(local_temp_dir, "output.n5")
+    #     # Create local temp directory
+    #     os.makedirs(local_temp_dir, exist_ok=True)
+    #     local_n5_path = os.path.join(local_temp_dir, "output.n5")
+    # else:
+    #     local_n5_path = n5_base_path
+
+    if n5_base_path.startswith("s3://"):    
+        s3 = s3fs.S3FileSystem(anon=False)  
+        store = s3fs.S3Map(root=n5_base_path, s3=s3, check=False)
+        root = zarr.group(store=store, overwrite=False)
     else:
-        local_n5_path = n5_base_path
+        store = zarr.N5Store(n5_base_path)
+        root = zarr.group(store=store, overwrite=False)
 
     try:
         # Create local N5 store
-        store = zarr.N5Store(local_n5_path)
-        root = zarr.group(store=store, overwrite=False)
-        root.attrs['n5'] = '4.0.0'
+        # store = zarr.N5Store(local_n5_path)
+        # root = zarr.group(store=store, overwrite=False)
+        # root.attrs['n5'] = '4.0.0'
 
         # Group matches by timepoint
         timepoint_matches = {}
@@ -633,6 +668,7 @@ def save_matches_as_n5(all_matches, view_paths, n5_base_path, clear_corresponden
                     # Save matches data
                     if 'data' in correspondences:
                         del correspondences['data']
+                    
                     correspondences.create_dataset(
                         "data",
                         data=matches_array,
@@ -640,33 +676,50 @@ def save_matches_as_n5(all_matches, view_paths, n5_base_path, clear_corresponden
                         chunks=(min(300000, matches_array.shape[0]),),
                         compressor=zarr.GZip()
                     )
-                    
-                    print(f"✅ Saved {matches_array.shape[0]} matches for view {current_setup}")
+
+                    # corr_attributes = {
+                    #     "correspondences": "1.0.0",
+                    #     "idMap": idMap
+                    # }
+
+                    # Create attributes.json folder for idmap if saving to s3
+                    # if n5_base_path.startswith("s3://"):
+                    #     s3 = s3fs.S3FileSystem(anon=False)  
+        
+                    #     # Construct the full path for the attributes.json file on S3
+                    #     corr_attributes_path = f"{n5_base_path.strip('/')}/{group_path}/correspondences/attributes.json"
+                        
+                    #     # Open the file in write mode on S3
+                    #     with s3.open(corr_attributes_path, 'w') as f:
+                    #         json.dump(corr_attributes, f, indent=4)
+                    #         print(f"Saved correspondences attributes.json to {corr_attributes_path}")
+
+                    #     print(f"✅ Saved {len(corr_attributes)} attributes for view {group_path}")
                     
                 except Exception as e:
                     print(f"❌ Error processing view {current_setup}: {str(e)}")
                     continue
 
-        # Upload to S3 if needed
-        if using_s3:
-            print("\n📤 Uploading results to S3...")
-            s3 = boto3.client('s3')
+        # # Upload to S3 if needed
+        # if using_s3:
+        #     print("\n📤 Uploading results to S3...")
+        #     s3 = boto3.client('s3')
             
-            # Walk through local directory and upload files
-            for root_dir, dirs, files in os.walk(local_n5_path):
-                for file in files:
-                    local_path = os.path.join(root_dir, file)
-                    relative_path = os.path.relpath(local_path, local_n5_path)
-                    s3_key = f"{s3_prefix}/{relative_path}"
+        #     # Walk through local directory and upload files
+        #     for root_dir, dirs, files in os.walk(local_n5_path):
+        #         for file in files:
+        #             local_path = os.path.join(root_dir, file)
+        #             relative_path = os.path.relpath(local_path, local_n5_path)
+        #             s3_key = f"{s3_prefix}/{relative_path}"
                     
-                    print(f"Uploading {relative_path} to s3://{bucket_name}/{s3_key}")
-                    with open(local_path, 'rb') as f:
-                        s3.upload_fileobj(f, bucket_name, s3_key)
+        #             print(f"Uploading {relative_path} to s3://{bucket_name}/{s3_key}")
+        #             with open(local_path, 'rb') as f:
+        #                 s3.upload_fileobj(f, bucket_name, s3_key)
             
             # Clean up
-            import shutil
-            shutil.rmtree(local_temp_dir)
-            print("✅ Successfully uploaded results to S3")
+            # import shutil
+            # shutil.rmtree(local_temp_dir)
+            # print("✅ Successfully uploaded results to S3")
 
         return True
 
@@ -753,8 +806,8 @@ def start_matching(xml_file, n5_folder_base, output_s3_path=None):
             print("⚠️ Warning: Could not find any timepoints defined in the XML file")
             all_timepoints = {0}  # Default to avoid errors
 
-        if n5_folder_base.startswith("s3://"):
-            n5_folder_base = fetch_n5_folder(n5_folder_base)
+        # if n5_folder_base.startswith("s3://"):
+        #     n5_folder_base = fetch_n5_folder(n5_folder_base)
         
         # If output path is not specified, use the same as input n5 folder
         if output_s3_path is None:
