@@ -14,7 +14,7 @@ class AdvancedRefinement:
         self.overlapping_only = True
         self.sorted_view_ids = None
 
-        self.result = interest_points  ## This is an array of [[[viewID],[Interval], [interestpoints],[intensities]]]
+        self.result = interest_points  
         self.store_intensities = False
         self._max_spots = 0
         self.max_spots_per_overlap = False

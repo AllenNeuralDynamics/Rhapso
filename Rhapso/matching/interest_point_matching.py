@@ -6,10 +6,54 @@ import os
 import json
 from sklearn.neighbors import NearestNeighbors
 import tensorstore as ts
+from urllib.parse import urlparse 
+import sys
+import zarr
+import s3fs
 
-def matchViews(stuff):
-    print("matching views")
-    return("apple")
+def print_dataset_info(store_path, dataset_prefix, print_data=False, num_points=30):
+    if store_path.startswith("s3://"):
+        s3 = s3fs.S3FileSystem(anon=False)
+        store = s3fs.S3Map(root=store_path, s3=s3)
+    else:
+        store = zarr.N5Store(store_path)
+    
+    root = zarr.open(store, mode='r')
+    dataset = root[dataset_prefix]
+ 
+    print(f"Information for dataset at {store_path} in prefix {dataset_prefix}:")
+    print("Data Type:", dataset.dtype)
+    print("Shape:", dataset.shape)
+    print("Chunks:", dataset.chunks)
+    print("Compression:", dataset.compressor)
+    if dataset.attrs:
+        print("Attributes:")
+        for attr, value in dataset.attrs.items():
+            print(f"  {attr}: {value}")
+    
+    # Adjust slicing logic based on num_points
+    if num_points == 'all':
+        data_slice = dataset[:]  # Retrieve all points
+        print(f"\nDisplaying all {dataset.shape[0]} points:")
+    else:
+        points_to_show = min(num_points, dataset.shape[0])
+        data_slice = dataset[:points_to_show]  # Retrieve up to num_points
+        print(f"\nDisplaying first {points_to_show} points out of {dataset.shape[0]} total points:")
+
+    print(data_slice)
+ 
+def list_files_under_prefix(node, path):
+    try:
+        for item in node[path]:
+            new_path = f"{path}/{item}"
+            if isinstance(node[new_path], zarr.hierarchy.Group):
+                print(f"Group: {new_path}")
+                list_files_under_prefix(node, new_path)
+            else:
+                print(f"Dataset: {new_path} - {node[new_path].shape}")
+    except KeyError:
+        print(f"No items found under the path {path}")
+ 
 
 def buildLabelMap(xml_root):
     """
@@ -88,15 +132,44 @@ def parse_xml(xml_path):
         views.append((timepoint, setup))
     return views
 
-def load_interest_points(views):
-    # Load interest points from the dataset based on view IDs
-    interest_points = {}
-    for view in views:
-        timepoint, setup = view
-        # Load interest points for the given timepoint and setup
-        # This is a placeholder, replace with actual loading logic
-        interest_points[view] = np.random.rand(100, 2)  # Example: 100 random points
-    return interest_points
+# def load_interest_points(views, xml_path, n5_base_path):
+#     """
+#     Load interest points from the dataset based on view IDs.
+
+#     Parameters:
+#     views (list): List of tuples containing (timepoint, setup).
+#     xml_path (str): Path to the XML file.
+#     n5_base_path (str): Base path to the .n5 folder.
+
+#     Returns:
+#     dict: A dictionary mapping view IDs to their interest points.
+#     """
+#     interest_points = {}
+#     for view in views:
+#         timepoint, setup = view
+#         view_folder = f"tpId_{timepoint}_viewSetupId_{setup}/beads/interestpoints/loc"
+#         full_path = os.path.join(n5_base_path, view_folder)
+
+#         try:
+#             # Open the N5 dataset
+#             if n5_base_path.startswith("s3://"):
+#                 s3 = s3fs.S3FileSystem(anon=False)
+#                 store = s3fs.S3Map(root=full_path, s3=s3)
+#             else:
+#                 store = zarr.N5Store(full_path)
+
+#             root = zarr.open(store, mode='r')
+#             loc_dataset = root["0/0"]  # Assuming the interest points are stored in "0/0"
+
+#             # Read the interest points
+#             points = loc_dataset[:]
+#             interest_points[view] = points
+
+#         except Exception as e:
+#             print(f"⚠️ Failed to load interest points for view {view}: {e}")
+#             interest_points[view] = None  # Mark as None if loading fails
+
+#     return interest_points
 
 def filter_interest_points(interest_points):
     # Filter interest points to keep only those that overlap with other views
@@ -201,37 +274,107 @@ def parse_xml(xml_file):
         timepoint = int(vip.attrib['timepoint'])
         path = vip.text.strip()
         if path.endswith("/beads"):
-            print(f"🔄 Normalizing path for setup {setup_id}: Removing trailing '/beads'")
+            print(f"🔄 Normalizing path for setup {setup_id} at timepoint {timepoint}: Removing trailing '/beads'")
             path = path[:-len("/beads")]
-        if setup_id in view_paths:
-            if timepoint < view_paths[setup_id]['timepoint']:
-                view_paths[setup_id] = {'timepoint': timepoint, 'path': path}
-        else:
-            view_paths[setup_id] = {'timepoint': timepoint, 'path': path}
-    print("✅ Successfully parsed XML file.")
+        
+        # Use tuple of (timepoint, setup_id) as key to handle multiple timepoints
+        key = (timepoint, setup_id)
+        view_paths[key] = {'timepoint': timepoint, 'path': path, 'setup': setup_id}
+    
+    print(f"✅ Successfully parsed XML file. Found {len(view_paths)} view/timepoint combinations.")
     return view_paths
 
 def open_n5_dataset(n5_path):
-    attributes_path = os.path.join(n5_path, 'attributes.json')
-    print(f"\n🔍 Checking for attributes.json at: {attributes_path}")
-    if os.path.exists(attributes_path):
-        print("✅ attributes.json found, attempting to open dataset.")
-        try:
-            dataset = ts.open({
-                'driver': 'n5',
-                'kvstore': {'driver': 'file', 'path': n5_path}
-            }).result()
-            print("✅ Successfully opened N5 dataset.")
-            return dataset
-        except Exception as e:
-            print(f"❌ Error opening N5 dataset: {e}")
-            return None
-    else:
-        print(f"❌ No valid N5 dataset found at {n5_path} (missing attributes.json)")
+    try:
+        if n5_path.startswith("s3://"):
+            s3 = s3fs.S3FileSystem(anon=False) 
+            store = s3fs.S3Map(root=n5_path, s3=s3, check=False)
+        else:
+            store = zarr.N5Store(n5_path)
+
+        dataset = zarr.open(store, mode='r')
+        print(f"✅ Successfully opened N5 dataset at {n5_path}")
+        return dataset
+    except Exception as e:
+        print(f"❌ Error opening N5 dataset at {n5_path}: {e}")
         return None
+
+# def open_n5_dataset(n5_path):
+#     # Check if the direct path exists
+#     attributes_path = os.path.join(n5_path, 'attributes.json')
+#     print(f"\n🔍 Checking for attributes.json at: {attributes_path}")
+    
+#     if not os.path.exists(attributes_path):
+#         # Try the alternate path structure by removing 'interestpoints.n5' if it exists in the path
+#         if 'interestpoints.n5' in n5_path:
+#             alt_path = n5_path.replace('interestpoints.n5/', '')
+#             alt_path = alt_path.replace('interestpoints.n5', '')
+#             attributes_path = os.path.join(alt_path, 'attributes.json')
+#             print(f"🔄 Path not found. Trying alternate path: {attributes_path}")
+        
+#         # If path still doesn't exist and doesn't use the base n5_folder_base structure, try the direct tpId path
+#         if not os.path.exists(attributes_path) and '/tpId_' not in n5_path:
+#             base_dir = os.path.dirname(n5_path)
+#             if os.path.exists(base_dir):
+#                 for item in os.listdir(base_dir):
+#                     if item.startswith('tpId_'):
+#                         view_id = item.split('_')[3]
+#                         if f'viewSetupId_{view_id}' in n5_path:
+#                             alt_path = os.path.join(base_dir, item, 'beads', 'interestpoints', 'loc')
+#                             attributes_path = os.path.join(alt_path, 'attributes.json')
+#                             print(f"🔄 Path not found. Trying tpId-based path: {attributes_path}")
+#                             if os.path.exists(attributes_path):
+#                                 n5_path = alt_path
+#                                 break
+    
+#     if os.path.exists(attributes_path):
+#         print(f"✅ attributes.json found at: {attributes_path}")
+#         try:
+#             dataset = ts.open({
+#                 'driver': 'n5',
+#                 'kvstore': {
+#                     'driver': 'file', 
+#                     'path': os.path.dirname(attributes_path)
+#                 }
+#             }).result()
+#             print("✅ Successfully opened N5 dataset.")
+#             return dataset
+#         except Exception as e:
+#             print(f"❌ Error opening N5 dataset: {e}")
+#             return None
+#     else:
+#         print(f"❌ No valid N5 dataset found at {n5_path} (missing attributes.json)")
+        
+#         # Debug info - list nearby directories to help troubleshoot
+#         try:
+#             base_dir = os.path.dirname(n5_path)
+#             print(f"📁 Contents of parent directory {base_dir}:")
+#             if os.path.exists(base_dir):
+#                 for item in os.listdir(base_dir):
+#                     print(f"   - {item}")
+                    
+#                 # If parent directory contains tpId folders, print their structure
+#                 if any(i.startswith('tpId_') for i in os.listdir(base_dir)):
+#                     for item in os.listdir(base_dir):
+#                         if item.startswith('tpId_'):
+#                             full_path = os.path.join(base_dir, item)
+#                             print(f"   📂 {item} contents:")
+#                             if os.path.isdir(full_path):
+#                                 for subitem in os.listdir(full_path):
+#                                     print(f"      - {subitem}")
+#             else:
+#                 print(f"   Directory does not exist")
+#         except Exception as e:
+#             print(f"   Error listing directory: {e}")
+            
+#         return None
 
 def print_dataset_info(dataset, label):
     try:
+        # Add a type check to ensure the dataset is valid
+        if not hasattr(dataset, 'shape'):
+            raise ValueError(f"Invalid dataset object for label '{label}'. Expected an object with a 'shape' attribute, got {type(dataset)}.")
+        
         num_items = dataset.shape[0]
         shape = dataset.shape
         print(f"\n📊 Dataset Info ({label}):")
@@ -248,29 +391,44 @@ def print_dataset_info(dataset, label):
 
 def parse_and_read_datasets(xml_file, n5_folder_base):
     view_paths = parse_xml(xml_file)
-    print(f"\n🔍 Found {len(view_paths)} view ID interest point folders to analyze.")
+    print(f"\n🔍 Found {len(view_paths)} view ID/timepoint interest point folders to analyze.")
     interest_point_info = {}
-    for idx, view in enumerate(view_paths, start=1):
-        print(f"\n🔗 Processing view {idx}/{len(view_paths)}: {view}")
-        full_path = os.path.join(n5_folder_base, view_paths[view]['path'], "beads", "interestpoints", "loc")
+
+    if n5_folder_base.startswith("s3://"):
+        s3 = s3fs.S3FileSystem(anon=False) 
+        store = s3fs.S3Map(root=n5_folder_base, s3=s3, check=False)
+    else:
+        store = zarr.N5Store(n5_folder_base)
+    root = zarr.open(store, mode='r')
+    
+    for idx, view_key in enumerate(view_paths, start=1):
+        timepoint, setup_id = view_key
+        view_info = view_paths[view_key]
+        print(f"\n🔗 Processing view {idx}/{len(view_paths)}: Setup {setup_id}, Timepoint {timepoint}")
+        full_path = os.path.join(n5_folder_base, view_info['path'], "beads", "interestpoints", "loc")
         print(f"🛠  Loading dataset from: {full_path}")
-        dataset = open_n5_dataset(full_path)
-        if not dataset:
-            print(f"⚠️ Skipping view {view} due to failed dataset loading.")
-            continue
-        relative_path = os.path.relpath(full_path, os.path.dirname(xml_file))
-        print_dataset_info(dataset, relative_path)
-        try:
-            data = dataset.read().result()
-        except Exception as e:
-            print(f"❌ Error reading dataset data: {e}")
-            continue
-        interest_point_info[view] = {'loc': {'num_items': dataset.shape[0],
-                                              'shape': dataset.shape,
-                                              'data': data}}
+
+        # dataset = open_n5_dataset(full_path)
+        path = view_info['path'] + '/beads/interestpoints/loc'
+        dataset = root[path]
+
+        # if not dataset:
+        #     print(f"⚠️ Skipping view {setup_id} at timepoint {timepoint} due to failed dataset loading.")
+        #     continue
+        # relative_path = os.path.relpath(full_path, os.path.dirname(xml_file))
+        # print_dataset_info(dataset, relative_path)
+        # try:
+        #     data = dataset.read().result()
+        # except Exception as e:
+        #     print(f"❌ Error reading dataset data: {e}")
+        #     continue
+        interest_point_info[view_key] = {'loc': {'num_items': dataset.shape[0],
+                                          'shape': dataset.shape,
+                                          'data': dataset}}
     return interest_point_info, view_paths
 
-def compute_matches(pointsA, pointsB, difference_threshold, ratio_of_distance):
+def compute_matches(pointsA, pointsB, difference_threshold=100.0, ratio_of_distance=5.0):
+    """Relaxed matching criteria with higher threshold and ratio"""
     if pointsA is None or pointsB is None:
         print("Invalid points data provided for matching.")
         return []
@@ -278,11 +436,13 @@ def compute_matches(pointsA, pointsB, difference_threshold, ratio_of_distance):
     distances, indices = nn.kneighbors(pointsA)
     matches = []
     for i, (dist, idx) in enumerate(zip(distances, indices)):
+        # More lenient distance threshold and ratio check
         if dist[0] < difference_threshold and dist[0] * ratio_of_distance <= dist[1]:
             matches.append((i, idx[0]))
     return matches
 
-def ransac_filter_matches(pointsA, pointsB, matches, num_iterations=1000, threshold=5.0):
+def ransac_filter_matches(pointsA, pointsB, matches, num_iterations=1000, threshold=10.0):
+    """Relaxed RANSAC parameters with higher threshold"""
     if len(matches) == 0:
         return matches, None
 
@@ -300,11 +460,13 @@ def ransac_filter_matches(pointsA, pointsB, matches, num_iterations=1000, thresh
         rand_idx = np.random.randint(0, len(matches_arr))
         t_candidate = diff_vectors[rand_idx]
         errors = np.linalg.norm(diff_vectors - t_candidate, axis=1)
+        # More lenient inlier threshold
         inlier_indices = np.where(errors < threshold)[0]
         if len(inlier_indices) > len(best_inliers):
             best_inliers = inlier_indices
             best_translation = t_candidate
-            if len(best_inliers) > 0.8 * len(matches_arr):
+            # Relaxed early termination condition
+            if len(best_inliers) > 0.6 * len(matches_arr):  # Reduced from 0.8
                 break
 
     if best_translation is None or len(best_inliers) == 0:
@@ -314,121 +476,383 @@ def ransac_filter_matches(pointsA, pointsB, matches, num_iterations=1000, thresh
     refined_translation = np.mean(diff_vectors[best_inliers], axis=0)
     print(f"🔎 RANSAC estimated translation: {refined_translation} with {len(best_inliers)} inliers out of {len(matches_arr)} matches.")
     
+    # More lenient final filtering
     errors = np.linalg.norm(diff_vectors - refined_translation, axis=1)
-    final_inlier_indices = np.where(errors < threshold)[0]
+    final_inlier_indices = np.where(errors < threshold * 1.5)[0]  # Increased threshold
     filtered_matches = matches_arr[final_inlier_indices]
     print(f"✅ RANSAC filtering retained {len(filtered_matches)} matches after outlier removal.")
     return filtered_matches.tolist(), refined_translation
 
 def perform_pairwise_matching(interest_point_info, view_paths, all_matches, labels, method):
     print("\n🔗 Starting pairwise matching across views:")
-    views = list(interest_point_info.keys())
-    for i in range(len(views)):
-        for j in range(i+1, len(views)):
-            viewA = views[i]
-            viewB = views[j]
-            print(f"\n💥 Matching view {viewA} with view {viewB}")
-            dataA = interest_point_info[viewA]['loc']['data']
-            dataB = interest_point_info[viewB]['loc']['data']
-            pointsA = dataA.T
-            pointsB = dataB.T
-            print("🔍 Computing initial matches using nearest neighbors...")
-            initial_matches = compute_matches(pointsA, pointsB, float('inf'), 3.0)
-            print(f"⚙️ Found {len(initial_matches)} initial matches.")
-            filtered_matches, t_refined = ransac_filter_matches(pointsA, pointsB, initial_matches, num_iterations=1000, threshold=5.0)
-            if filtered_matches:
-                for match in filtered_matches:
-                    ptA = pointsA[match[0]]
-                    ptB = pointsB[match[1]]
-                    print(f"Matched Points (Global Coordinates): [ViewSetupId: {viewA}, TimePointId: {view_paths[viewA]['timepoint']}, x: {ptA[0]:.2f}, y: {ptA[1]:.2f}, z: {ptA[2]:.2f}] <=> [ViewSetupId: {viewB}, TimePointId: {view_paths[viewB]['timepoint']}, x: {ptB[0]:.2f}, y: {ptB[1]:.2f}, z: {ptB[2]:.2f}]")
-                    all_matches.append((viewA, viewB, match[0], match[1]))
-            else:
-                print("⚠️ No inlier matches found after RANSAC filtering.")
+    
+    # Group views by timepoint
+    timepoint_groups = {}
+    for view_key in interest_point_info.keys():
+        timepoint, setup_id = view_key
+        if timepoint not in timepoint_groups:
+            timepoint_groups[timepoint] = []
+        timepoint_groups[timepoint].append(view_key)
+    
+    # Process each timepoint separately
+    for timepoint, views in timepoint_groups.items():
+        print(f"\n⏱️  Processing timepoint {timepoint} with {len(views)} views")
+        for i in range(len(views)):
+            for j in range(i+1, len(views)):
+                viewA = views[i]
+                viewB = views[j]
+                tp_A, setup_A = viewA
+                tp_B, setup_B = viewB
+                
+                print(f"\n💥 Matching view {setup_A} with view {setup_B} at timepoint {timepoint}")
+                dataA = interest_point_info[viewA]['loc']['data']
+                dataB = interest_point_info[viewB]['loc']['data']
+                pointsA = dataA
+                pointsB = dataB
+                print("🔍 Computing initial matches using nearest neighbors...")
+                initial_matches = compute_matches(pointsA, pointsB, float('inf'), 3.0)
+                print(f"⚙️ Found {len(initial_matches)} initial matches.")
+                filtered_matches, t_refined = ransac_filter_matches(pointsA, pointsB, initial_matches, num_iterations=1000, threshold=5.0)
+                if filtered_matches:
+                    for match in filtered_matches:
+                        ptA = pointsA[match[0]]
+                        ptB = pointsB[match[1]]
+                        print(f"Matched Points (Global Coordinates): [ViewSetupId: {setup_A}, TimePointId: {tp_A}, x: {ptA[0]:.2f}, y: {ptA[1]:.2f}, z: {ptA[2]:.2f}] <=> [ViewSetupId: {setup_B}, TimePointId: {tp_B}, x: {ptB[0]:.2f}, y: {ptB[1]:.2f}, z: {ptB[2]:.2f}]")
+                        all_matches.append((viewA, viewB, match[0], match[1]))
+                else:
+                    print("⚠️ No inlier matches found after RANSAC filtering.")
+
+
+def read_interest_points(store_path, dataset_path):
+    """Read interest points from N5/Zarr store"""
+    try:
+        if store_path.startswith("s3://"):
+            s3 = s3fs.S3FileSystem(anon=False)
+            store = s3fs.S3Map(root=store_path, s3=s3, check=False)
+        else:
+            store = zarr.N5Store(store_path)
+            
+        root = zarr.open(store, mode='r')
+        
+        # Check if the path exists
+        if dataset_path not in root:
+            print(f"⚠️ Dataset path {dataset_path} not found")
+            return None
+            
+        # Read interest points data
+        loc_path = f"{dataset_path}/interestpoints/loc"
+        if loc_path in root:
+            return root[loc_path][:]
+        else:
+            print(f"⚠️ Location data not found at {loc_path}")
+            return None
+            
+    except Exception as e:
+        print(f"❌ Error reading interest points: {e}")
+        return None
 
 def save_matches_as_n5(all_matches, view_paths, n5_base_path, clear_correspondences):
     print("\n💾 Saving matches as correspondences into N5 folders...")
-    timepoint = min(vp['timepoint'] for vp in view_paths.values())
-    sorted_views = sorted(view_paths.keys(), key=lambda x: int(x))
-    idMap = {}
-    for i, view in enumerate(sorted_views):
-        key = f"{timepoint},{view},beads"
-        idMap[key] = i
+    
+    # Determine if we're using S3
+    # using_s3 = n5_base_path.startswith("s3://")
+    # local_temp_dir = "/tmp/n5_temp_output"
 
-    match_list = []
-    unique_id = 0
-    for (viewA, viewB, idxA, idxB) in all_matches:
-        keyA = f"{timepoint},{viewA},beads"
-        keyB = f"{timepoint},{viewB},beads"
-        if idMap[keyA] < idMap[keyB]:
-            match_list.append([idxA, idxB, unique_id])
-        else:
-            match_list.append([idxB, idxA, unique_id])
-        unique_id += 1
-
-    if not match_list:
-        print("No matches to save.")
-        return
-
-    matches_array = np.array(match_list, dtype=np.uint64).T
-    total_matches = matches_array.shape[1]
-
-    data_attributes = {
-        "dataType": "uint64",
-        "compression": {
-            "type": "raw"
-        },
-        "blockSize": [1, 300000],
-        "dimensions": [3, total_matches]
-    }
-
-    for view in sorted_views:
-        correspondences_folder = os.path.join(n5_base_path, view_paths[view]['path'], "beads", "correspondences")
-        print(f"\n\n📁 Saving correspondences for view: {view}\n    Folder: {correspondences_folder}\n{'-'*60}")
-        os.makedirs(correspondences_folder, exist_ok=True)
+    # if using_s3:
+    #     # Parse S3 path
+    #     parsed_url = urlparse(n5_base_path)
+    #     bucket_name = parsed_url.netloc
+    #     s3_prefix = parsed_url.path.lstrip('/')
         
-        corr_attributes = {
-            "correspondences": "1.0.0",
-            "idMap": idMap
-        }
-        attributes_path = os.path.join(correspondences_folder, "attributes.json")
-        with open(attributes_path, "w") as f:
-            json.dump(corr_attributes, f, indent=4)
-        print(f"Saved correspondences attributes.json to {attributes_path}")
+    #     # Create local temp directory
+    #     os.makedirs(local_temp_dir, exist_ok=True)
+    #     local_n5_path = os.path.join(local_temp_dir, "output.n5")
+    # else:
+    #     local_n5_path = n5_base_path
 
-        data_folder = os.path.join(correspondences_folder, "data")
-        os.makedirs(data_folder, exist_ok=True)
-        for i in range(3):
-            subfolder = os.path.join(data_folder, str(i))
-            os.makedirs(subfolder, exist_ok=True)
+    if n5_base_path.startswith("s3://"):    
+        s3 = s3fs.S3FileSystem(anon=False)  
+        store = s3fs.S3Map(root=n5_base_path, s3=s3, check=False)
+        root = zarr.group(store=store, overwrite=False)
+    else:
+        store = zarr.N5Store(n5_base_path)
+        root = zarr.group(store=store, overwrite=False)
+
+    try:
+        # Create local N5 store
+        # store = zarr.N5Store(local_n5_path)
+        # root = zarr.group(store=store, overwrite=False)
+        # root.attrs['n5'] = '4.0.0'
+
+        # Group matches by timepoint
+        timepoint_matches = {}
+        for match in all_matches:
+            viewA, viewB, idxA, idxB = match
+            timepoint, _ = viewA
+            if timepoint not in timepoint_matches:
+                timepoint_matches[timepoint] = []
+            timepoint_matches[timepoint].append(match)
+
+        # Process each timepoint's matches
+        for timepoint, matches in timepoint_matches.items():
+            
+            # Get all views for this timepoint
+            all_views_for_timepoint = [view_key for view_key in view_paths.keys() 
+                                     if view_key[0] == timepoint]
+            all_setups = sorted({view_key[1] for view_key in all_views_for_timepoint}, 
+                              key=lambda x: int(x))
+
+            # Process each view separately with its own idMap
+            for view_key in all_views_for_timepoint:
+                _, current_setup = view_key
+                # Get all other setups except the current one for this view's idMap
+                other_setups = [s for s in all_setups if s != current_setup]
+                other_setups = sorted(other_setups, key=lambda x: int(x))
+                
+                # Create ID map without the base view for this specific view
+                idMap = {f"{timepoint},{setup_id},beads": i 
+                        for i, setup_id in enumerate(other_setups)}
+
+                group_path = f"tpId_{timepoint}_viewSetupId_{current_setup}/beads"
+                print(f"\n📁 Processing view {current_setup} at path: {group_path}")
+                print(f"🔍 ID Map for timepoint {timepoint}, setup {current_setup}:")
+                for k, v in idMap.items():
+                    print(f"   {k} -> {v}")
+
+                # Filter matches for current view
+                current_matches = []
+                for viewA, viewB, idxA, idxB in matches:
+                    _, setupA = viewA
+                    _, setupB = viewB
+                    if setupA == current_setup or setupB == current_setup:
+                        if setupA == current_setup:
+                            keyA = f"{timepoint},{setupB},beads"
+                            current_matches.append([idxA, idxB, idMap[keyA]])
+                        else:  # setupB == current_setup
+                            keyB = f"{timepoint},{setupA},beads"
+                            current_matches.append([idxB, idxA, idMap[keyB]])
+
+                if not current_matches:
+                    print(f"No matches to save for view {current_setup}")
+                    continue
+
+                # Convert to numpy array
+                matches_array = np.array(current_matches, dtype=np.uint64)
+
+                try:
+                    # Create groups
+                    if group_path in root:
+                        group = root[group_path]
+                    else:
+                        group = root.create_group(group_path)
+                    
+                    # Handle correspondences
+                    if 'correspondences' in group:
+                        if clear_correspondences:
+                            del group['correspondences']
+                            correspondences = group.create_group('correspondences')
+                        else:
+                            correspondences = group['correspondences']
+                    else:
+                        correspondences = group.create_group('correspondences')
+                    
+                    # Set attributes
+                    correspondences.attrs.update({
+                        "pointcloud": "1.0.0",
+                        "type": "list",
+                        "list version": "1.0.0",
+                        "idMap": idMap,
+                        "timepoint": timepoint
+                    })
+                    
+                    # Save matches data
+                    if 'data' in correspondences:
+                        del correspondences['data']
+                    
+                    correspondences.create_dataset(
+                        "data",
+                        data=matches_array,
+                        dtype='uint64',
+                        chunks=(min(300000, matches_array.shape[0]),),
+                        compressor=zarr.GZip()
+                    )
+
+                    # corr_attributes = {
+                    #     "correspondences": "1.0.0",
+                    #     "idMap": idMap
+                    # }
+
+                    # Create attributes.json folder for idmap if saving to s3
+                    # if n5_base_path.startswith("s3://"):
+                    #     s3 = s3fs.S3FileSystem(anon=False)  
         
-        data_attributes_path = os.path.join(data_folder, "attributes.json")
-        with open(data_attributes_path, "w") as f:
-            json.dump(data_attributes, f, indent=4)
-        print(f"Saved data attributes.json to {data_attributes_path}")
+                    #     # Construct the full path for the attributes.json file on S3
+                    #     corr_attributes_path = f"{n5_base_path.strip('/')}/{group_path}/correspondences/attributes.json"
+                        
+                    #     # Open the file in write mode on S3
+                    #     with s3.open(corr_attributes_path, 'w') as f:
+                    #         json.dump(corr_attributes, f, indent=4)
+                    #         print(f"Saved correspondences attributes.json to {corr_attributes_path}")
 
-        for i in range(3):
-            row_data = matches_array[i, :]
-            byte_data = row_data.tobytes()
-            output_file = os.path.join(data_folder, str(i), "0")
-            with open(output_file, "wb") as f:
-                f.write(byte_data)
-            print(f"Saved row {i} data to {output_file} (raw binary)")
+                    #     print(f"✅ Saved {len(corr_attributes)} attributes for view {group_path}")
+                    
+                except Exception as e:
+                    print(f"❌ Error processing view {current_setup}: {str(e)}")
+                    continue
 
-        print(f"Saved matches N5 dataset with dimensions [3, {total_matches}] in folder: {correspondences_folder}")
+        # # Upload to S3 if needed
+        # if using_s3:
+        #     print("\n📤 Uploading results to S3...")
+        #     s3 = boto3.client('s3')
+            
+        #     # Walk through local directory and upload files
+        #     for root_dir, dirs, files in os.walk(local_n5_path):
+        #         for file in files:
+        #             local_path = os.path.join(root_dir, file)
+        #             relative_path = os.path.relpath(local_path, local_n5_path)
+        #             s3_key = f"{s3_prefix}/{relative_path}"
+                    
+        #             print(f"Uploading {relative_path} to s3://{bucket_name}/{s3_key}")
+        #             with open(local_path, 'rb') as f:
+        #                 s3.upload_fileobj(f, bucket_name, s3_key)
+            
+            # Clean up
+            # import shutil
+            # shutil.rmtree(local_temp_dir)
+            # print("✅ Successfully uploaded results to S3")
+
+        return True
+
+    except Exception as e:
+        print(f"❌ Error in save_matches_as_n5: {e}")
+        import traceback
+        traceback.print_exc()
+        return False
 
 def main(xml_file, n5_folder_base, labels, method, clear_correspondences):
-    interest_point_info, view_paths = parse_and_read_datasets(xml_file, n5_folder_base)
-    print("\n📦 Collected Interest Point Info:")
-    for view, info in interest_point_info.items():
-        print(f"View {view}:")
-        for subfolder, details in info.items():
-            if subfolder == 'loc':
-                print(f"  {subfolder}: num_items: {details['num_items']}, shape: {details['shape']}")
-            else:
-                print(f"  {subfolder}: {details}")
-    all_matches = []
-    perform_pairwise_matching(interest_point_info, view_paths, all_matches, labels, method)
-    save_matches_as_n5(all_matches, view_paths, n5_folder_base, clear_correspondences)
+    print("main")
+
+def fetch_n5_folder(s3_path, local_temp_dir="/tmp/n5_temp"):
+    try:
+        if s3_path.startswith("s3://"):
+            print(f"📥 Fetching N5 folder from S3: {s3_path}")
+            s3 = boto3.client('s3')
+            parsed_url = urlparse(s3_path)
+            bucket_name = parsed_url.netloc
+            prefix = parsed_url.path.lstrip('/')
+            local_path = os.path.join(local_temp_dir, os.path.basename(prefix))
+            os.makedirs(local_path, exist_ok=True)
+            print(f"📂 Local directory for N5 folder: {local_path}")
+            paginator = s3.get_paginator('list_objects_v2')
+            for page in paginator.paginate(Bucket=bucket_name, Prefix=prefix):
+                for obj in page.get('Contents', []):
+                    key = obj['Key']
+                    local_file_path = os.path.join(local_temp_dir, key[len(prefix):].lstrip('/'))
+                    os.makedirs(os.path.dirname(local_file_path), exist_ok=True)
+                    s3.download_file(bucket_name, key, local_file_path)
+                    print(f"  📄 Downloaded: {local_file_path}")
+            print(f"✅ N5 folder downloaded to: {local_path}")
+            return local_path
+        else:
+            print(f"📂 Using local N5 folder: {s3_path}")
+            return s3_path
+    except Exception as e:
+        print(f"❌ Error fetching N5 folder: {e}")
+        sys.exit(1)
+
+
+def start_matching(xml_file, n5_folder_base, output_s3_path=None):
+    try:
+        if xml_file.startswith("s3://"):
+            print(f"📥 Fetching XML file from S3: {xml_file}")
+            xml_file = fetch_xml_file(xml_file)
+            local_xml_path = "/tmp/xml_temp.xml"
+            with open(local_xml_path, "w") as f:
+                f.write(xml_file)
+            print(f"📂 Local XML file saved to: {local_xml_path}")
+            xml_file = local_xml_path
+        else:
+            print(f"📂 Using local XML file: {xml_file}")
+
+        # Parse the XML to get all defined timepoints
+        tree = ET.parse(xml_file)
+        root = tree.getroot()
+        
+        # Get all timepoints defined in the XML
+        all_timepoints = set()
+        
+        # First, try to find timepoints in a "list" type format
+        timepoints_list = root.find(".//Timepoints[@type='list']")
+        if timepoints_list is not None:
+            for timepoint in timepoints_list.findall("Timepoint"):
+                all_timepoints.add(int(timepoint.find("id").text))
+        
+        # If no timepoints found, try "range" format
+        if not all_timepoints:
+            timepoint_range = root.find(".//Timepoints[@type='range']")
+            if timepoint_range is not None:
+                first = int(timepoint_range.find("first").text)
+                last = int(timepoint_range.find("last").text)
+                all_timepoints = set(range(first, last + 1))
+        
+        # If still no timepoints found, try to get timepoints from ViewInterestPointsFile elements
+        if not all_timepoints:
+            for vip in root.findall(".//ViewInterestPointsFile"):
+                all_timepoints.add(int(vip.attrib['timepoint']))
+        
+        if all_timepoints:
+            print(f"📊 XML file contains {len(all_timepoints)} timepoints: {sorted(all_timepoints)}")
+        else:
+            print("⚠️ Warning: Could not find any timepoints defined in the XML file")
+            all_timepoints = {0}  # Default to avoid errors
+
+        # if n5_folder_base.startswith("s3://"):
+        #     n5_folder_base = fetch_n5_folder(n5_folder_base)
+        
+        # If output path is not specified, use the same as input n5 folder
+        if output_s3_path is None:
+            output_s3_path = n5_folder_base
+
+        labels = ["beads"]
+        method = "FAST_ROTATION"
+        clear_correspondences = False
+
+        # Parse the XML and parse datasets using the updated functions that handle multiple timepoints
+        interest_point_info, view_paths = parse_and_read_datasets(xml_file, n5_folder_base)
+        print("\n📦 Collected Interest Point Info:")
+        
+        # Group by timepoint for better visualization
+        loaded_timepoints = set(tp for (tp, _) in interest_point_info.keys())
+        for timepoint in sorted(loaded_timepoints):
+            print(f"\n⏱️  Timepoint {timepoint}:")
+            for view_key, info in interest_point_info.items():
+                tp, setup = view_key
+                if tp == timepoint:
+                    print(f"  View {setup}:")
+                    for subfolder, details in info.items():
+                        if subfolder == 'loc':
+                            print(f"    {subfolder}: num_items: {details['num_items']}, shape: {details['shape']}")
+                        else:
+                            print(f"    {subfolder}: {details}")
+        
+        # Report on missing timepoints
+        missing_timepoints = all_timepoints - loaded_timepoints
+        if missing_timepoints:
+            print(f"\n⚠️ Warning: Could not load interest points for {len(missing_timepoints)} timepoints: {sorted(missing_timepoints)}")
+            print("   This could be because the interest point files don't exist or couldn't be accessed.")
+                            
+        all_matches = []
+        perform_pairwise_matching(interest_point_info, view_paths, all_matches, labels, method)
+        save_matches_as_n5(all_matches, view_paths, output_s3_path, clear_correspondences)
+        
+        # Print comprehensive summary
+        print(f"\n✅ Successfully processed XML file with {len(all_timepoints)} timepoints defined in XML")
+        print(f"✅ Successfully loaded interest points for {len(loaded_timepoints)} timepoints")
+        print(f"✅ Generated and saved {len(all_matches)} matches across all loaded timepoints")
+        print(f"✅ Output saved to: {output_s3_path}")
+    except Exception as e:
+        print(f"❌ Error in start_matching function: {e}")
+        sys.exit(1)
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser(description="Pairwise Matching Pipeline")

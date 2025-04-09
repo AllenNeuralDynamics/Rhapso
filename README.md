@@ -8,6 +8,10 @@ Rhapso is being developed as part of the Allen Institute for Neurotechnology (AI
 
 ## Table of Contents
 - [Repository Structure](#repository-structure)
+- [Usage](#usage)
+- [Componenents Walkthrough](#components-walkthrough)
+- [Sample Data](#sample-data)
+- [Run Parameter Configurations](#run-parameter-configurations)
 - [Command Line Usage](#command-line-usage)
 - [Setup Instructions](#setup-instructions)
 - [Build Package](#build-package)
@@ -65,6 +69,115 @@ rhapso/
 ├── README.md                    # Project documentation
 └── requirements.txt             # Dependencies
 ```
+
+---
+
+
+## Usage
+
+### Python Pipeline Guide: Rhapso/pipelines/python_pipeline.py
+
+### Overview
+This pipeline provides a local execution environment for Rhapso, utilizing its core components to demonstrate the system's capabilities with sample data. It is designed to showcase how flexible and adaptable Rhapso is, allowing users to customize and interchange components to fit various use cases.
+
+### Getting Started
+1.	Location: The pipeline script is located at Rhapso/pipelines/python_pipeline.py.
+2.	Purpose: Ideal for users new to Rhapso or those looking to explore its functionalities by stepping through the process with provided [sample data](#sample-data).
+3.	Customization: Discover how to modify and tailor Rhapso to meet specific needs by experimenting with the components within this pipeline.
+
+### Configuration
+- Sample Data: To get started with the sample data, visit [sample data](#sample-data).
+- Parameters: The pipeline requires setting parameters that vary based on your dataset size. These parameters are crucial for optimizing the execution of your pipeline.
+-	Optimization: For detailed guidance on setting up optimization parameters, check out [Run Parameter Configurations](#run-parameter-configurations).
+
+### Running the Job
+1. Follow [Setup Instructions](#setup-instructions).
+2. Navigate your terminal to the root folder of Rhapso. In your terminal, run: python Rhapso/pipelines/python_pipeline.py.
+
+### Monitoring
+Follow the steps in the pipeline script to understand the sequence and integration of Rhapso components. Each step is an opportunity to tweak and learn about the system’s flexibility in real-time applications.
+
+<br>
+
+### Spark ETL Pipeline Guide: Rhapso/pipelines/spark_etl_pipeline.py
+
+### Overview
+This pipeline enables the execution of Rhapso on production data using AWS Glue's Spark ETL capabilities, which is ideal for processing large-scale datasets, specifically when dealing with OME image data in terabytes or larger.
+
+### Prerequisites
+1.	AWS Account: Ensure you have an active AWS account. Sign up or log in here.
+2.	Navigate to AWS Glue: Access AWS Glue from your AWS Management Console. Find it under "Services" or use the search bar.
+
+### Setup
+1.	Access ETL Jobs:
+-	In AWS Glue, select "ETL Jobs" from the left sidebar.
+-	Click on "Add Job" to start a new ETL job setup.
+2.	Configure the Job:
+-	Choose "Spark" as the ETL engine and select "Start Fresh" in the script editor.
+-	In the script editor, paste the contents of Rhapso/pipelines/spark_etl_pipeline.py.
+3.	Import Rhapso Library:
+-	Navigate to "Job Details", then scroll to "Advanced Properties".
+-	Under "Job Parameters", add --additional-python-modules as the key.
+-	For the value, input the full S3 path to the .whl file containing the Rhapso project.
+-	To create .whl file, navigate to [Build Package](#build-package)
+
+### Running the Job
+1.	Adjust Job Settings for Your Data:
+-	Review guidelines on dataset sizes and optimal worker types [Run Parameter Configurations](#run-parameter-configurations) to ensure the Glue engine is configured correctly for your data.
+2.	Save and Run:
+-	Save your configurations and initiate the job by clicking "Run".
+-	Monitor the job's progress in the "Runs" tab.
+
+### Monitoring
+Watch the execution in real-time and make any necessary adjustments based on the job performance and outputs.
+
+---
+
+## Components Walkthrough
+
+This guide offers a high-level overview of Rhapso components, explaining each component's role in the process. It’s designed for users who want to understand or modify Rhapso’s process.
+
+### Interest Point Detection
+1.	**XML to DataFrame** -	Converts XML metadata into structured DataFrames to facilitate data manipulation.
+2.	**View Transform Models** -	Generates transformation matrices from XML data to align multiple views in a dataset.
+3.	**Overlap Detection** -	Identifies overlapping areas between different views using the transformation matrices.
+4.	**Load Image Data** -	Loads and preprocesses image data based on detected overlaps, preparing it for feature detection.
+5.	**Difference of Gaussian** - Applies the Difference of Gaussian (DoG) method to identify potential interest points in the image data.
+6.	**Advanced Refinement** -	Refines detected points using a KD-tree structure to ensure accuracy and relevance of features.
+7.	**Save Interest Points** - Saves the refined interest points and associated metadata for further analysis or usage.
+
+### Interest Point Matching
+1.	**XML Parsing** -	Extracts necessary metadata such as view IDs and setup information from an XML file, crucial for correlating different datasets.
+2.	**Data Retrieval** - Fetches data from specified sources (local or cloud storage) based on the XML configuration, ensuring that all relevant image data is accessible for processing.
+3.	**Interest Points Loading** -	Loads interest points data, which contains critical features extracted from images. This step is essential for subsequent matching procedures.
+4.	**Interest Points Filtering** -	Filters out irrelevant or less significant points based on predefined criteria, refining the dataset for more accurate matching.
+5.	**View Grouping** -	Organizes views into logical groups, facilitating efficient and systematic pairing for the matching process.
+6.	**Pairwise Matching Setup** -	Prepares and configures the conditions and parameters for pairwise matching between the grouped views.
+7.	**RANSAC for Matching** -	Applies the RANSAC algorithm to find the best match between pairs, using geometric constraints to validate the correspondences.
+8.	**Match Refinement** - Refines the matches to ensure high accuracy, discarding outliers and confirming valid correspondences based on robust statistical methods.
+9.	**Results Compilation and Storage** -	Aggregates all matching results and stores them in a designated format and location for further analysis or use in downstream processes.
+
+### Solver
+1.	**XML to DataFrame** - Converts XML metadata into structured DataFrames to facilitate data manipulation and subsequent operations.
+2.	**View Transform Models** -	Generates affine transformation matrices from the DataFrames, essential for aligning multiple views in a coherent manner.
+3.	**Data Preparation** - Prepares and organizes data retrieved from different sources, setting the stage for effective model generation and tile setup.
+4.	**Model and Tile Setup** - Creates models and configures tiles based on the prepared data and the transformation matrices, crucial for the optimization process.
+5.	**Align Tiles** -	Applies transformation models to tiles, aligning them according to the specified parameters and conditions.
+6.	**Global Optimization** -	Performs a comprehensive optimization over all tiles to refine the alignment based on a global perspective, ensuring consistency and accuracy across the dataset.
+7.	**Save Results** - Saves the optimized results back to XML, documenting the new affine transformations for each view, thereby finalizing the process.
+
+### Cloud Fusion
+To Do
+
+---
+
+## Sample Data
+To Do - add sample data sets for users to download
+
+---
+
+## Run Parameter Configurations
+To Do - add configurations
 
 ---
 
