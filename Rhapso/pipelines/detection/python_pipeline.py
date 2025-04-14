@@ -35,13 +35,12 @@ threshold = 0.008
 file_type = "tiff"
 file_source = "local"
 xml_file_path = "/Users/seanfite/Desktop/AllenInstitute/Rhapso/Data/IP_TIFF_XML/dataset.xml"
-
 image_file_path = "/Users/seanfite/Desktop/AllenInstitute/Rhapso/Data/IP_TIFF_XML/"
 output_file_path = "/Users/seanfite/Desktop/AllenInstitute/Rhapso/Data/IP_TIFF_XML/output"
-
 xml_bucket_name = None
 image_bucket_name = None
 output_bucket_name = None
+key = 'detection'
 
 # Zarr - s3
 # file_type = 'zarr'
@@ -52,6 +51,7 @@ output_bucket_name = None
 # image_bucket_name = "aind-open-data"
 # output_file_path = "output"
 # output_bucket_name = 'interest-point-detection'
+# key = "detection"
 
 # Tiff - local
 # file_type = 'tiff'
@@ -62,6 +62,7 @@ output_bucket_name = None
 # xml_bucket_name = None
 # image_bucket_name = None
 # output_bucket_name = None
+# key = "detection"
 
 # data input source
 s3 = boto3.client("s3")
@@ -81,7 +82,7 @@ elif file_source == "local":
     xml_file = fetch_local_xml(xml_file_path)
 
 # Load XML data into dataframes
-processor = XMLToDataFrame(xml_file)
+processor = XMLToDataFrame(xml_file, key)
 dataframes = processor.run()
 print("XML loaded")
 
@@ -92,8 +93,7 @@ print("Transforms models have been created")
 
 # Use view transform matrices to find areas of overlap
 overlap_detection = OverlapDetection(
-    view_transform_matrices, dataframes, dsxy, dsz, image_file_path, file_type
-)
+    view_transform_matrices, dataframes, dsxy, dsz, image_file_path, file_type)
 overlapping_area = overlap_detection.run()
 print("Overlap detection is done")
 

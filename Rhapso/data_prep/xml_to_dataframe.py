@@ -7,8 +7,9 @@ import xml.etree.ElementTree as ET
 
 
 class XMLToDataFrame:
-    def __init__(self, xml_file):
+    def __init__(self, xml_file, key):
         self.xml_content = xml_file
+        self.key = key
 
     def parse_image_loader_zarr(self, root):
         image_loader_data = []
@@ -117,10 +118,10 @@ class XMLToDataFrame:
                 )
         return pd.DataFrame(viewregistrations_data)
 
-    def parse_view_interest_points(self, root, key):
+    def parse_view_interest_points(self, root):
         view_interest_points_data = []
 
-        if key == "data_prep":
+        if self.key == "detection":
             if len(root.findall(".//ViewInterestPointsFile")) != 0:
                 raise Exception("There should be no interest points in this file yet.")
 
@@ -166,12 +167,12 @@ class XMLToDataFrame:
             length = False
         return length
 
-    def run(self, key):
+    def run(self):
         root = ET.fromstring(self.xml_content)
         image_loader_df = self.route_image_loader(root)
         view_setups_df = self.parse_view_setups(root)
         view_registrations_df = self.parse_view_registrations(root)
-        view_interest_points_df = self.parse_view_interest_points(root, key)
+        view_interest_points_df = self.parse_view_interest_points(root)
 
         return {
             "image_loader": image_loader_df,

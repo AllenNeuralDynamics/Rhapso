@@ -11,19 +11,20 @@ sigma: 1.8
 threshold: 0.008
 file_type: 'tiff'
 file_source_detection: 'local'
-xml_file_path_detection: '/Users/seanfite/Desktop/IP_TIFF_XML-101/dataset.xml'
-image_file_path:  '/Users/seanfite/Desktop/IP_TIFF_XML-101/'
-output_file_path: '/Users/seanfite/Desktop/IP_TIFF_XML-101/output'
+xml_file_path_detection: '/Users/seanfite/Desktop/IP_TIFF_XML/dataset.xml'
+image_file_path:  '/Users/seanfite/Desktop/IP_TIFF_XML/'
+output_file_path: '/Users/seanfite/Desktop/IP_TIFF_XML/output'
 xml_bucket_name_detection: None
 image_bucket_name: None
 output_bucket_name: None
+key: 'detection'
 
 # INTEREST POINT MATCHING
 # -----------------------------------
 
-xml_input_file: '/Users/seanfite/Desktop/IP_TIFF_XML-101/output/dataset-detection.xml'
-n5_base_path: '/Users/seanfite/Desktop/IP_TIFF_XML-101/output/interestpoints.n5'
-output_path: '/Users/seanfite/Desktop/IP_TIFF_XML-101/output/interestpoints.n5'
+xml_input_file: '/Users/seanfite/Desktop/IP_TIFF_XML/output/dataset-detection.xml'
+n5_base_path: '/Users/seanfite/Desktop/IP_TIFF_XML/output/interestpoints.n5'
+output_path: '/Users/seanfite/Desktop/IP_TIFF_XML/output/interestpoints.n5'
 
 # SOLVER
 # -----------------------------------
@@ -40,6 +41,6 @@ max_allowed_error: 5.0
 max_plateauwidth: 200
 file_source_solver: 'local'
 xml_bucket_name_solver: None
-xml_file_path_solver: '/Users/seanfite/Desktop/IP_TIFF_XML-101/output/dataset-detection.xml'
-data_prefix: '/Users/seanfite/Desktop/IP_TIFF_XML-101/output/interestpoints.n5'
-xml_file_path_output: '/Users/seanfite/Desktop/IP_TIFF_XML-101/output/dataset-solve.xml'
+xml_file_path_solver: '/Users/seanfite/Desktop/IP_TIFF_XML/output/dataset-detection.xml'
+data_prefix: '/Users/seanfite/Desktop/IP_TIFF_XML/output/interestpoints.n5'
+xml_file_path_output: '/Users/seanfite/Desktop/IP_TIFF_XML/output/dataset-solve.xml'

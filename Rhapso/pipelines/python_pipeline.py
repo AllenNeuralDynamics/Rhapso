@@ -22,7 +22,8 @@ interest_point_detection = InterestPointDetection(
     image_file_path=config['image_file_path'],
     image_bucket_name=config['image_bucket_name'],
     output_file_path=config['output_file_path'],
-    output_bucket_name=config['output_bucket_name']
+    output_bucket_name=config['output_bucket_name'],
+    key = ['key']
 )
 interest_point_detection.run()
 

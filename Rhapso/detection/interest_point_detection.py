@@ -13,7 +13,8 @@ from dask import compute
 
 class InterestPointDetection:
     def __init__(self, strategy, dsxy, dsz, min_intensity, max_intensity, sigma, threshold, file_type, file_source,
-            xml_file_path, xml_bucket_name, image_file_path, image_bucket_name, output_file_path, output_bucket_name):
+            xml_file_path, xml_bucket_name, image_file_path, image_bucket_name, output_file_path, output_bucket_name,
+            key):
         
         self.strategy = strategy
         self.dsxy = dsxy
@@ -30,6 +31,7 @@ class InterestPointDetection:
         self.image_bucket_name = image_bucket_name
         self.output_file_path = output_file_path
         self.output_bucket_name = output_bucket_name
+        self.key = key
 
     def detection(self):
         # data input source
@@ -53,7 +55,7 @@ class InterestPointDetection:
             xml_file = fetch_local_xml(self.xml_file_path)
 
         # Load XML data into dataframes         
-        processor = XMLToDataFrame(xml_file)
+        processor = XMLToDataFrame(xml_file, self.key)
         dataframes = processor.run()
         print("XML loaded")
 

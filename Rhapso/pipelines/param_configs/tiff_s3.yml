@@ -18,6 +18,7 @@ image_file_path: 's3://rhapso-tif-sample/IP_TIFF_XML/'
 image_bucket_name: "rhapso-tif-sample"
 output_file_path: "output"
 output_bucket_name: 'interest-point-detection'
+key: 'detection'
 
 # INTEREST POINT MATCHING
 # -----------------------------------
