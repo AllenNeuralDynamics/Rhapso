@@ -2,10 +2,11 @@ from collections import OrderedDict
 from scipy.spatial import KDTree
 import numpy as np
 
-# This component groups interest points by view_id and if overlapping only, uses kd tree algorithm to remove duplicate points, 
+# This component groups interest points by view_id and if overlapping only, uses kd tree algorithm to remove duplicate points,
 # otherwise checks for max spots
 
-class AdvancedRefinement():
+
+class AdvancedRefinement:
     def __init__(self, interest_points):
         self.interest_points = interest_points
         self.consolidated_data = {}
@@ -22,23 +23,23 @@ class AdvancedRefinement():
         self.interest_points_per_view_id = {}
         self.intensities_per_view_id = {}
         self.intervals_per_view_id = {}
-    
+
     # ensure each interest point is sufficiently isolated
     def kd_tree(self):
         filtered_data = {}
-        
+
         for view_id, points in self.consolidated_data.items():
             if not points:
                 continue
-            
-            pts = np.array([p[0] for p in points]) 
+
+            pts = np.array([p[0] for p in points])
             tree = KDTree(pts)
             unique_indices = set()
-            
+
             for i, point in enumerate(pts):
-                distances, _ = tree.query(point, k=3) 
-     
-                if distances[2] > self.combine_distance:  
+                distances, _ = tree.query(point, k=3)
+
+                if distances[2] > self.combine_distance:
                     unique_indices.add(i)
 
             filtered_data[view_id] = [points[i] for i in unique_indices]
@@ -48,18 +49,18 @@ class AdvancedRefinement():
     # combine interest points by view id
     def consolidate_interest_points(self):
         for entry in self.interest_points:
-            view_id = entry['view_id']
-            points = entry['interest_points']
-            intensities = entry['intensities']
+            view_id = entry["view_id"]
+            points = entry["interest_points"]
+            intensities = entry["intensities"]
 
             if view_id not in self.consolidated_data:
                 self.consolidated_data[view_id] = []
 
             for point, intensity in zip(points, intensities):
                 self.consolidated_data[view_id].append((point, intensity))
-        
+
         self.consolidated_data = OrderedDict(sorted(self.consolidated_data.items()))
-    
+
     def filter_points(self, interest_points, intensities, max_spots):
         combined_list = []
         for i in range(len(interest_points)):
@@ -77,7 +78,7 @@ class AdvancedRefinement():
             interest_points.append((ip))
 
         return interest_points, intensities
-    
+
     # TODO - test integration when Rhapso is ran without --overlappingonly param
     def max_spots(self):
         # max_spots_overlap is a set param
@@ -85,9 +86,9 @@ class AdvancedRefinement():
             ips_list = []
             intensities_list = []
             intervals_list = []
-
-            for id in self.interest_points['view_id']:
-
+            # This is trying to access a list like a dictionary.
+            for id in self.interest_points["view_id"]:
+                # we never add anything to interest_points_per_view_id, self.intensities_per_view_id, intervals_per_view_id so it will always be empty and will always have a type error.
                 ips_list.append(self.interest_points_per_view_id[id])
                 intensities_list.append(self.intensities_per_view_id[id])
                 intervals_list.append(self.intervals_per_view_id[id])
@@ -115,8 +116,8 @@ class AdvancedRefinement():
                         )
 
             # To later put back into interest_points_per_view_id and intensities_per_view_id
-            self.interest_points_per_view_id[self.interest_points['view_id']].clear()
-            self.intensities_per_view_id[self.interest_points['view_id']].clear()
+            self.interest_points_per_view_id[self.interest_points["view_id"]].clear()
+            self.intensities_per_view_id[self.interest_points["view_id"]].clear()
 
             for interval in interval_data:
                 intervals = interval[0]
@@ -124,7 +125,8 @@ class AdvancedRefinement():
                 intensity_list = interval[2]
 
                 my_max_spots = round(
-                    self.max_spots * (sum(intervals["dimensions"]) / self.max_interval_size)
+                    self.max_spots
+                    * (sum(intervals["dimensions"]) / self.max_interval_size)
                 )
                 if my_max_spots > 0 and my_max_spots < len(ips):
                     old_size = len(ips)
@@ -143,8 +145,10 @@ class AdvancedRefinement():
                     )
                 else:
                     print("NOT filtered interval")
-                self.interest_points_per_view_id[self.interest_points['view_id']] += ips
-                self.intensities_per_view_id[self.interest_points['view_id']] += intensities_list
+                self.interest_points_per_view_id[self.interest_points["view_id"]] += ips
+                self.intensities_per_view_id[
+                    self.interest_points["view_id"]
+                ] += intensities_list
         return (
             self.interest_points_per_view_id,
             self.intensities_per_view_id,

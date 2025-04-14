@@ -93,7 +93,8 @@ print("Transforms models have been created")
 
 # Use view transform matrices to find areas of overlap
 overlap_detection = OverlapDetection(
-    view_transform_matrices, dataframes, dsxy, dsz, image_file_path, file_type)
+    view_transform_matrices, dataframes, dsxy, dsz, image_file_path, file_type
+)
 overlapping_area = overlap_detection.run()
 print("Overlap detection is done")
 
@@ -175,7 +176,6 @@ print("Advanced refinement is done")
 save_interest_points = SaveInterestPoints(
     dataframes,
     consolidated_data,
-    image_file_path,
     xml_file_path,
     xml_bucket_name,
     output_bucket_name,
