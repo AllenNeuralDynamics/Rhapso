@@ -26,20 +26,15 @@ jobs:
           python-version: '3.x'
 
       # Step 3: Install dependencies
-      - name: Install dependencies
+      - name: Install dependencies 
         run: |
           python -m pip install --upgrade pip
           pip install setuptools wheel twine
 
-      # Step 4: Build the .whl file with branch name suffix
+      # Step 4: Build the distribution package (without renaming)
       - name: Build the distribution package
         run: |
           python setup.py sdist bdist_wheel
-          BRANCH_NAME=${{ github.event.inputs.branch }}
-          BRANCH_NAME_SANITIZED=$(echo "$BRANCH_NAME" | tr '/' '_' | tr '[:upper:]' '[:lower:]')
-          ORIGINAL_WHL=$(ls dist/*.whl)
-          NEW_WHL=$(echo $ORIGINAL_WHL | sed "s/\.whl/_${BRANCH_NAME_SANITIZED}.whl/")
-          mv "$ORIGINAL_WHL" "$NEW_WHL"
 
       # Step 5: Configure AWS CLI with credentials
       - name: Configure AWS CLI
@@ -49,7 +44,10 @@ jobs:
           aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
           aws-region: us-west-2
 
-      # Step 6: Upload the renamed .whl file to S3
+      # Step 6: Upload the .whl file to an S3 folder for the branch
       - name: Upload .whl to S3
         run: |
-          aws s3 cp dist/*.whl s3://rhapso-dev/rhapso-whl-package/
+          BRANCH_NAME=${{ github.event.inputs.branch }}
+          # Sanitize branch name: replace "/" with "_" and convert to lowercase
+          BRANCH_NAME_SANITIZED=$(echo "$BRANCH_NAME" | tr '/' '_' | tr '[:upper:]' '[:lower:]')
+          aws s3 cp dist/*.whl s3://rhapso-dev/rhapso-whl-package/branch=${BRANCH_NAME_SANITIZED}/

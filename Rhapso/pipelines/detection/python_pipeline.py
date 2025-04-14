@@ -13,7 +13,7 @@ from Rhapso.pipelines.utils import fetch_local_xml
 
 strategy = "python"
 dsxy = 4
-dsz = 4
+dsz = 1
 min_intensity = 0
 max_intensity = 255
 sigma = 1.8
@@ -34,13 +34,11 @@ threshold = 0.008
 # Tiff - local
 file_type = "tiff"
 file_source = "local"
-xml_file_path = (
-    "/Users/seanfite/Desktop/AllenInstitute/Rhapso/Data/IP_TIFF_XML/dataset.xml"
-)
+xml_file_path = "/Users/seanfite/Desktop/AllenInstitute/Rhapso/Data/IP_TIFF_XML/dataset.xml"
+
 image_file_path = "/Users/seanfite/Desktop/AllenInstitute/Rhapso/Data/IP_TIFF_XML/"
-output_file_path = (
-    "/Users/seanfite/Desktop/AllenInstitute/Rhapso/Data/IP_TIFF_XML/output"
-)
+output_file_path = "/Users/seanfite/Desktop/AllenInstitute/Rhapso/Data/IP_TIFF_XML/output"
+
 xml_bucket_name = None
 image_bucket_name = None
 output_bucket_name = None
@@ -54,6 +52,16 @@ output_bucket_name = None
 # image_bucket_name = "aind-open-data"
 # output_file_path = "output"
 # output_bucket_name = 'interest-point-detection'
+
+# Tiff - local
+# file_type = 'tiff'
+# file_source = 'local'
+# xml_file_path = '/Users/seanfite/Desktop/AllenInstitute/Rhapso/Data/IP_TIFF_XML/dataset.xml'
+# image_file_path =  '/Users/seanfite/Desktop/AllenInstitute/Rhapso/Data/IP_TIFF_XML/'
+# output_file_path = '/Users/seanfite/Desktop/AllenInstitute/Rhapso/Data/IP_TIFF_XML/output'
+# xml_bucket_name = None
+# image_bucket_name = None
+# output_bucket_name = None
 
 # data input source
 s3 = boto3.client("s3")
@@ -184,12 +192,3 @@ save_interest_points.run()
 print("Interest points saved")
 
 print("Interest point detection is done")
-
-# INTEREST POINT MATCHING
-# --------------------------
-
-# SOLVE
-# --------------------------
-
-# FUSION
-# --------------------------

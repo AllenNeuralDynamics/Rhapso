@@ -1,18 +1,17 @@
 import zarr
 import numpy as np
-import zarr
 import xml.etree.ElementTree as ET
 import s3fs
 import boto3
 from io import BytesIO
 import io
+import json
 
 class SaveInterestPoints:
-    def __init__(self, dataframes, consolidated_data, prefix, xml_file_path, xml_bucket_name, output_bucket_name, output_file_path,
+    def __init__(self, dataframes, consolidated_data, xml_file_path, xml_bucket_name, output_bucket_name, output_file_path,
                  downsample_xy, downsample_z, min_intensity, max_intensity, sigma, threshold, file_source):
         self.consolidated_data = consolidated_data
         self.image_loader_df = dataframes['image_loader']
-        self.prefix = prefix
         self.xml_file_path = xml_file_path
         self.xml_bucket_name = xml_bucket_name
         self.output_bucket_name = output_bucket_name
@@ -102,6 +101,17 @@ class SaveInterestPoints:
         else:
             print("input source not accepted")
             return
+    
+    def write_json_to_s3(self, id_dataset_path, loc_dataset_path, attributes):
+        json_path = id_dataset_path + '/attributes.json'
+        json_bytes = json.dumps(attributes).encode('utf-8')
+        s3 = boto3.client('s3')
+        s3.put_object(Bucket=self.output_bucket_name, Key=json_path, Body=json_bytes)
+
+        json_path = loc_dataset_path + '/attributes.json'
+        json_bytes = json.dumps(attributes).encode('utf-8')
+        s3 = boto3.client('s3')
+        s3.put_object(Bucket=self.output_bucket_name, Key=json_path, Body=json_bytes)
 
     def save_intensities_to_n5(self, view_id, n5_path, root):
         intensities_path = n5_path + '/interestpoints/intensities'
@@ -126,18 +136,13 @@ class SaveInterestPoints:
             )
 
     def save_interest_points_to_n5(self, view_id, n5_path, root): 
-        dataset_path = n5_path + '/interestpoints' 
-        corresponding_path = n5_path + '/corresponding'   
+        dataset_path = n5_path + '/interestpoints'    
 
         if dataset_path in root:
             del root[dataset_path]
-        
-        if corresponding_path in root:
-            del root[corresponding_path]
 
         # Create directories
         dataset = root.create_group(dataset_path)
-        root.create_group(corresponding_path)
 
         # Set attributes
         dataset.attrs["pointcloud"] = "1.0.0"
@@ -147,6 +152,13 @@ class SaveInterestPoints:
         # Create sub-datasets
         id_dataset = f"{dataset_path}/id"
         loc_dataset = f"{dataset_path}/loc"
+
+        # Create attributes.json files if saving to s3
+        if self.file_source == 's3':
+            id_path = "output/" + id_dataset
+            loc_path = "output/" + loc_dataset
+            attrs_dict = dict(dataset.attrs)
+            self.write_json_to_s3(id_path, loc_path, attrs_dict)
 
         # Prep interest points lists or create empty n5 directories if none
         if view_id in self.consolidated_data:

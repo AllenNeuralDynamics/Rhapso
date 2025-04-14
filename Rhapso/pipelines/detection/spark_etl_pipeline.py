@@ -1,4 +1,3 @@
-import sys
 from awsglue.transforms import *
 from awsglue.utils import getResolvedOptions
 from pyspark.context import SparkContext
@@ -16,10 +15,12 @@ from Rhapso.data_prep.serialize_image_chunks import SerializeImageChunks
 from Rhapso.data_prep.deserialize_image_chunks import DeserializeImageChunks
 from Rhapso.detection.difference_of_gaussian import DifferenceOfGaussian
 from Rhapso.detection.advanced_refinement import AdvancedRefinement
+from Rhapso.detection.save_interest_points import SaveInterestPoints
+import sys
 import boto3
 import ast
 
-# Spark ETL testing pipeline - this script runs in AWS Glue or in a AWS Glue Docker Container (dev only)
+# Spark ETL detection pipeline - this script runs in AWS Glue
 
 s3 = boto3.client('s3')
 
@@ -31,33 +32,39 @@ spark = SparkSession.builder.appName("Interest Point Detection").getOrCreate()
 job = Job(glueContext)
 job.init(args['JOB_NAME'], args)
 
-# DOWNSAMPLING
-dsxy = 4
-dsz = 4
+# GENERAL PARAMS
 strategy = 'spark-etl'
+file_source = 's3'
+output_bucket_name = 'interest-point-detection'
+output_file_path = 'output'
+dsxy = 30
+dsz = 40
+min_intensity = 0
+max_intensity = 255
+sigma = 1.8
+threshold = 0.008 
 
 # SPARK ETL PARAMS
-parquet_bucket_path = 's3://interest-point-detection/ipd-staging-v2/'
-crawler_name = "NewestIPD"
-crawler_s3_path = "s3://interest-point-detection/ipd-staging-v2/"
-crawler_database_name = "NewestIPD"
+parquet_bucket_path = 's3://interest-point-detection/ipd_zarr_staging_glue/'
+crawler_name = "ipd_zarr_staging_glue"
+crawler_s3_path = "s3://interest-point-detection/ipd_zarr_staging_glue/"
+crawler_database_name = "ipd_zarr_staging_glue"
 crawler_iam_role = "arn:aws:iam::443370675126:role/rhapso-s3"
-
-glue_database = 'newestipd'
-glue_table_name = 'ipd_staging_v2'
+glue_database = 'ipd_zarr_staging_glue'
+glue_table_name = 'ipd_zarr_staging_glue'
 
 # FILE TYPE - PICK ONE
-file_type = 'tiff'
-xml_bucket_name = "rhapso-tif-sample"
-image_bucket_name = "tiff-sample"
-prefix = 's3://rhapso-tif-sample/IP_TIFF_XML/'
-xml_file_path = "IP_TIFF_XML/dataset.xml"
+# file_type = 'tiff'
+# xml_bucket_name = "rhapso-tif-sample"
+# xml_file_path = "IP_TIFF_XML/dataset.xml"
+# image_bucket_name = "tiff-sample"
+# image_file_path = 's3://rhapso-tif-sample/IP_TIFF_XML/'
 
-# file_type_zarr = 'zarr'
-# xml_bucket_name = "rhapso-zar-sample"
-# image_bucket_name = "aind-open-data"
-# prefix = 's3://aind-open-data/exaSPIM_708365_2024-04-29_12-46-15/SPIM.ome.zarr'
-# xml_file_path = "dataset.xml"
+file_type = 'zarr'
+xml_bucket_name = "rhapso-zar-sample"
+xml_file_path = "dataset.xml"
+image_bucket_name = "aind-open-data"
+image_file_path = 's3://aind-open-data/exaSPIM_708365_2024-04-29_12-46-15/SPIM.ome.zarr/'
 
 def fetch_from_s3(s3, bucket_name, input_file):
     response = s3.get_object(Bucket=bucket_name, Key=input_file)
@@ -79,12 +86,12 @@ view_transform_matrices = create_models.run()
 print("Transforms Models have been created")
 
 # Use view transform matrices to find areas of overlap
-overlap_detection = OverlapDetection(view_transform_matrices, dataframes, dsxy, dsz, prefix, file_type)
+overlap_detection = OverlapDetection(view_transform_matrices, dataframes, dsxy, dsz, image_file_path, file_type)
 overlapping_area = overlap_detection.run()
 print("Overlap Detection is done")
 
 # Load images
-images_loader = LoadImageData(dataframes, overlapping_area, dsxy, dsz, prefix, file_type)
+images_loader = LoadImageData(dataframes, overlapping_area, dsxy, dsz, image_file_path, file_type)
 all_image_data = images_loader.run()
 print("Image data has loaded")
 
@@ -107,7 +114,7 @@ image_data_dyf = glueContext.create_dynamic_frame.from_catalog(
 print("Dynamic frame loaded")
 
 # Detect interest points using DoG algorithm - custom transform
-difference_of_gaussian = DifferenceOfGaussian()
+difference_of_gaussian = DifferenceOfGaussian(min_intensity, max_intensity, sigma, threshold)
 deserialize_image_chunks = DeserializeImageChunks()
 def interest_point_detection(record):
     try:
@@ -127,7 +134,7 @@ def interest_point_detection(record):
         print("Error processing record:", str(e))
         return {}
 mapped_results_dyf = image_data_dyf.map(interest_point_detection, transformation_ctx="map_interest_points")
-print("Interest point detection done")
+print("Difference of gaussian is done")
 
 # Format results out of dynamic frame for advanced refinement
 result_df = mapped_results_dyf.toDF()
@@ -147,22 +154,16 @@ print("Results formatted and ready for advanced refinement")
 
 # Use kdtree algorithm to filter out duplicated points of interest
 advanced_refinement = AdvancedRefinement(interest_points_list)
-final_interest_points = advanced_refinement.run()
+consolidated_data = advanced_refinement.run()
 print("Advanced refinement is complete.")
 
-print("Final interest points:", final_interest_points)
+# Save interest points to N5 and update xml file
+save_interest_points = SaveInterestPoints(dataframes, consolidated_data, xml_file_path, xml_bucket_name, 
+                                          output_bucket_name, output_file_path, dsxy, dsz, min_intensity, 
+                                          max_intensity, sigma, threshold, file_source)
+save_interest_points.run()
 
-# save_interest_points = SaveInterestPoints()
-# save_interest_points.run()
-
-# INTEREST POINT MATCHING
-# --------------------------
-
-# SOLVE 
-# --------------------------
-
-# FUSION
-# --------------------------
+print("Interest point detection is done")
 
 job.commit()
 
@@ -173,7 +174,7 @@ job.commit()
 # python setup.py bdist_wheel
 
 # CREATE NEW AWS GLUE DOCKER CONTAINER (name -> spark-etl)
-# docker run -d --name spark-etl --user root --memory 16g --memory-swap 16g -v /Users/seanfite/Desktop/Rhapso:/app/logs -it amazon/aws-glue-libs:glue_libs_4.0.0_image_01-arm64
+# docker run -d --name spark-etl --user root --memory 16g --memory-swap 16g -v /Users/seanfite/Desktop/Allen-Rhapso:/app/logs -it amazon/aws-glue-libs:glue_libs_4.0.0_image_01-arm64
 
 # START CONTAINER
 # docker start spark-etl
@@ -213,22 +214,3 @@ job.commit()
 
 # REMOVE ALL DOCKER CONTAINERS
 # docker rm $(docker ps -aq)
-
-# DYNAMIC FRAME LOADER DEV VERSION ---
-# The docker container can only handle a few image chunks at a time. If doing local dev work in the docker 
-# container, use this version to create the dynamic frame and set limit to a max 3 image chunks.
-# specific_files = [
-#     "s3://interest-point-detection/ipd-staging-v2/1.parquet/partition_key=12/9aa52395caba4e6582089464b2287c60-0.parquet"
-#     "s3://interest-point-detection/ipd-staging-v2/1.parquet/partition_key=11/9aa52395caba4e6582089464b2287c60-0.parquet",
-#     "s3://interest-point-detection/ipd-staging-v2/1.parquet/partition_key=15/9aa52395caba4e6582089464b2287c60-0.parquet"
-# ]
-# image_data_dyf = glueContext.create_dynamic_frame.from_options(
-#     connection_type="s3",  
-#     format="parquet",     
-#     connection_options={"paths": specific_files}, 
-#     transformation_ctx="dynamic_frame"
-# )
-# spark_df = image_data_dyf.toDF()
-# limited_spark_df = spark_df.limit(2)
-# limited_dyf = DynamicFrame.fromDF(limited_spark_df, glueContext, "limited_dyf")
-# END DYNAMIC FRAME LOADER DEV VERSION ---

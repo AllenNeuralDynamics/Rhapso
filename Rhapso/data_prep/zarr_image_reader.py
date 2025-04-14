@@ -13,6 +13,21 @@ class ZarrImageReader():
         self.file_path = file_path
         self.view_id = view_id
 
+    def display_images(self, dask_array):
+        for i, img in enumerate(dask_array):
+            img = img.compute_chunk_sizes()
+            delayed_chunks = img.to_delayed().ravel() 
+            for j, delayed_chunk in enumerate(delayed_chunks):
+                chunk = delayed_chunk.compute()  
+                num_z = chunk.shape[2]  
+                for z in range(num_z):
+                    z_slice = chunk[0, 0, z, :, :]
+                    plt.figure(figsize=(10, 8), dpi=100)
+                    im = plt.imshow(z_slice, cmap='gray', interpolation='bessel')
+                    plt.title(f"Chunk {j+1}, Z-Slice {z+1}")
+                    plt.colorbar(im)  
+                    plt.show()
+
     def downsample(self, data, factor_dx, factor_dy, factor_dz, axes):
         factors = {0: factor_dz, 1: factor_dx, 2: factor_dy}
 
@@ -39,7 +54,7 @@ class ZarrImageReader():
         full_path = f"{self.file_path}"
         store = s3fs.S3Map(root=full_path, s3=s3)
         zarr_array = zarr.open(store, mode='r')
-        dask_array = da.from_zarr(zarr_array)
+        dask_array = da.from_zarr(zarr_array)   
 
         downsampled_stack = self.downsample(dask_array, self.dsx, self.dsy, self.dsz, axes=[0, 1, 2])
         image_chunks = []
@@ -48,7 +63,12 @@ class ZarrImageReader():
             lb = bound_set['lower_bound']
             ub = bound_set['upper_bound']
             
-            downsampled_image_chunk = downsampled_stack[:, :, lb[0]:ub[0], lb[1]:ub[1], lb[2]:ub[2]]
+            downsampled_image_chunk = downsampled_stack[0, 0, lb[2]:ub[2], lb[1]:ub[1], lb[0]:ub[0]]
+
+            # Print image chunk size
+            # chunk_size_bytes = downsampled_image_chunk.size * downsampled_image_chunk.dtype.itemsize
+            # chunk_size_mb = chunk_size_bytes / (1024 ** 2)
+            # print(chunk_size_mb)
             
             interval_key = (
                 tuple(lb),
@@ -61,7 +81,6 @@ class ZarrImageReader():
                 'interval_key': interval_key,
                 'image_chunk': downsampled_image_chunk
             })
-            break
         
         return image_chunks
 
