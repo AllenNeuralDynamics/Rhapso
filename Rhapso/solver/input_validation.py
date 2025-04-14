@@ -1,65 +1,6 @@
 from Rhapso.matching.interest_point_matching import build_label_map
 
 
-# # serialVersionUID = "5220898723968914742L"
-# IP = None
-# STITCHING = None
-# # Technically an enum- should either be IP OR STITCHING
-# solver_source = {} # "IP", "STITCHING"
-# source_points = None
-# labels = None
-# fixed_views = None
-# label_weights = None
-
-# registration_TP = None
-# reference_TP = None
-# # data_global = {
-# #     "base_path_uri": "base_path_uri",
-# #     "bounding_boxes": "bounding_boxes",
-# #     "grid_move_requested": "Bool",
-# #     "intensity_adjustments": "intensity_adjustments",
-# #     "PointSpreadFunctions": "PointSpreadFunctions",
-# # "sequence_discription": {}, <----- get sequence desctiption is necessary
-# #     "stitching_results": {},
-# #     "view_registrations": {},
-# #     "view_interest_points": {},
-# # }
-
-# data_global = {
-#     "base_path_uri": "base_path_uri",
-#     "grid_move_requested": "Bool",
-#     "intensity_adjustments": "intensity_adjustments",
-#     "PointSpreadFunctions": "PointSpreadFunctions",
-#     "sequence_discription": {},
-#     "stitching_results": {},
-#     "view_registrations": {},
-#     "view_interest_points": {},
-# }
-# view_ids_global = None
-# disable_fixed_views = False
-# fixed_view_ids = {1: 1}
-
-# TO_REFERENCE_TIMEPOINT,
-# TIMEPOINTS_INDIVIDUALLY, List of nums- not sure where they are derived from
-
-# image_loader_data = {
-#     {
-#         "view_setup": "view_setup",
-#         "timepoint": "timepoint",
-#         "series": "series",
-#         "channel": "channel",
-#         "file_path": "file_path",
-#     },
-#     {
-#         "view_setup": "view_setup",
-#         "timepoint": "timepoint",
-#         "series": "series",
-#         "channel": "channel",
-#         "file_path": "file_path",
-#     },
-# }
-
-
 class InputValidation:
     def __init__(
         self,
@@ -92,7 +33,7 @@ class InputValidation:
         self.disable_fixed_views = disable_fixed_views
         self.source_points = None
         self.solver_source = solver_source
-        self.image_loader_data  # Data_global and image loader are likely the same and may be able to be eliminated.
+        self.image_loader_data = image_loader_data  # Data_global and image loader are likely the same and may be able to be eliminated.
 
     def input_validation(self):
 
@@ -172,7 +113,7 @@ class InputValidation:
         print("The following ViewIds are used as fixed views:")
         print(
             ", ".join(
-                f"tpId={vid["timepoint"]} setupId={vid["setup"]}"
+                f'tpId={vid["timepoint"]} setupId={vid["setup"]}'
                 for vid in self.fixed_view_ids
             )
         )
@@ -212,8 +153,7 @@ class InputValidation:
 
                 print("The following ViewIds are fixed: ")
                 for vid in self.fixed_view_ids:
-                    # todo fix
-                    print(f"tpId={vid["timepoint"]} setupId={vid["setup"]}")
+                    print(f'tpId={vid["timepoint"]} setupId={vid["setup"]}')
 
         return True
 
@@ -246,7 +186,7 @@ class InputValidation:
 
         return fixed
 
-    def init_registration_parameters():
+    def init_registration_parameters(self):
         # Retrieves data_global object
         data_global = self.image_loader_data
 
@@ -272,11 +212,11 @@ class InputValidation:
             # Retrieve and sort all timepoints
             timepoint_to_process_list = []
 
-            for view_id in data_global:
+            for view in data_global:
                 # This could be viewId[0]
-                timepoint_to_process_list.append(view_id["timepoint"])
-            for view_id in view_ids_global:
-                timepoint_to_process_list.append(view_id["timepoint"])
+                timepoint_to_process_list.append(view["timepoint"])
+            for view in view_ids_global:
+                timepoint_to_process_list.append(view["timepoint"])
 
             timepoint_to_process_set = set(sorted(timepoint_to_process_list))
 
