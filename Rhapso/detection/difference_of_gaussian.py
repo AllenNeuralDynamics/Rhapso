@@ -130,9 +130,9 @@ class DifferenceOfGaussian:
         peaks = peak_local_max(dog, threshold_rel=min_initial_peak_value)
         
         # compare peaks with image data 
-        # final_peaks = self.refine_peaks(peaks, image)
+        final_peaks = self.refine_peaks(peaks, image)
          
-        return peaks 
+        return final_peaks 
     
     def interpolation(self, image, interest_points):
         if interest_points is None or len(interest_points) == 0:
