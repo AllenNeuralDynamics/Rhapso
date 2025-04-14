@@ -126,6 +126,11 @@ class AlignTiles:
 
             # Update matrix B using the outer product of p_shifted and q_shifted
             B += np.outer(p_shifted, q_shifted)
+        
+        # error handling in case identical point matches are found
+        if np.linalg.matrix_rank(A) < 3:
+            print("matches are too identical")
+            return affine_model
 
         # Solve the normal equations A * X = B for X using matrix inversion
         try:
@@ -209,7 +214,6 @@ class AlignTiles:
                 timepoint, setup = parts[0].split()[-1], parts[1].split()[-1]
                 label = 'beads'
                 view_key = f"{timepoint},{setup},{label}"
-
                 if view_key in reference_tile[1]['connected_tiles']:
                     pm = self.get_connected_point_matches(target_tile, reference_tile)
 

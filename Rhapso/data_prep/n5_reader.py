@@ -26,10 +26,10 @@ def print_dataset_info(store_path, dataset_prefix, print_data=False, num_points=
         for attr, value in dataset.attrs.items():
             print(f"  {attr}: {value}")
 
-    first_column = dataset[:]  
-    ip_index = first_column[0]
-    print(max(ip_index))
-    print("hi")
+    # first_column = dataset[:]  
+    # ip_index = first_column[0]
+    # print(max(ip_index))
+    # print("hi")
 
 def list_files_under_prefix(node, path):
     try:
@@ -47,7 +47,8 @@ def list_files_under_prefix(node, path):
 # Max value for view 18,0 in corr ip index is 1017
 
 def compare_n5_stores():
-    path1 = "/Users/seanfite/Desktop/IP_TIFF_XML/output/interestpoints.n5/"
+    path0 = "/Users/seanfite/Desktop/Rhapso-Final-Output/"
+    path1 = "/Users/seanfite/Desktop/IP_TIFF_XML-Rhapso/interestpoints.n5/"
     path2 = "/Users/seanfite/Desktop/AllenInstitute/Rhapso/Data/IP_TIFF_XML/output/interestpoints.n5/"
     path3 = "s3://interest-point-detection/output/interestpoints.n5/"
     path4 = "/Users/seanfite/Desktop/interestpoints-after-matching.n5/"
@@ -92,6 +93,6 @@ def open_n5_dataset(n5_path):
                             n5_path = alt_path
                             break
 
-open_n5_dataset('/Users/seanfite/Desktop/IP_TIFF_XML/interestpoints.n5/')  
+# open_n5_dataset('/Users/seanfite/Desktop/IP_TIFF_XML/interestpoints.n5/')  
 
 

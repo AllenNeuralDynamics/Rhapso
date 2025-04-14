@@ -12,7 +12,7 @@ from memory_profiler import profile
 
 strategy = 'python'
 dsxy = 4
-dsz = 4
+dsz = 1
 min_intensity = 0
 max_intensity = 255
 sigma = 1.8
