@@ -4,14 +4,22 @@ Utilities for scripts.
 
 import re
 from pathlib import Path
-
 import boto3
 import yaml
+from io import BytesIO
 
 
 def read_config_yaml(yaml_path: str) -> dict:
-    with open(yaml_path, "r") as f:
-        yaml_dict = yaml.safe_load(f)
+    if yaml_path.startswith('s3://'):
+        s3 = boto3.client('s3')
+        bucket_name, key = yaml_path[5:].split('/', 1)
+        response = s3.get_object(Bucket=bucket_name, Key=key)
+        file_stream = BytesIO(response['Body'].read())
+        yaml_dict = yaml.safe_load(file_stream)
+    else:
+        with open(yaml_path, "r") as f:
+            yaml_dict = yaml.safe_load(f)
+    
     return yaml_dict
 
 

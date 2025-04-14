@@ -9,10 +9,11 @@ import boto3
 from dask import delayed
 from dask import compute
 from memory_profiler import profile
+from Rhapso.pipelines.utils import fetch_local_xml
 
 strategy = "python"
 dsxy = 4
-dsz = 4
+dsz = 1
 min_intensity = 0
 max_intensity = 255
 sigma = 1.8
@@ -21,14 +22,25 @@ threshold = 0.008
 # TODO - we should be able to get image_file_path from the xml
 
 # Tiff - s3
+# file_type = 'tiff'
+# file_source = 's3'
+# xml_file_path = "IP_TIFF_XML/dataset.xml"
+# xml_bucket_name = "rhapso-tif-sample"
+# image_file_path = 's3://rhapso-tif-sample/IP_TIFF_XML/'
+# image_bucket_name = "rhapso-tif-sample"
+# output_file_path = "output"
+# output_bucket_name = 'interest-point-detection'
+
+# Tiff - local
 file_type = "tiff"
-file_source = "s3"
-xml_file_path = "IP_TIFF_XML/dataset.xml"
-xml_bucket_name = "rhapso-tif-sample"
-image_file_path = "s3://rhapso-tif-sample/IP_TIFF_XML/"
-image_bucket_name = "rhapso-tif-sample"
-output_file_path = "output"
-output_bucket_name = "interest-point-detection"
+file_source = "local"
+xml_file_path = "/Users/seanfite/Desktop/AllenInstitute/Rhapso/Data/IP_TIFF_XML/dataset.xml"
+image_file_path = "/Users/seanfite/Desktop/AllenInstitute/Rhapso/Data/IP_TIFF_XML/"
+output_file_path = "/Users/seanfite/Desktop/AllenInstitute/Rhapso/Data/IP_TIFF_XML/output"
+xml_bucket_name = None
+image_bucket_name = None
+output_bucket_name = None
+key = 'detection'
 
 # Zarr - s3
 # file_type = 'zarr'
@@ -39,6 +51,7 @@ output_bucket_name = "interest-point-detection"
 # image_bucket_name = "aind-open-data"
 # output_file_path = "output"
 # output_bucket_name = 'interest-point-detection'
+# key = "detection"
 
 # Tiff - local
 # file_type = 'tiff'
@@ -49,6 +62,7 @@ output_bucket_name = "interest-point-detection"
 # xml_bucket_name = None
 # image_bucket_name = None
 # output_bucket_name = None
+# key = "detection"
 
 # data input source
 s3 = boto3.client("s3")
@@ -59,22 +73,16 @@ def fetch_from_s3(s3, bucket_name, input_file):
     return response["Body"].read().decode("utf-8")
 
 
-def fetch_local_xml(file_path):
-    with open(file_path, "r", encoding="utf-8") as file:
-        return file.read()
-
-
 # INTEREST POINT DETECTION
 # --------------------------
 
-# Fetch xml data
 if file_source == "s3":
     xml_file = fetch_from_s3(s3, xml_bucket_name, xml_file_path)
 elif file_source == "local":
     xml_file = fetch_local_xml(xml_file_path)
 
 # Load XML data into dataframes
-processor = XMLToDataFrame(xml_file)
+processor = XMLToDataFrame(xml_file, key)
 dataframes = processor.run()
 print("XML loaded")
 

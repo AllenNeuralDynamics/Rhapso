@@ -1,0 +1,378 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<SpimData version="0.2">
+  <BasePath type="relative">.</BasePath>
+  <SequenceDescription>
+    <ImageLoader format="spimreconstruction.filemap2">
+      <ZGrouped>false</ZGrouped>
+      <files>
+        <FileMapping view_setup="5" timepoint="30" series="0" channel="0">
+          <file type="relative">spim_TL30_Angle225.tif</file>
+        </FileMapping>
+        <FileMapping view_setup="4" timepoint="30" series="0" channel="0">
+          <file type="relative">spim_TL30_Angle180.tif</file>
+        </FileMapping>
+        <FileMapping view_setup="6" timepoint="30" series="0" channel="0">
+          <file type="relative">spim_TL30_Angle270.tif</file>
+        </FileMapping>
+        <FileMapping view_setup="1" timepoint="30" series="0" channel="0">
+          <file type="relative">spim_TL30_Angle45.tif</file>
+        </FileMapping>
+        <FileMapping view_setup="0" timepoint="30" series="0" channel="0">
+          <file type="relative">spim_TL30_Angle0.tif</file>
+        </FileMapping>
+        <FileMapping view_setup="3" timepoint="30" series="0" channel="0">
+          <file type="relative">spim_TL30_Angle135.tif</file>
+        </FileMapping>
+        <FileMapping view_setup="2" timepoint="30" series="0" channel="0">
+          <file type="relative">spim_TL30_Angle90.tif</file>
+        </FileMapping>
+        <FileMapping view_setup="3" timepoint="18" series="0" channel="0">
+          <file type="relative">spim_TL18_Angle135.tif</file>
+        </FileMapping>
+        <FileMapping view_setup="2" timepoint="18" series="0" channel="0">
+          <file type="relative">spim_TL18_Angle90.tif</file>
+        </FileMapping>
+        <FileMapping view_setup="1" timepoint="18" series="0" channel="0">
+          <file type="relative">spim_TL18_Angle45.tif</file>
+        </FileMapping>
+        <FileMapping view_setup="0" timepoint="18" series="0" channel="0">
+          <file type="relative">spim_TL18_Angle0.tif</file>
+        </FileMapping>
+        <FileMapping view_setup="6" timepoint="18" series="0" channel="0">
+          <file type="relative">spim_TL18_Angle270.tif</file>
+        </FileMapping>
+        <FileMapping view_setup="5" timepoint="18" series="0" channel="0">
+          <file type="relative">spim_TL18_Angle225.tif</file>
+        </FileMapping>
+        <FileMapping view_setup="4" timepoint="18" series="0" channel="0">
+          <file type="relative">spim_TL18_Angle180.tif</file>
+        </FileMapping>
+      </files>
+    </ImageLoader>
+    <ViewSetups>
+      <ViewSetup>
+        <id>0</id>
+        <name>0</name>
+        <size>1388 1040 81</size>
+        <voxelSize>
+          <unit>µm</unit>
+          <size>0.7310780550106993 0.7310780550106993 2.0</size>
+        </voxelSize>
+        <attributes>
+          <illumination>0</illumination>
+          <channel>0</channel>
+          <tile>0</tile>
+          <angle>0</angle>
+        </attributes>
+      </ViewSetup>
+      <ViewSetup>
+        <id>1</id>
+        <name>1</name>
+        <size>1388 1040 91</size>
+        <voxelSize>
+          <unit>µm</unit>
+          <size>0.7310780550106993 0.7310780550106993 2.0</size>
+        </voxelSize>
+        <attributes>
+          <illumination>0</illumination>
+          <channel>0</channel>
+          <tile>0</tile>
+          <angle>45</angle>
+        </attributes>
+      </ViewSetup>
+      <ViewSetup>
+        <id>2</id>
+        <name>2</name>
+        <size>1388 1040 102</size>
+        <voxelSize>
+          <unit>µm</unit>
+          <size>0.7310780550106993 0.7310780550106993 2.0</size>
+        </voxelSize>
+        <attributes>
+          <illumination>0</illumination>
+          <channel>0</channel>
+          <tile>0</tile>
+          <angle>90</angle>
+        </attributes>
+      </ViewSetup>
+      <ViewSetup>
+        <id>3</id>
+        <name>3</name>
+        <size>1388 1040 91</size>
+        <voxelSize>
+          <unit>µm</unit>
+          <size>0.7310780550106993 0.7310780550106993 2.0</size>
+        </voxelSize>
+        <attributes>
+          <illumination>0</illumination>
+          <channel>0</channel>
+          <tile>0</tile>
+          <angle>135</angle>
+        </attributes>
+      </ViewSetup>
+      <ViewSetup>
+        <id>4</id>
+        <name>4</name>
+        <size>1388 1040 101</size>
+        <voxelSize>
+          <unit>µm</unit>
+          <size>0.7310780550106993 0.7310780550106993 2.0</size>
+        </voxelSize>
+        <attributes>
+          <illumination>0</illumination>
+          <channel>0</channel>
+          <tile>0</tile>
+          <angle>180</angle>
+        </attributes>
+      </ViewSetup>
+      <ViewSetup>
+        <id>5</id>
+        <name>5</name>
+        <size>1388 1040 91</size>
+        <voxelSize>
+          <unit>µm</unit>
+          <size>0.7310780550106993 0.7310780550106993 2.0</size>
+        </voxelSize>
+        <attributes>
+          <illumination>0</illumination>
+          <channel>0</channel>
+          <tile>0</tile>
+          <angle>225</angle>
+        </attributes>
+      </ViewSetup>
+      <ViewSetup>
+        <id>6</id>
+        <name>6</name>
+        <size>1388 1040 111</size>
+        <voxelSize>
+          <unit>µm</unit>
+          <size>0.7310780550106993 0.7310780550106993 2.0</size>
+        </voxelSize>
+        <attributes>
+          <illumination>0</illumination>
+          <channel>0</channel>
+          <tile>0</tile>
+          <angle>270</angle>
+        </attributes>
+      </ViewSetup>
+      <Attributes name="illumination">
+        <Illumination>
+          <id>0</id>
+          <name>0</name>
+        </Illumination>
+      </Attributes>
+      <Attributes name="channel">
+        <Channel>
+          <id>0</id>
+          <name>0</name>
+        </Channel>
+      </Attributes>
+      <Attributes name="tile">
+        <Tile>
+          <id>0</id>
+          <name>0</name>
+        </Tile>
+      </Attributes>
+      <Attributes name="angle">
+        <Angle>
+          <id>0</id>
+          <name>0</name>
+          <axis>1.0 0.0 0.0</axis>
+          <degrees>0.0</degrees>
+        </Angle>
+        <Angle>
+          <id>45</id>
+          <name>45</name>
+          <axis>1.0 0.0 0.0</axis>
+          <degrees>45.0</degrees>
+        </Angle>
+        <Angle>
+          <id>90</id>
+          <name>90</name>
+          <axis>1.0 0.0 0.0</axis>
+          <degrees>90.0</degrees>
+        </Angle>
+        <Angle>
+          <id>135</id>
+          <name>135</name>
+          <axis>1.0 0.0 0.0</axis>
+          <degrees>135.0</degrees>
+        </Angle>
+        <Angle>
+          <id>180</id>
+          <name>180</name>
+          <axis>1.0 0.0 0.0</axis>
+          <degrees>180.0</degrees>
+        </Angle>
+        <Angle>
+          <id>225</id>
+          <name>225</name>
+          <axis>1.0 0.0 0.0</axis>
+          <degrees>225.0</degrees>
+        </Angle>
+        <Angle>
+          <id>270</id>
+          <name>270</name>
+          <axis>1.0 0.0 0.0</axis>
+          <degrees>270.0</degrees>
+        </Angle>
+      </Attributes>
+    </ViewSetups>
+    <Timepoints type="list">
+      <Timepoint>
+        <id>18</id>
+      </Timepoint>
+      <Timepoint>
+        <id>30</id>
+      </Timepoint>
+    </Timepoints>
+    <MissingViews />
+  </SequenceDescription>
+  <ViewRegistrations>
+    <ViewRegistration timepoint="18" setup="0">
+      <ViewTransform type="affine">
+        <Name>Rotation around axis (1.0, 0.0, 0.0) by 0.0 degrees</Name>
+        <affine>1.0 0.0 0.0 -694.0 0.0 1.0 0.0 -520.0 0.0 0.0 1.0 -110.79528300000001</affine>
+      </ViewTransform>
+      <ViewTransform type="affine">
+        <Name>calibration</Name>
+        <affine>1.0 0.0 0.0 0.0 0.0 1.0 0.0 0.0 0.0 0.0 2.735686 0.0</affine>
+      </ViewTransform>
+    </ViewRegistration>
+    <ViewRegistration timepoint="18" setup="1">
+      <ViewTransform type="affine">
+        <Name>Rotation around axis (1.0, 0.0, 0.0) by 45.0 degrees</Name>
+        <affine>1.0 0.0 0.0 -694.0 0.0 0.7071067811865476 0.7071067811865475 -455.7117327587728 0.0 -0.7071067811865475 0.7071067811865476 279.67931967523657</affine>
+      </ViewTransform>
+      <ViewTransform type="affine">
+        <Name>calibration</Name>
+        <affine>1.0 0.0 0.0 0.0 0.0 1.0 0.0 0.0 0.0 0.0 2.735686 0.0</affine>
+      </ViewTransform>
+    </ViewRegistration>
+    <ViewRegistration timepoint="18" setup="2">
+      <ViewTransform type="affine">
+        <Name>Rotation around axis (1.0, 0.0, 0.0) by 90.0 degrees</Name>
+        <affine>1.0 0.0 0.0 -694.0 0.0 6.123233995736766E-17 1.0 -139.51998600000002 0.0 -1.0 6.123233995736766E-17 520.0</affine>
+      </ViewTransform>
+      <ViewTransform type="affine">
+        <Name>calibration</Name>
+        <affine>1.0 0.0 0.0 0.0 0.0 1.0 0.0 0.0 0.0 0.0 2.735686 0.0</affine>
+      </ViewTransform>
+    </ViewRegistration>
+    <ViewRegistration timepoint="18" setup="3">
+      <ViewTransform type="affine">
+        <Name>Rotation around axis (1.0, 0.0, 0.0) by 135.0 degrees</Name>
+        <affine>1.0 0.0 0.0 -694.0 0.0 -0.7071067811865475 0.7071067811865476 279.67931967523657 0.0 -0.7071067811865476 -0.7071067811865475 455.7117327587728</affine>
+      </ViewTransform>
+      <ViewTransform type="affine">
+        <Name>calibration</Name>
+        <affine>1.0 0.0 0.0 0.0 0.0 1.0 0.0 0.0 0.0 0.0 2.735686 0.0</affine>
+      </ViewTransform>
+    </ViewRegistration>
+    <ViewRegistration timepoint="18" setup="4">
+      <ViewTransform type="affine">
+        <Name>Rotation around axis (1.0, 0.0, 0.0) by 180.0 degrees</Name>
+        <affine>1.0 0.0 0.0 -694.0 0.0 -1.0 1.2246467991473532E-16 520.0 0.0 -1.2246467991473532E-16 -1.0 138.15214300000005</affine>
+      </ViewTransform>
+      <ViewTransform type="affine">
+        <Name>calibration</Name>
+        <affine>1.0 0.0 0.0 0.0 0.0 1.0 0.0 0.0 0.0 0.0 2.735686 0.0</affine>
+      </ViewTransform>
+    </ViewRegistration>
+    <ViewRegistration timepoint="18" setup="5">
+      <ViewTransform type="affine">
+        <Name>Rotation around axis (1.0, 0.0, 0.0) by 225.0 degrees</Name>
+        <affine>1.0 0.0 0.0 -694.0 0.0 -0.7071067811865477 -0.7071067811865475 455.7117327587729 0.0 0.7071067811865475 -0.7071067811865477 -279.67931967523657</affine>
+      </ViewTransform>
+      <ViewTransform type="affine">
+        <Name>calibration</Name>
+        <affine>1.0 0.0 0.0 0.0 0.0 1.0 0.0 0.0 0.0 0.0 2.735686 0.0</affine>
+      </ViewTransform>
+    </ViewRegistration>
+    <ViewRegistration timepoint="18" setup="6">
+      <ViewTransform type="affine">
+        <Name>Rotation around axis (1.0, 0.0, 0.0) by 270.0 degrees</Name>
+        <affine>1.0 0.0 0.0 -694.0 0.0 -1.8369701987210297E-16 -1.0 151.83057300000007 0.0 1.0 -1.8369701987210297E-16 -520.0</affine>
+      </ViewTransform>
+      <ViewTransform type="affine">
+        <Name>calibration</Name>
+        <affine>1.0 0.0 0.0 0.0 0.0 1.0 0.0 0.0 0.0 0.0 2.735686 0.0</affine>
+      </ViewTransform>
+    </ViewRegistration>
+    <ViewRegistration timepoint="30" setup="0">
+      <ViewTransform type="affine">
+        <Name>Rotation around axis (1.0, 0.0, 0.0) by 0.0 degrees</Name>
+        <affine>1.0 0.0 0.0 -694.0 0.0 1.0 0.0 -520.0 0.0 0.0 1.0 -110.79528300000001</affine>
+      </ViewTransform>
+      <ViewTransform type="affine">
+        <Name>calibration</Name>
+        <affine>1.0 0.0 0.0 0.0 0.0 1.0 0.0 0.0 0.0 0.0 2.735686 0.0</affine>
+      </ViewTransform>
+    </ViewRegistration>
+    <ViewRegistration timepoint="30" setup="1">
+      <ViewTransform type="affine">
+        <Name>Rotation around axis (1.0, 0.0, 0.0) by 45.0 degrees</Name>
+        <affine>1.0 0.0 0.0 -694.0 0.0 0.7071067811865476 0.7071067811865475 -455.7117327587728 0.0 -0.7071067811865475 0.7071067811865476 279.67931967523657</affine>
+      </ViewTransform>
+      <ViewTransform type="affine">
+        <Name>calibration</Name>
+        <affine>1.0 0.0 0.0 0.0 0.0 1.0 0.0 0.0 0.0 0.0 2.735686 0.0</affine>
+      </ViewTransform>
+    </ViewRegistration>
+    <ViewRegistration timepoint="30" setup="2">
+      <ViewTransform type="affine">
+        <Name>Rotation around axis (1.0, 0.0, 0.0) by 90.0 degrees</Name>
+        <affine>1.0 0.0 0.0 -694.0 0.0 6.123233995736766E-17 1.0 -139.51998600000002 0.0 -1.0 6.123233995736766E-17 520.0</affine>
+      </ViewTransform>
+      <ViewTransform type="affine">
+        <Name>calibration</Name>
+        <affine>1.0 0.0 0.0 0.0 0.0 1.0 0.0 0.0 0.0 0.0 2.735686 0.0</affine>
+      </ViewTransform>
+    </ViewRegistration>
+    <ViewRegistration timepoint="30" setup="3">
+      <ViewTransform type="affine">
+        <Name>Rotation around axis (1.0, 0.0, 0.0) by 135.0 degrees</Name>
+        <affine>1.0 0.0 0.0 -694.0 0.0 -0.7071067811865475 0.7071067811865476 279.67931967523657 0.0 -0.7071067811865476 -0.7071067811865475 455.7117327587728</affine>
+      </ViewTransform>
+      <ViewTransform type="affine">
+        <Name>calibration</Name>
+        <affine>1.0 0.0 0.0 0.0 0.0 1.0 0.0 0.0 0.0 0.0 2.735686 0.0</affine>
+      </ViewTransform>
+    </ViewRegistration>
+    <ViewRegistration timepoint="30" setup="4">
+      <ViewTransform type="affine">
+        <Name>Rotation around axis (1.0, 0.0, 0.0) by 180.0 degrees</Name>
+        <affine>1.0 0.0 0.0 -694.0 0.0 -1.0 1.2246467991473532E-16 520.0 0.0 -1.2246467991473532E-16 -1.0 138.15214300000005</affine>
+      </ViewTransform>
+      <ViewTransform type="affine">
+        <Name>calibration</Name>
+        <affine>1.0 0.0 0.0 0.0 0.0 1.0 0.0 0.0 0.0 0.0 2.735686 0.0</affine>
+      </ViewTransform>
+    </ViewRegistration>
+    <ViewRegistration timepoint="30" setup="5">
+      <ViewTransform type="affine">
+        <Name>Rotation around axis (1.0, 0.0, 0.0) by 225.0 degrees</Name>
+        <affine>1.0 0.0 0.0 -694.0 0.0 -0.7071067811865477 -0.7071067811865475 455.7117327587729 0.0 0.7071067811865475 -0.7071067811865477 -279.67931967523657</affine>
+      </ViewTransform>
+      <ViewTransform type="affine">
+        <Name>calibration</Name>
+        <affine>1.0 0.0 0.0 0.0 0.0 1.0 0.0 0.0 0.0 0.0 2.735686 0.0</affine>
+      </ViewTransform>
+    </ViewRegistration>
+    <ViewRegistration timepoint="30" setup="6">
+      <ViewTransform type="affine">
+        <Name>Rotation around axis (1.0, 0.0, 0.0) by 270.0 degrees</Name>
+        <affine>1.0 0.0 0.0 -694.0 0.0 -1.8369701987210297E-16 -1.0 151.83057300000007 0.0 1.0 -1.8369701987210297E-16 -520.0</affine>
+      </ViewTransform>
+      <ViewTransform type="affine">
+        <Name>calibration</Name>
+        <affine>1.0 0.0 0.0 0.0 0.0 1.0 0.0 0.0 0.0 0.0 2.735686 0.0</affine>
+      </ViewTransform>
+    </ViewRegistration>
+  </ViewRegistrations>
+  <ViewInterestPoints />
+  <BoundingBoxes />
+  <PointSpreadFunctions />
+  <StitchingResults />
+  <IntensityAdjustments />
+</SpimData>

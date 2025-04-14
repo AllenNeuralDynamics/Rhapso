@@ -63,11 +63,12 @@ class ZarrImageReader():
             lb = bound_set['lower_bound']
             ub = bound_set['upper_bound']
             
-            # downsampled_image_chunk = downsampled_stack[:, :, lb[0]:ub[0], lb[1]:ub[1], lb[2]:ub[2]]
             downsampled_image_chunk = downsampled_stack[0, 0, lb[2]:ub[2], lb[1]:ub[1], lb[0]:ub[0]]
 
+            # Print image chunk size
             # chunk_size_bytes = downsampled_image_chunk.size * downsampled_image_chunk.dtype.itemsize
             # chunk_size_mb = chunk_size_bytes / (1024 ** 2)
+            # print(chunk_size_mb)
             
             interval_key = (
                 tuple(lb),

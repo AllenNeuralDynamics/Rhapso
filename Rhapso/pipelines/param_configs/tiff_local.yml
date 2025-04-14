@@ -1,0 +1,46 @@
+
+# INTEREST POINT DETECTION
+# -----------------------------------
+
+strategy: 'python'
+dsxy: 4
+dsz: 3
+min_intensity: 0
+max_intensity: 255
+sigma: 1.8
+threshold: 0.008
+file_type: 'tiff'
+file_source_detection: 'local'
+xml_file_path_detection: '/Users/seanfite/Desktop/IP_TIFF_XML/dataset.xml'
+image_file_path:  '/Users/seanfite/Desktop/IP_TIFF_XML/'
+output_file_path: '/Users/seanfite/Desktop/IP_TIFF_XML/output'
+xml_bucket_name_detection: None
+image_bucket_name: None
+output_bucket_name: None
+key: 'detection'
+
+# INTEREST POINT MATCHING
+# -----------------------------------
+
+xml_input_file: '/Users/seanfite/Desktop/IP_TIFF_XML/output/dataset-detection.xml'
+n5_base_path: '/Users/seanfite/Desktop/IP_TIFF_XML/output/interestpoints.n5'
+output_path: '/Users/seanfite/Desktop/IP_TIFF_XML/output/interestpoints.n5'
+
+# SOLVER
+# -----------------------------------
+
+fixed_views: [ 'timepoint: 18, setup: 0', 'timepoint: 30, setup: 0']
+model: "affine"
+alignment_option: 1
+relative_threshold: 3.5
+absolute_threshold: 7.0
+min_matches: 3
+damp: .4
+max_iterations: 100000
+max_allowed_error: 5.0
+max_plateauwidth: 200
+file_source_solver: 'local'
+xml_bucket_name_solver: None
+xml_file_path_solver: '/Users/seanfite/Desktop/IP_TIFF_XML/output/dataset-detection.xml'
+data_prefix: '/Users/seanfite/Desktop/IP_TIFF_XML/output/interestpoints.n5'
+xml_file_path_output: '/Users/seanfite/Desktop/IP_TIFF_XML/output/dataset-solve.xml'

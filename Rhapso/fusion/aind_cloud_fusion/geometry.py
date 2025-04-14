@@ -69,20 +69,22 @@ class Affine(Transform):
             data.shape[-1] == 3
         ), "Data shape is {data.shape}, last dimension of input data must be 3d."
 
-        # matrix: (3, 3) -> (1,)*(dims - 1) + (3, 3)
-        # data: (dims, 3) -> (dims, 3, 1)
-        # Ex:
-        # (3, 3) -> (1, 1, 1, 3, 3)
-        # (z, y, x, 3) -> (z, y, x, 3, 1)
-        dims = len(data.shape)
-        expanded_matrix = self.matrix_3x3[(None,) * (dims - 1)].to(device)
-        expanded_data = torch.unsqueeze(data, dims).to(device)
+        # Ensure the matrix and translation are on the same device as data
+        matrix = self.matrix_3x3.to(data.device)
+        translation = self.translation.to(data.device)
 
-        transformed_data = expanded_matrix @ expanded_data
-        transformed_data = torch.squeeze(transformed_data, -1)
-        transformed_data = transformed_data + self.translation.to(device)
+        # Reshape translation if necessary
+        translation = translation.reshape(3)
 
-        return transformed_data
+        # Apply matrix transformation
+        # We use einsum for the matrix multiplication
+        data = torch.einsum('ij,zyxj->zyxi', matrix, data)
+
+        # Apply translation
+        data += translation
+
+        return data
+
 
     def backward(
         self, data: torch.Tensor, device: torch.device
@@ -107,24 +109,21 @@ class Affine(Transform):
             data.shape[-1] == 3
         ), "Data shape is {data.shape}, last dimension of input data must be 3d."
 
-        # matrix: (3, 3) -> (1,)*(dims - 1) + (3, 3)
-        # data: (dims, 3) -> (dims, 3, 1)
-        # Ex:
-        # (3, 3) -> (1, 1, 1, 3, 3)
-        # (z, y, x, 3) -> (z, y, x, 3, 1)
-        dims = len(data.shape)
-        expanded_matrix = self.backward_matrix_3x3[(None,) * (dims - 1)].to(
-            device
-        )
-        expanded_data = torch.unsqueeze(data, dims).to(device)
+        # Ensure the matrix and translation are on the same device as data
+        matrix = self.backward_matrix_3x3.to(data.device)
+        translation = self.backward_translation.to(data.device)
 
-        transformed_data = expanded_matrix @ expanded_data
-        transformed_data = torch.squeeze(transformed_data, -1)
-        transformed_data = transformed_data + self.backward_translation.to(
-            device
-        )
+        # Reshape translation if necessary
+        translation = translation.reshape(3)
 
-        return transformed_data
+        # Apply matrix transformation
+        # We use einsum for the matrix multiplication
+        data = torch.einsum('ij,zyxj->zyxi', matrix, data)
+
+        # Apply translation
+        data += translation
+
+        return data
 
 
 def aabb_3d(data) -> AABB:
