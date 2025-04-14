@@ -9,8 +9,9 @@ import boto3
 from dask import delayed
 from dask import compute
 from memory_profiler import profile
+from Rhapso.pipelines.utils import fetch_local_xml
 
-strategy = 'python'
+strategy = "python"
 dsxy = 4
 dsz = 1
 min_intensity = 0
@@ -21,14 +22,26 @@ threshold = 0.008
 # TODO - we should be able to get image_file_path from the xml
 
 # Tiff - s3
-file_type = 'tiff'
-file_source = 's3'
-xml_file_path = "IP_TIFF_XML/dataset.xml"
-xml_bucket_name = "rhapso-tif-sample"
-image_file_path = 's3://rhapso-tif-sample/IP_TIFF_XML/'
-image_bucket_name = "rhapso-tif-sample"
-output_file_path = "output"
-output_bucket_name = 'interest-point-detection'
+# file_type = 'tiff'
+# file_source = 's3'
+# xml_file_path = "IP_TIFF_XML/dataset.xml"
+# xml_bucket_name = "rhapso-tif-sample"
+# image_file_path = 's3://rhapso-tif-sample/IP_TIFF_XML/'
+# image_bucket_name = "rhapso-tif-sample"
+# output_file_path = "output"
+# output_bucket_name = 'interest-point-detection'
+
+# Tiff - local
+file_type = "tiff"
+file_source = "local"
+xml_file_path = "/Users/seanfite/Desktop/AllenInstitute/Rhapso/Data/IP_TIFF_XML/dataset.xml"
+
+image_file_path = "/Users/seanfite/Desktop/AllenInstitute/Rhapso/Data/IP_TIFF_XML/"
+output_file_path = "/Users/seanfite/Desktop/AllenInstitute/Rhapso/Data/IP_TIFF_XML/output"
+
+xml_bucket_name = None
+image_bucket_name = None
+output_bucket_name = None
 
 # Zarr - s3
 # file_type = 'zarr'
@@ -51,47 +64,50 @@ output_bucket_name = 'interest-point-detection'
 # output_bucket_name = None
 
 # data input source
-s3 = boto3.client('s3')
+s3 = boto3.client("s3")
+
 
 def fetch_from_s3(s3, bucket_name, input_file):
     response = s3.get_object(Bucket=bucket_name, Key=input_file)
-    return response['Body'].read().decode('utf-8')
+    return response["Body"].read().decode("utf-8")
 
-def fetch_local_xml(file_path):
-    with open(file_path, 'r', encoding='utf-8') as file:
-        return file.read()
 
 # INTEREST POINT DETECTION
 # --------------------------
 
-# Fetch xml data
-if file_source == 's3':
-    xml_file = fetch_from_s3(s3, xml_bucket_name, xml_file_path) 
-elif file_source == 'local':
+if file_source == "s3":
+    xml_file = fetch_from_s3(s3, xml_bucket_name, xml_file_path)
+elif file_source == "local":
     xml_file = fetch_local_xml(xml_file_path)
 
-# Load XML data into dataframes         
+# Load XML data into dataframes
 processor = XMLToDataFrame(xml_file)
 dataframes = processor.run()
 print("XML loaded")
 
-# Create view transform matrices 
+# Create view transform matrices
 create_models = ViewTransformModels(dataframes)
 view_transform_matrices = create_models.run()
 print("Transforms models have been created")
 
 # Use view transform matrices to find areas of overlap
-overlap_detection = OverlapDetection(view_transform_matrices, dataframes, dsxy, dsz, image_file_path, file_type)
+overlap_detection = OverlapDetection(
+    view_transform_matrices, dataframes, dsxy, dsz, image_file_path, file_type
+)
 overlapping_area = overlap_detection.run()
 print("Overlap detection is done")
 
-# Load images 
-images_loader = LoadImageData(dataframes, overlapping_area, dsxy, dsz, image_file_path, file_type)
+# Load images
+images_loader = LoadImageData(
+    dataframes, overlapping_area, dsxy, dsz, image_file_path, file_type
+)
 all_image_data = images_loader.run()
 print("Image data loaded")
 
 # Detect interest points using DoG algorithm
-difference_of_gaussian = DifferenceOfGaussian(min_intensity, max_intensity, sigma, threshold)
+difference_of_gaussian = DifferenceOfGaussian(
+    min_intensity, max_intensity, sigma, threshold
+)
 
 # BASE PYTHON VERSION - SLOWEST RUN TIME (DEV ONLY)
 # final_peaks = []
@@ -105,8 +121,8 @@ difference_of_gaussian = DifferenceOfGaussian(min_intensity, max_intensity, sigm
 #     final_peaks.append({
 #         'view_id': view_id,
 #         'interval_key': interval_key,
-#         'interest_points': interest_points, 
-#         'intensities': intensities 
+#         'interest_points': interest_points,
+#         'intensities': intensities
 #     })
 # print("Difference of gaussian is done")
 
@@ -131,32 +147,47 @@ difference_of_gaussian = DifferenceOfGaussian(min_intensity, max_intensity, sigm
 # DASK MAP VERSION (SINGLE THREAD INTERPRETER ONLY)
 final_peaks = []
 delayed_results = []
-delayed_keys = {} 
+delayed_keys = {}
 for image_data in all_image_data:
-    view_id = image_data['view_id']
-    interval_key = image_data['interval_key']
-    image_chunk = image_data['image_chunk']
+    view_id = image_data["view_id"]
+    interval_key = image_data["interval_key"]
+    image_chunk = image_data["image_chunk"]
     dog_result = delayed(difference_of_gaussian.run)(image_chunk, dsxy, dsz)
     delayed_results.append(dog_result)
-    delayed_keys[dog_result] = (view_id, interval_key)  
-computed_results = compute(*delayed_results) 
+    delayed_keys[dog_result] = (view_id, interval_key)
+computed_results = compute(*delayed_results)
 for result, task in zip(computed_results, delayed_results):
     view_id, interval_key = delayed_keys[task]
-    final_peaks.append({
-        'view_id': view_id,
-        'interval_key': interval_key,
-        'interest_points': result['interest_points'],
-        'intensities': result['intensities']
-    })
+    final_peaks.append(
+        {
+            "view_id": view_id,
+            "interval_key": interval_key,
+            "interest_points": result["interest_points"],
+            "intensities": result["intensities"],
+        }
+    )
 print("Difference of gaussian is done")
 
 advanced_refinement = AdvancedRefinement(final_peaks)
 consolidated_data = advanced_refinement.run()
 print("Advanced refinement is done")
 
-save_interest_points = SaveInterestPoints(dataframes, consolidated_data, xml_file_path, xml_bucket_name, 
-                                          output_bucket_name, output_file_path, dsxy, dsz, min_intensity, 
-                                          max_intensity, sigma, threshold, file_source)
+save_interest_points = SaveInterestPoints(
+    dataframes,
+    consolidated_data,
+    image_file_path,
+    xml_file_path,
+    xml_bucket_name,
+    output_bucket_name,
+    output_file_path,
+    dsxy,
+    dsz,
+    min_intensity,
+    max_intensity,
+    sigma,
+    threshold,
+    file_source,
+)
 save_interest_points.run()
 print("Interest points saved")
 
