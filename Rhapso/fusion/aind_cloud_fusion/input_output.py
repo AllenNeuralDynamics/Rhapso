@@ -7,20 +7,16 @@ import re
 from collections import OrderedDict
 from dataclasses import dataclass
 from pathlib import Path
-from typing import Optional, Union
-
+from typing import Optional
 import boto3
 import dask.array as da
 import numpy as np
 import tensorstore as ts
 import xmltodict
 import yaml
-from dask.distributed import LocalCluster
-from dask_yarn import YarnCluster
 from numcodecs import Blosc
-from zarr.errors import ArrayNotFoundError
-
-import Rhapso.fusion.geometry as geometry
+from io import BytesIO
+import fusion.aind_cloud_fusion.geometry as geometry
 
 
 def read_config_yaml(yaml_path: str) -> dict:
@@ -76,7 +72,7 @@ class InputTensorstore(InputArray):
         self.arr = arr
 
     def __getitem__(self, slice):
-        return np.array(self.arr[slice])
+        return np.array(self.arr[slice].read().result())
 
     @property
     def shape(self):
@@ -142,8 +138,9 @@ class BigStitcherDataset(Dataset):
         assert datastore in [
             0,
             1,
-        ], "Only 0 = Dask and 1 = Tensorstore supported."
-        self.datastore = datastore  # {0 = Dask, 1 = Tensorstore}
+            2,
+        ], "Only 0 = Dask, 1 = Tensorstore"
+        self.datastore = datastore
 
         allowed_levels = [0, 1, 2, 3, 4, 5]
         assert (
@@ -165,52 +162,31 @@ class BigStitcherDataset(Dataset):
             if not self.s3_path.endswith("/"):
                 self.s3_path = self.s3_path + "/"
 
-            if not t_path.endswith(".tif"):
-                level_str = "/" + str(self.level)  # Ex: '/0'
-                tile_paths[t_id] = self.s3_path + Path(t_path).name + level_str
-            else:
-                tile_paths[t_id] = self.s3_path + Path(t_path).name
+            level_str = "/" + str(self.level)  # Ex: '/0'
+            tile_paths[t_id] = self.s3_path + Path(t_path).name + level_str
 
         tile_arrays: dict[int, InputArray] = {}
         for tile_id, t_path in tile_paths.items():
+
             arr = None
-            try:
-                if t_path.endswith('.tif'):
-                    import tifffile
-                    img = tifffile.imread(t_path)
-                    # Reshape to expected 5D format (t,c,z,y,x)
-                    if img.ndim == 2:  # y,x
-                        img = img[None, None, None, :, :]
-                    elif img.ndim == 3:  # z,y,x
-                        img = img[None, None, :, :, :]
-                    elif img.ndim == 4:  # c,z,y,x
-                        img = img[None, :, :, :, :]
-                    arr = InputDask(da.from_array(img))
-                else:
-                    if self.datastore == 0:  # Dask
-                        if not os.path.exists(t_path):
-                            raise FileNotFoundError(f"Zarr path not found: {t_path}")
-                        tile_zarr = da.from_zarr(t_path)
-                        arr = InputDask(tile_zarr)
-                    elif self.datastore == 1:  # Tensorstore
-                        # Referencing the following naming convention:
-                        # s3://BUCKET_NAME/DATASET_NAME/TILE/NAME/CHANNEL
-                        parts = t_path.split("/")
-                        bucket = parts[2]
-                        third_slash_index = (
-                            len(parts[0]) + len(parts[1]) + len(parts[2]) + 3
-                        )
-                        obj = t_path[third_slash_index:]
+            if self.datastore == 0:  # Dask
+                tile_zarr = da.from_zarr(t_path)
+                arr = InputDask(tile_zarr)
+            elif self.datastore == 1:  # Tensorstore
+                # Referencing the following naming convention:
+                # s3://BUCKET_NAME/DATASET_NAME/TILE/NAME/CHANNEL
+                parts = t_path.split("/")
+                bucket = parts[2]
+                third_slash_index = (
+                    len(parts[0]) + len(parts[1]) + len(parts[2]) + 3
+                )
+                obj = t_path[third_slash_index:]
 
-                        tile_zarr = open_zarr_s3(bucket, obj)
-                        arr = InputTensorstore(tile_zarr)
+                tile_zarr = open_zarr_s3(bucket, obj)
+                arr = InputTensorstore(tile_zarr)
 
-                print(f"Loading Tile {tile_id} / {len(tile_paths)}")
-                tile_arrays[int(tile_id)] = arr
-
-            except (ArrayNotFoundError, FileNotFoundError) as e:
-                print(f"Error loading tile {tile_id} from path {t_path}: {e}")
-                continue
+            print(f"Loading Tile {tile_id}")
+            tile_arrays[int(tile_id)] = arr
 
         self.tile_cache = tile_arrays
 
@@ -296,30 +272,16 @@ class BigStitcherDataset(Dataset):
         with open(xml_path, "r") as file:
             data: OrderedDict = xmltodict.parse(file.read())
 
-        # Handle different data formats
-        imageloader = data["SpimData"]["SequenceDescription"]["ImageLoader"]
-        
-        # For TIFF files
-        if "files" in imageloader:
-            base_path = os.path.dirname(xml_path)
-            files = imageloader["files"]["FileMapping"]
-            if not isinstance(files, list):
-                files = [files]
-            
-            # Create mapping of setup_id to file paths
-            for file_map in files:
-                setup_id = int(file_map["@view_setup"])
-                relative_path = file_map["file"]["#text"]
-                full_path = os.path.join(base_path, relative_path)
-                
-                if setup_id not in view_paths:
-                    view_paths[setup_id] = full_path
+        parent = data["SpimData"]["SequenceDescription"]["ImageLoader"][
+            "zarr"
+        ]["#text"]
 
-        # For zarr files
-        elif "zarr" in imageloader:
-            parent = imageloader["zarr"]["#text"]
-            for i, zgroup in enumerate(imageloader["zgroups"]["zgroup"]):
-                view_paths[i] = parent + "/" + zgroup["path"]
+        for i, zgroup in enumerate(
+            data["SpimData"]["SequenceDescription"]["ImageLoader"]["zgroups"][
+                "zgroup"
+            ]
+        ):
+            view_paths[i] = parent + "/" + zgroup["path"]
 
         return view_paths
 
@@ -344,8 +306,16 @@ class BigStitcherDataset(Dataset):
         """
 
         view_transforms: dict[int, list[dict]] = {}
-        with open(xml_path, "r") as file:
-            data: OrderedDict = xmltodict.parse(file.read())
+
+        if xml_path.startswith('s3://'):
+            s3 = boto3.client('s3')
+            bucket_name, key = xml_path[5:].split('/', 1)
+            response = s3.get_object(Bucket=bucket_name, Key=key)
+            file_stream = BytesIO(response['Body'].read())
+            data = xmltodict.parse(file_stream.read().decode('utf-8'))
+        else:
+            with open(xml_path, "r") as file:
+                data: OrderedDict = xmltodict.parse(file.read())
 
         for view_reg in data["SpimData"]["ViewRegistrations"][
             "ViewRegistration"
@@ -463,8 +433,17 @@ class BigStitcherDatasetChannel(BigStitcherDataset):
         # Otherwise fetch for first time
         tile_arrays: dict[int, InputArray] = {}
 
-        with open(self.xml_path, "r") as file:
-            data: OrderedDict = xmltodict.parse(file.read())
+        if self.xml_path.startswith('s3://'):
+            # Handle S3 path
+            s3 = boto3.client('s3')
+            bucket_name, key = self.xml_path[5:].split('/', 1)
+            response = s3.get_object(Bucket=bucket_name, Key=key)
+            file_stream = BytesIO(response['Body'].read())
+            data = xmltodict.parse(file_stream.read().decode('utf-8'))
+        else:
+            with open(self.xml_path, "r") as file:
+                data: OrderedDict = xmltodict.parse(file.read())
+
         tile_id_lut = {}
         for zgroup in data["SpimData"]["SequenceDescription"]["ImageLoader"][
             "zgroups"
@@ -472,8 +451,15 @@ class BigStitcherDatasetChannel(BigStitcherDataset):
             tile_id = zgroup["@setup"]
             tile_name = zgroup["path"]
             s_parts = tile_name.split("_")
-            location = (int(s_parts[2]), int(s_parts[4]), int(s_parts[6]))
-            tile_id_lut[location] = int(tile_id)
+            
+            match = re.search(r'ch_(\d+)', tile_name)
+            ch = int(match.group(1))
+
+            location_ch = (int(s_parts[2]), 
+                           int(s_parts[4]), 
+                           int(s_parts[6]), 
+                           ch)
+            tile_id_lut[location_ch] = int(tile_id)
 
         # Reference path: s3://aind-open-data/HCR_677594_2023-10-20_15-10-36/SPIM.ome.zarr/
         # Reference tilename: <tile_name, no underscores>_X_####_Y_####_Z_####_ch_###.zarr
@@ -497,12 +483,17 @@ class BigStitcherDatasetChannel(BigStitcherDataset):
 
                     full_resolution_p = self.s3_path + p + "/0"
                     s_parts = p.split("_")
-                    location = (
+                    
+                    match = re.search(r'ch_(\d+)', p)
+                    ch = int(match.group(1))
+                    
+                    location_ch = (
                         int(s_parts[2]),
                         int(s_parts[4]),
                         int(s_parts[6]),
+                        ch
                     )
-                    tile_id = tile_id_lut[location]
+                    tile_id = tile_id_lut[location_ch]
 
                     arr = None
                     if self.datastore == 0:  # Dask
@@ -522,7 +513,7 @@ class BigStitcherDatasetChannel(BigStitcherDataset):
                         tile_zarr = open_zarr_s3(bucket, obj)
                         arr = InputTensorstore(tile_zarr)
 
-                    print(f"Loading Tile {tile_id} / {len(tile_id_lut)}")
+                    print(f"Loading Tile {tile_id}")
                     tile_arrays[int(tile_id)] = arr
 
         self.tile_cache = tile_arrays
@@ -580,7 +571,7 @@ class BigStitcherDatasetChannel(BigStitcherDataset):
                 if self.datastore == 1:
                     assert False, print("This is not supported.")
 
-                print(f"Loading Tile {tile_id} / {len(tile_id_lut)}")
+                print(f"Loading Tile {tile_id}")
                 tile_arrays[int(tile_id)] = arr
 
         else:
@@ -600,12 +591,8 @@ class BigStitcherDatasetChannel(BigStitcherDataset):
                 if self.datastore == 1:
                     assert False, print("This is not supported.")
 
-                print(f"Loading Tile {tile_id} / {len(tile_id_lut)}")
+                print(f"Loading Tile {tile_id}")
                 tile_arrays[int(tile_id)] = arr
-
-            # print("Zarr tiles: ", tile_arrays)
-
-            # raise ValueError("Not implemented yet")
 
         self.tile_cache = tile_arrays
 
@@ -653,39 +640,12 @@ class OutputTensorstore(OutputArray):
     def __setitem__(self, index, value):
         self.arr[index].write(value).result()
 
-
 @dataclass
 class OutputParameters:
     path: str
-    chunksize: tuple[int, int, int, int, int]
-    resolution_zyx: tuple[float, float, float]
-    datastore: int  # {0 == Dask, 1 == Tensorstore}
+    datastore: int = 0 # {0 == Dask, 1 == Tensorstore}
+    chunksize: tuple[int, int, int, int, int] = (1, 1, 128, 128, 128)
+    resolution_zyx: tuple[float, float, float] = (1.0, 1.0, 1.0)
     dtype: np.dtype = np.uint16
     dimension_separator: str = "/"
     compressor = Blosc(cname="zstd", clevel=1, shuffle=Blosc.SHUFFLE)
-
-
-@dataclass
-class RuntimeParameters:
-    """
-    Simplified Runtime Parameters
-    option:
-        0: single process exectution
-        1: multiprocessing execution
-        2: local dask cluster execution
-        3: dask-emr execution
-    pool_size: number of processes/vCPUs for options {1, 2, 3}
-        This parameter is used to initalize a basic cluster for options {2, 3}.
-    worker_cells:
-        list of cells/chunks this execution operates on
-    custom_cluster: Custom cluster configuration for options {2, 3}.
-        For {0, 1}, this parameter is ignored.
-        For 2, custom_cluster is an optional LocalCluster obj, and
-        the most basic cluster is init based on pool_size.
-        For 3, custom_cluster is a necessary YarnCluster obj.
-    """
-
-    option: int
-    pool_size: int
-    worker_cells: list[tuple[int, int, int]]
-    custom_cluster: Optional[Union[LocalCluster, YarnCluster]] = None

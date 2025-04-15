@@ -1,4 +1,5 @@
 import unittest
+<<<<<<< HEAD
 import numpy as np
 from collections import OrderedDict
 from scipy.spatial import KDTree
@@ -76,6 +77,14 @@ class TestAdvancedRefinement(unittest.TestCase):
         self.assertGreaterEqual(len(result), 1)
         self.assertIn(((320, 636, 64), 30.77), result["timepoint=18, setup=4"])
         self.assertIsInstance(result, dict)
+=======
+
+
+class TestAdvancedRefinement(unittest.TestCase):
+
+    def setUp(self):
+        pass
+>>>>>>> main
 
 
 if __name__ == "__main__":

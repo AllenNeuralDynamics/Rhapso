@@ -39,7 +39,10 @@ class SaveResults:
                 affine.text = '1.0 0.0 0.0 0.0 0.0 1.0 0.0 0.0 0.0 0.0 1.0 0.0'
             else:
                 model = self.tiles.get(view, {}).get('model', {}).get('a', {})
-                affine.text = ' '.join(f"{model.get(f'm{i}{j}', 0.0):.4f}" for i in range(3) for j in range(4))
+                if not model or all(float(val) == 0.0 for key, val in model.items()):
+                    affine.text = '1.0 0.0 0.0 0.0 0.0 1.0 0.0 0.0 0.0 0.0 1.0 0.0'
+                else:   
+                    affine.text = ' '.join(f"{model.get(f'm{i}{j}', 0.0):.4f}" for i in range(3) for j in range(4))
 
             view_registration.insert(0, new_view_transform)
 

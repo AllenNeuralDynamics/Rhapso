@@ -35,6 +35,7 @@ job.init(args['JOB_NAME'], args)
 # GENERAL PARAMS
 strategy = 'spark-etl'
 file_source = 's3'
+key = 'detection'
 output_bucket_name = 'interest-point-detection'
 output_file_path = 'output'
 dsxy = 30
@@ -76,7 +77,7 @@ def fetch_from_s3(s3, bucket_name, input_file):
 xml_file = fetch_from_s3(s3, xml_bucket_name, xml_file_path) 
 
 # Load XML data into dataframes
-processor = XMLToDataFrame(xml_file)
+processor = XMLToDataFrame(xml_file, key)
 dataframes = processor.run()
 print("XML loaded")
 
