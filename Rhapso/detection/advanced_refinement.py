@@ -2,9 +2,8 @@ from collections import OrderedDict
 from scipy.spatial import KDTree
 import numpy as np
 
-# This component groups interest points by view_id and if overlapping only, uses kd tree algorithm to remove duplicate points,
+# This class groups interest points by view_id and if overlapping only, uses kd tree algorithm to remove duplicate points,
 # otherwise checks for max spots
-
 
 class AdvancedRefinement:
     def __init__(self, interest_points):
@@ -24,21 +23,26 @@ class AdvancedRefinement:
         self.intensities_per_view_id = {}
         self.intervals_per_view_id = {}
 
-    # ensure each interest point is sufficiently isolated
     def kd_tree(self):
+        """
+        Constructs a KD-Tree for each view's points and retains points that are distanced from the nearest 
+        two neighbours by at least `combine_distance`.
+        """
         filtered_data = {}
 
         for view_id, points in self.consolidated_data.items():
-            if not points:
-                continue
-
+            if not points: continue
+            
+            # Prepare a numpy array from the first coordinate of each point for KDTree
             pts = np.array([p[0] for p in points])
             tree = KDTree(pts)
             unique_indices = set()
 
+            # Identify unique points based on distance criteria
             for i, point in enumerate(pts):
                 distances, _ = tree.query(point, k=3)
 
+                # Include point if the third closest point is beyond the combine distance
                 if distances[2] > self.combine_distance:
                     unique_indices.add(i)
 
@@ -46,8 +50,11 @@ class AdvancedRefinement:
 
         self.consolidated_data = filtered_data
 
-    # combine interest points by view id
     def consolidate_interest_points(self):
+        """
+        Aggregates and sorts interest points from multiple entries into a consolidated dictionary, 
+        organized by view_id.
+        """
         for entry in self.interest_points:
             view_id = entry["view_id"]
             points = entry["interest_points"]
@@ -62,6 +69,9 @@ class AdvancedRefinement:
         self.consolidated_data = OrderedDict(sorted(self.consolidated_data.items()))
 
     def filter_points(self, interest_points, intensities, max_spots):
+        """
+        Filters and returns the top `max_spots` interest points based on their intensities.
+        """
         combined_list = []
         for i in range(len(interest_points)):
             combined_list.append((intensities[i], interest_points[i]))
@@ -156,6 +166,9 @@ class AdvancedRefinement:
         )
 
     def run(self):
+        """
+        Executes the entry point of the script.
+        """
         self.consolidate_interest_points()
         if self.overlapping_only:
             self.kd_tree()

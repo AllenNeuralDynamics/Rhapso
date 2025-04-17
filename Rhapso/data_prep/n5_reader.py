@@ -2,8 +2,7 @@ import zarr
 import s3fs
 import os
 
-# correspondences are the indexes of interest points, correspondences, and group (hashmap of data)
-# interest points are the actual locations of all points (data)
+# FOR DEV ONLY, these are helper functions for verifying N5 output
 
 def print_dataset_info(store_path, dataset_prefix, print_data=False, num_points=30):
     if store_path.startswith("s3://"):

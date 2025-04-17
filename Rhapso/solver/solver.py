@@ -29,6 +29,8 @@ class Solver:
         self.max_iterations = max_iterations
         self.max_allowed_error = max_allowed_error
         self.max_plateauwidth = max_plateauwidth
+
+        self.key = "solver"
         self.s3 = boto3.client('s3')
 
     def solve(self):
@@ -47,7 +49,7 @@ class Solver:
             xml_file = fetch_local_xml(self.xml_file_path)
 
         # Load XML data into dataframes         
-        processor = XMLToDataFrame(xml_file)
+        processor = XMLToDataFrame(xml_file, self.key)
         dataframes = processor.run()
         print("XML loaded")
 

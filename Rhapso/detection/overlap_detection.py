@@ -5,8 +5,7 @@ import zarr
 import s3fs
 import dask.array as da
 
-# This components uses transforms models to find areas of overlap between image tiles
-
+# This class uses transforms models to find areas of overlap between image tiles
 
 class OverlapDetection:
     def __init__(self, transform_models, dataframes, dsxy, dsz, prefix, file_type):
@@ -19,9 +18,13 @@ class OverlapDetection:
         self.image_shape_cache = {}
 
     def load_image_metadata(self, file_path):
-
+        """
+        Loads and caches the shape metadata of an image file based on its path.
+        Supports Zarr and TIFF file types.
+        """
         if not file_path:
             raise ValueError("The file path does not exist or is not valid.")
+        
         if file_path in self.image_shape_cache:
             return self.image_shape_cache[file_path]
 
@@ -34,18 +37,22 @@ class OverlapDetection:
             dask_array = da.expand_dims(dask_array, axis=2)
             shape = dask_array.shape
             self.image_shape_cache[file_path] = shape
+        
         elif self.file_type == "tiff":
             img = BioImage(file_path, reader=bioio_tifffile.Reader)
             data = img.get_dask_stack()
-            # TODO - (1, 1, 1, z, y, x) ? or ?
             shape = data.shape
             self.image_shape_cache[file_path] = shape
+        
         elif self.file_type != "tiff" and self.file_type != "zarr":
             raise ValueError("This file type is not tiff or zarr and is not supported.")
 
         return shape
 
     def create_mipmap_transform(self):
+        """
+        Creates a scale matrix for transforming image coordinates based on defined dsxy and dsz scaling factors.
+        """
         scale_matrix = np.array(
             [
                 [self.dsxy, 0, 0, 0],
@@ -58,6 +65,11 @@ class OverlapDetection:
         return scale_matrix
 
     def open_and_downsample(self, shape):
+        """
+        Calculates the new dimensions for downsampling an image based on dsxy and dsz factors and creates a transformation 
+        matrix. The function progressively halves the dimensions of the image until the scaling factors fall below 1,
+        accounting for both even and odd dimensions.
+        """
         dsx = self.dsxy
         dsy = self.dsxy
         dsz = self.dsz
@@ -85,6 +97,9 @@ class OverlapDetection:
         return ((0, 0, 0), (x_new, y_new, z_new)), mipmap_transform
 
     def get_inverse_mipmap_transform(self, mipmap_transform):
+        """
+        Computes the inverse of a mipmap transformation matrix to reverse the scaling effect.
+        """
         try:
             inverse_scale_matrix = np.linalg.inv(mipmap_transform)
         except np.linalg.LinAlgError:
@@ -94,6 +109,9 @@ class OverlapDetection:
         return inverse_scale_matrix
 
     def estimate_bounds(self, a, interval):
+        """
+        Estimates the transformed spatial bounds of an interval after applying an inverse downsampling transformation.
+        """
         assert len(interval) >= 6, "Interval dimensions do not match."
 
         # set lower bounds
@@ -135,12 +153,20 @@ class OverlapDetection:
         return r_min[:3], r_max[:3]
 
     def calculate_intersection(self, bbox1, bbox2):
+        """
+        Calculates the intersection of two bounding boxes. The intersection is defined by the maximal lower 
+        bounds and minimal upper bounds of the bounding boxes.
+        """
         intersect_min = np.maximum(bbox1[0], bbox2[0])
         intersect_max = np.minimum(bbox1[1], bbox2[1])
 
         return (intersect_min, intersect_max)
 
     def calculate_new_dims(self, lower_bound, upper_bound):
+        """
+        Calculates new dimensions from given lower and upper bounds. Each dimension is determined by the difference 
+        between the upper and lower bounds, adjusted to be inclusive if starting from zero.
+        """
         new_dims = []
         for lb, ub in zip(lower_bound, upper_bound):
             if lb == 0:
@@ -151,11 +177,14 @@ class OverlapDetection:
         return new_dims
 
     def find_overlapping_area(self):
+        """
+        Identifies overlapping areas between different view IDs within an image dataset, considering their spatial 
+        transformations and downsampling effects.
+        """
         if len(self.image_loader_df) == 0:
             raise ValueError("Image Loader dataframe is empty.")
 
         # iterate through each view_id
-        start = None
         for i, row_i in self.image_loader_df.iterrows():
             view_id = f"timepoint: {row_i['timepoint']}, setup: {row_i['view_setup']}"
 
@@ -232,5 +261,8 @@ class OverlapDetection:
             self.to_process[view_id] = all_intervals
 
     def run(self):
+        """
+        Executes the entry point of the script.
+        """
         self.find_overlapping_area()
         return self.to_process

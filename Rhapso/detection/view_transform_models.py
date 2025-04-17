@@ -4,17 +4,21 @@ import numpy as np
 # This component creates transform matrices for each viewID from ViewRegistrations-ViewTransform.
 # If there is more than one matrix, matrix multiplication is implemented and only one matrix is returned
 
-
 class ViewTransformModels:
     def __init__(self, df):
         self.view_registrations_df = df.get("view_registrations", pd.DataFrame())
+        
         self.calibration_matrices = {}
         self.rotation_matrices = {}
         self.concatenated_matrices = {}
 
     def create_transform_matrices(self):
-        if self.view_registrations_df.empty:
-            raise ValueError("view_registrations_df is empty")
+        """
+        Extracts transformation matrices from a dataframe and organizes them into appropriate data structures
+        based on their types and intended usage.
+        """
+        if self.view_registrations_df.empty: raise ValueError("view_registrations_df is empty")
+        
         # parse DF for view_transform matrices
         for _, row in self.view_registrations_df.iterrows():
             if row["type"] == "affine":
@@ -37,16 +41,19 @@ class ViewTransformModels:
                     self.rotation_matrices[view_id] = {"affine_matrix": affine_matrix}
 
     def concatenate_matrices_by_view_id(self):
-        if not self.calibration_matrices and not self.rotation_matrices:
-            raise ValueError("No matrices to concatenate")
-        # zarr
+        """
+        Concatenates calibration and rotation matrices for each view ID, if available.
+        """
+        if not self.calibration_matrices and not self.rotation_matrices: raise ValueError("No matrices to concatenate")
+        
+        # Zarr
         if not self.calibration_matrices:
             self.concatenated_matrices = {
                 key: self.rotation_matrices[key]["affine_matrix"]
                 for key in self.rotation_matrices
             }
-            return
-        # tiff
+        
+        # TIFF
         else:
             for key in self.calibration_matrices:
                 if key in self.rotation_matrices:
@@ -56,6 +63,9 @@ class ViewTransformModels:
                     self.concatenated_matrices[key] = concatenated_matrix
 
     def print_matrices(self):
+        """
+        Debug function to print all concatenated affine matrices in a formatted string.
+        """
         for key, matrix in self.concatenated_matrices.items():
             affine_format = (
                 "3d-affine: ("
@@ -65,6 +75,9 @@ class ViewTransformModels:
             print(f"{key}: {affine_format}")
 
     def run(self):
+        """
+        Executes the entry point of the script.
+        """
         self.create_transform_matrices()
         self.concatenate_matrices_by_view_id()
         return self.concatenated_matrices

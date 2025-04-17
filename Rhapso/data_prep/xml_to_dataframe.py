@@ -1,10 +1,8 @@
-from idna import check_label
 import pandas as pd
 import xml.etree.ElementTree as ET
 
 # This component recieves an XML file containing Tiff or Zarr image metadata and converts
 # it into several Dataframes
-
 
 class XMLToDataFrame:
     def __init__(self, xml_file, key):
@@ -12,6 +10,10 @@ class XMLToDataFrame:
         self.key = key
 
     def parse_image_loader_zarr(self, root):
+        """
+        Parses image loader configuration from a Zarr file's XML structure and constructs a DataFrame containing the 
+        metadata for each image group.
+        """
         image_loader_data = []
 
         for il in root.findall(".//ImageLoader/zgroups/zgroup"):
@@ -32,20 +34,27 @@ class XMLToDataFrame:
         return pd.DataFrame(image_loader_data)
 
     def parse_image_loader_tiff(self, root):
+        """
+        Parses image loader configuration from a TIFF file's XML structure and constructs a DataFrame containing 
+        metadata for each image group.
+        """
         image_loader_data = []
 
-        if (
-            not root.findall(".//ImageLoader/files/FileMapping")
-            or len(root.findall(".//ImageLoader/files/FileMapping")) == 0
-        ):
+        # Ensure that file mappings are present in the XML
+        if not root.findall(".//ImageLoader/files/FileMapping"):
             raise Exception("There are no files in this XML")
+        
+        # Check for required labels in the XML
         if not self.check_labels(root):
             raise Exception("Required labels do not exist")
+
+        # Validate that the lengths of view setups, registrations, and tiles match
         if not self.check_length(root):
             raise Exception(
                 "The amount of view setups, view registrations, and tiles do not match"
             )
 
+        # Iterate over each file mapping in the XML
         for fm in root.findall(".//ImageLoader/files/FileMapping"):
             view_setup = fm.get("view_setup")
             timepoint = fm.get("timepoint")
@@ -62,9 +71,14 @@ class XMLToDataFrame:
                     "file_path": file_path,
                 }
             )
+
+        # Convert the list to a DataFrame and return
         return pd.DataFrame(image_loader_data)
 
     def route_image_loader(self, root):
+        """
+        Directs the XML parsing process based on the image loader format specified in the XML.
+        """
         format_node = root.find(".//ImageLoader")
         format_type = format_node.get("format")
 
@@ -76,6 +90,9 @@ class XMLToDataFrame:
             raise ValueError("Unsupported format type")
 
     def parse_view_setups(self, root):
+        """
+        Parses the view setups from an XML structure and constructs a DataFrame containing metadata for each view setup.
+        """
         viewsetups_data = []
 
         for vs in root.findall(".//ViewSetup"):
@@ -98,6 +115,10 @@ class XMLToDataFrame:
         return pd.DataFrame(viewsetups_data)
 
     def parse_view_registrations(self, root):
+        """
+        Parses view registrations from an XML structure and constructs a DataFrame containing registration metadata 
+        for each view.
+        """
         viewregistrations_data = []
         for vr in root.findall(".//ViewRegistration"):
             timepoint = vr.get("timepoint")
@@ -119,6 +140,10 @@ class XMLToDataFrame:
         return pd.DataFrame(viewregistrations_data)
 
     def parse_view_interest_points(self, root):
+        """
+        Parses interest points data from an XML structure and constructs a DataFrame containing metadata and paths 
+        for each set of interest points.
+        """
         view_interest_points_data = []
 
         if self.key == "detection":
@@ -143,6 +168,10 @@ class XMLToDataFrame:
         return pd.DataFrame(view_interest_points_data)
 
     def check_labels(self, root):
+        """
+        Verifies the presence of required XML labels including bounding boxes, point spread functions, 
+        stitching results, and intensity adjustments.
+        """
         labels = True
         if root.find(".//BoundingBoxes") is None:
             labels = False
@@ -156,18 +185,20 @@ class XMLToDataFrame:
         return labels
 
     def check_length(self, root):
+        """
+        Validates that the count of elements within the XML structure aligns with expected relationships
+        between file mappings, view setups, and view registrations.
+        """
         length = True
-        if len(root.findall(".//ImageLoader/files/FileMapping")) != len(
-            root.findall(".//ViewRegistration")
-        ) and len(root.findall(".//ViewSetup")) != len(
-            root.findall(".//ViewRegistration")
-        ) * (
-            1 / 2
-        ):
-            length = False
+        if len(root.findall(".//ImageLoader/files/FileMapping")) != len(root.findall(".//ViewRegistration")) or \
+            len(root.findall(".//ViewSetup")) != len(root.findall(".//ViewRegistration")) * (1 / 2):
+            length = False  # Set to False if the relationships do not match expected counts
         return length
 
     def run(self):
+        """
+        Executes the entry point of the script.
+        """
         root = ET.fromstring(self.xml_content)
         image_loader_df = self.route_image_loader(root)
         view_setups_df = self.parse_view_setups(root)

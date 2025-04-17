@@ -1,11 +1,16 @@
 import numpy as np
 import pyarrow.parquet as pq
 
+# This class takes flattened serialized image data and unflattens it back to original 3D chunk
+
 class DeserializeImageChunks:
     def __init__(self):
         pass
 
     def process_image_data(self, record):
+        """
+        Reconstructs and reshapes image data from a flat object containing shape info and serialized slices.
+        """
         shape = tuple(record['shape'])
         image_data = []
         slice_keys = [k for k in record.keys() if k.startswith('slice_')]
@@ -29,6 +34,9 @@ class DeserializeImageChunks:
             return None
 
     def run(self, image_chunks_dyf):
+        """
+        Executes the entry point of the script.
+        """
         return self.process_image_data(image_chunks_dyf)  
 
 # DEBUGGING HELPERS  

@@ -4,7 +4,7 @@ import numpy as np
 import dask.array as da
 import matplotlib.pyplot as plt
 
-# This component loads tiff image data using bio-io library
+# This class loads TIFF image data using Bio-io library
 
 class TiffImageReader:
     def __init__(self, dsxy, dsz, process_intervals, file_path, view_id):
@@ -17,8 +17,11 @@ class TiffImageReader:
         self.image_data = {}
         self.downsampled_slices = []
 
-    # downsampling by factor of 2 for X,Y,Z
     def downsample(self, data, factor_dx, factor_dy, factor_dz, axes):
+        """
+        Reduces the resolution of the data array by averaging over defined block sizes
+        along specified axes.
+        """
         for axis in axes:
             if axis == 0: 
                 while factor_dz > 1:
@@ -35,6 +38,9 @@ class TiffImageReader:
         return data  
 
     def visualize_slice(self, image):
+        """
+        Helper function to human verify slice data
+        """
         try:
             plt.figure(figsize=(10, 8))
             plt.imshow(image, cmap='gray')  
@@ -45,6 +51,9 @@ class TiffImageReader:
             print(f"Error displaying slice: {e}") 
     
     def load_and_process_slices(self, file_path):
+        """
+        Loads image slices from a file, downsamples them, and segments them into chunks based on predefined intervals.
+        """
         img = BioImage(file_path, reader=bioio_tifffile.Reader)
         full_dask_stack = img.get_dask_stack()[0, 0, 0, :, :, :]
         downsampled_stack = self.downsample(full_dask_stack, self.dsxy, self.dsxy, self.dsz, axes=[0, 1, 2])
@@ -73,4 +82,7 @@ class TiffImageReader:
         return image_chunks
 
     def run(self):
+        """
+        Executes the entry point of the script.
+        """
         return self.load_and_process_slices(self.file_path)

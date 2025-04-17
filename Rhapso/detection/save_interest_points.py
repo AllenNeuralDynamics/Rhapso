@@ -7,9 +7,12 @@ from io import BytesIO
 import io
 import json
 
+# This class save interest points found to N5 and updates the XML with interest points paths
+
 class SaveInterestPoints:
     def __init__(self, dataframes, consolidated_data, xml_file_path, xml_bucket_name, output_bucket_name, output_file_path,
                  downsample_xy, downsample_z, min_intensity, max_intensity, sigma, threshold, file_source):
+        
         self.consolidated_data = consolidated_data
         self.image_loader_df = dataframes['image_loader']
         self.xml_file_path = xml_file_path
@@ -24,22 +27,36 @@ class SaveInterestPoints:
         self.threshold = threshold
         self.file_source = file_source
 
-        self.s3_filesystem = s3fs.S3FileSystem()
         self.overlappingOnly = "true"
         self.findMin = "true"
         self.findMax = "true"
         self.default_block_size = 300000
+        self.s3_filesystem = s3fs.S3FileSystem()
     
     def load_xml_file(self, file_path):
+        """
+        Loads an XML file from a specified path and returns the parsed tree along with its root element.
+        """
         tree = ET.parse(file_path)
         root = tree.getroot()
+        
         return tree, root
     
     def fetch_from_s3(self, s3, bucket_name, input_file):
+        """
+        Retrieves and decodes the contents of a specified file from an AWS S3 bucket to a UTF-8 string.
+        """
         response = s3.get_object(Bucket=bucket_name, Key=input_file)
+        
         return response['Body'].read().decode('utf-8')
     
     def save_to_xml(self):
+        """
+        Serializes and saves interest points data to an XML file either locally or on AWS S3,
+        depending on the specified file source.
+        """
+
+        # Load or fetch the XML file based on the file source
         if self.file_source == 'local':
             tree, root = self.load_xml_file(self.xml_file_path)
         
@@ -50,19 +67,19 @@ class SaveInterestPoints:
             root = tree.getroot()
         
         else:
-            print("input source not accepted.")
-            return
+            raise ValueError("Input source not accepted. Supported sources are 'local' and 's3'.")
 
-        interest_points_section = root.find('.//ViewInterestPoints')
-        
+        # Locate or create the section for storing interest points
+        interest_points_section = root.find('.//ViewInterestPoints') 
         if interest_points_section is None:
             interest_points_section = ET.SubElement(root, 'ViewInterestPoints')
-            interest_points_section.text = '\n    ' 
+            interest_points_section.text = '\n    '  
         
         else:
             interest_points_section.clear()
             interest_points_section.text = '\n    '  
 
+        # Populate the XML with new interest points data
         for view_id, _ in self.consolidated_data.items():
             parts = view_id.split(',') 
             timepoint_part = parts[0].strip()  
@@ -87,6 +104,7 @@ class SaveInterestPoints:
         
         interest_points_section.tail = '\n  '
 
+        # Save the XML back to the file source
         if self.file_source == 'local':
             tree.write(self.output_file_path + '/dataset-detection.xml', encoding='utf-8', xml_declaration=True)
         
@@ -99,10 +117,13 @@ class SaveInterestPoints:
             s3.upload_fileobj(xml_bytes, self.output_bucket_name, object_name)
         
         else:
-            print("input source not accepted")
-            return
+            raise ValueError("Input source '{0}' is not supported. Please use 'local' or 's3'.".format(self.file_source))
     
     def write_json_to_s3(self, id_dataset_path, loc_dataset_path, attributes):
+        """
+        This function serializes the provided attributes to JSON format and uploads the result
+        to specified paths in an S3 bucket.
+        """
         json_path = id_dataset_path + '/attributes.json'
         json_bytes = json.dumps(attributes).encode('utf-8')
         s3 = boto3.client('s3')
@@ -114,6 +135,9 @@ class SaveInterestPoints:
         s3.put_object(Bucket=self.output_bucket_name, Key=json_path, Body=json_bytes)
 
     def save_intensities_to_n5(self, view_id, n5_path, root):
+        """
+        Saves intensity data associated with a given view ID to an N5 dataset.
+        """
         intensities_path = n5_path + '/interestpoints/intensities'
         
         if view_id in self.consolidated_data:
@@ -136,6 +160,9 @@ class SaveInterestPoints:
             )
 
     def save_interest_points_to_n5(self, view_id, n5_path, root): 
+        """
+        Saves interest points and their IDs to N5 format at the specified path, handling dataset creation and attribute setting.
+        """
         dataset_path = n5_path + '/interestpoints'    
 
         if dataset_path in root:
@@ -204,6 +231,11 @@ class SaveInterestPoints:
             )
 
     def save_points(self):
+        """
+        Saves interest points and associated data to specified storage (local or S3) in N5 format and also serializes 
+        the dataset configuration to XML. Initializes the storage root, sets metadata attributes, and processes each 
+        entry in the image loader dataframe.
+        """
         if self.file_source == 'local':
             store = zarr.N5Store(self.output_file_path)
             root = zarr.group(store, overwrite=False)
@@ -223,4 +255,7 @@ class SaveInterestPoints:
         self.save_to_xml()
 
     def run(self):
+        """
+        Executes the entry point of the script.
+        """
         self.save_points()
