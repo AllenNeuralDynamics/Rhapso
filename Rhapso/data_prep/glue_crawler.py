@@ -1,21 +1,27 @@
 import boto3
 import time
 
+# This class creates an AWS Glue Crawler and waits for the crawler to finish setup
+
 class GlueCrawler:
     def __init__(self, crawler_name, crawler_s3_path, crawler_database_name, crawler_iam_role):
         self.crawler_name = crawler_name
         self.s3_path = crawler_s3_path
         self.database_name = crawler_database_name
         self.iam_role = crawler_iam_role
+
         self.glue_client = boto3.client('glue')
 
     def create_or_update_crawler(self):
+        """
+        Creates an AWS Glue crawler if it doesn't already exist. If the crawler exists, no action is taken.
+        """
         crawlers = self.glue_client.list_crawlers()['CrawlerNames']
         if self.crawler_name in crawlers:
             print(f"Crawler '{self.crawler_name}' already exists.")
         else:
             try:
-                response = self.glue_client.create_crawler(
+                self.glue_client.create_crawler(
                     Name=self.crawler_name,
                     Role=self.iam_role,
                     DatabaseName=self.database_name,
@@ -31,14 +37,21 @@ class GlueCrawler:
                 print(f"Failed to create crawler: {str(e)}")
 
     def start_crawler(self):
+        """
+        Starts the AWS Glue crawler by name and logs the result.
+        """
         try:
             self.glue_client.start_crawler(Name=self.crawler_name)
             print(f"Crawler '{self.crawler_name}' started.")
         except Exception as e:
-            print(f"Failed to start crawler: {str(e)}")
+            raise RuntimeError(f"Failed to start crawler: {str(e)}")
 
     def wait_for_crawler(self):
-        timeout = 800  # Maximum wait time in seconds
+        """
+        Waits for the AWS Glue crawler to finish running by polling its status.
+        Logs status updates and exits if the crawler becomes READY, FAILED, or times out.
+        """
+        timeout = 800  
         start_time = time.time()
         
         while True:
@@ -63,6 +76,9 @@ class GlueCrawler:
                 time.sleep(15)
 
     def run(self):
+        """
+        Executes the entry point of the script.
+        """
         self.create_or_update_crawler()
         self.start_crawler()
         self.wait_for_crawler()

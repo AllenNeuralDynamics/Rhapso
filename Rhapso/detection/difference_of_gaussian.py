@@ -4,7 +4,7 @@ from scipy.optimize import curve_fit
 import numpy as np
 from scipy.ndimage import map_coordinates
 
-# This component implements the difference of gaussian algorithm on image chunks
+# This class implements the difference of gaussian algorithm on image chunks
 
 class DifferenceOfGaussian:
     def __init__(self, min_intensity, max_intensity, sigma, threshold):
@@ -14,6 +14,9 @@ class DifferenceOfGaussian:
         self.threshold = threshold
     
     def gaussian_3d(self, xyz, amplitude, zo, yo, xo, sigma_x, sigma_y, sigma_z, offset):
+        """
+        Computes the 3D Gaussian value for given coordinates and Gaussian parameters.
+        """
         x, y, z = xyz
         g = offset + amplitude * np.exp(
             -(((x - xo) ** 2) / (2 * sigma_x ** 2) +
@@ -23,11 +26,16 @@ class DifferenceOfGaussian:
         return g.ravel()
 
     def refine_peaks(self, peaks, image):
-        if peaks is None:
-            return []
+        """
+        Refines the position of detected peaks in a 3D image by fitting a Gaussian model to local
+        neighborhoods around each peak. Peaks too close to the image borders are excluded from refinement.
+        """
+        if peaks is None: return []
+        
         refined_peaks = []
         window_size = 5
 
+        # Create 3D grids for the neighborhood around a point, spanning the defined window size in all directions
         z_grid, y_grid, x_grid = np.mgrid[
             -window_size:window_size+1,
             -window_size:window_size+1,
@@ -63,14 +71,23 @@ class DifferenceOfGaussian:
         return refined_peaks
 
     def apply_gaussian_blur(self, input_float, sigma, shape):
+        """
+        Applies a Gaussian blur to the input image across multiple dimensions.
+        Each dimension is blurred sequentially according to the provided sigma values.
+        """
         blurred_image = input_float
         
         for i in range(shape):
+            # Apply Gaussian filter with reflection at the borders for each dimension
             blurred_image = gaussian_filter(blurred_image, sigma=sigma[i], mode='reflect')
         
         return blurred_image
     
     def compute_sigma(self, steps, k, initial_sigma):
+        """
+        Computes a series of sigma values for Gaussian blurring.
+        Each subsequent sigma is derived by multiplying the previous one by the factor k.
+        """
         sigma = np.zeros(steps + 1)
         sigma[0] = initial_sigma
 
@@ -80,6 +97,10 @@ class DifferenceOfGaussian:
         return sigma
 
     def compute_sigma_difference(self, sigma, image_sigma):
+        """
+        Computes the difference in sigma values required to achieve a desired level of blurring,
+        accounting for the existing blur (image_sigma) in an image.
+        """
         steps = len(sigma) - 1
         sigma_diff = np.zeros(steps + 1)
         sigma_diff[0] = np.sqrt(sigma[0]**2 - image_sigma**2)
@@ -90,6 +111,10 @@ class DifferenceOfGaussian:
         return sigma_diff
     
     def compute_sigmas(self, initial_sigma, shape):
+        """
+        Generates sigma values for Gaussian blurring across specified dimensions.
+        Calculates the sigma differences required for sequential filtering steps.
+        """
         k = 2 ** (1 / 4)
         self.k_min_1_inv = 1.0 / (k - 1.0)
         steps = 3
@@ -104,10 +129,16 @@ class DifferenceOfGaussian:
         return sigma
     
     def normalize_image(self, image):
+        """
+        Normalizes an image to the [0, 1] range using predefined minimum and maximum intensities.
+        """
         normalized_image = (image - self.min_intensity) / (self.max_intensity - self.min_intensity)
         return normalized_image
 
     def compute_difference_of_gaussian(self, image):
+        """
+        Computes feature points in an image using the Difference of Gaussian (DoG) method.
+        """
         shape = 3
         initial_sigma = self.sigma
         min_peak_value = self.threshold
@@ -130,11 +161,15 @@ class DifferenceOfGaussian:
         peaks = peak_local_max(dog, threshold_rel=min_initial_peak_value)
         
         # compare peaks with image data 
-        final_peaks = self.refine_peaks(peaks, image)
+        # final_peaks = self.refine_peaks(peaks, image)
          
-        return final_peaks 
+        return peaks 
     
     def interpolation(self, image, interest_points):
+        """
+        Interpolates the image at given interest points to retrieve their intensity values.
+        Uses linear interpolation (order=1) and retrieves values at the nearest border if out-of-bounds.
+        """
         if interest_points is None or len(interest_points) == 0:
             return np.array([]) 
 
@@ -142,13 +177,18 @@ class DifferenceOfGaussian:
         intensities = map_coordinates(image, points, order=1, mode='nearest')
         return intensities
     
-    # return points to original sample level
     def upsample_coordinates(self, points, dsxy, dsz):
+        """
+        Upscales a list of coordinate points by specified scale factors for x, y (dsxy) and z (dsz) axes.
+        """
         if points is None:
             return []
         return [(point[2] * dsxy, point[1] * dsxy, point[0] * dsz) for point in points]
     
     def run(self, image_chunk, dsxy, dsz):
+        """
+        Executes the entry point of the script.
+        """
         final_peaks = self.compute_difference_of_gaussian(image_chunk)
         intensities = self.interpolation(image_chunk, final_peaks)
         upsampled_final_peaks = self.upsample_coordinates(final_peaks, dsxy, dsz)

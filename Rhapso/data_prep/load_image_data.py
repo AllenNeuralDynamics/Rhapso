@@ -1,6 +1,8 @@
 from ..data_prep.tiff_image_reader import TiffImageReader 
 from ..data_prep.zarr_image_reader import ZarrImageReader  
 
+# This class interfaces the loading of Zarr or TIFF image data
+
 class LoadImageData:
     def __init__(self, dataframes, overlapping_area, dsxy, dsz, prefix, file_type):
         self.dataframes = dataframes
@@ -12,6 +14,10 @@ class LoadImageData:
         self.file_type = file_type
 
     def load_image_data(self, process_intervals, file_path, view_id):
+        """
+        Loads image data based on the file type specified and processes it using the 
+        corresponding image reader.
+        """
         if self.file_type == 'zarr':
             image_reader = ZarrImageReader(self.dsxy, self.dsz, process_intervals, file_path, view_id)
         elif self.file_type == 'tiff':
@@ -19,7 +25,11 @@ class LoadImageData:
                                     
         return image_reader.run()
 
-    def interest_point_detection(self):
+    def load_and_process_images(self):
+        """
+        Iterates through all entries in a DataFrame, interfacing the loading and processing
+        of image data for each view configuration based on the file type.
+        """
         images = []
         for _, row in self.image_loader_df.iterrows():
             view_id = f"timepoint: {row['timepoint']}, setup: {row['view_setup']}"
@@ -33,4 +43,7 @@ class LoadImageData:
         return images
     
     def run(self):
-        return self.interest_point_detection()
+        """
+        Executes the entry point of the script.
+        """
+        return self.load_and_process_images()
