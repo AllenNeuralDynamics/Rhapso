@@ -43,7 +43,7 @@ git clone https://github.com/AllenNeuralDynamics/Rhapso.git
 cd Rhapso
 ```
 
-### Python Version**
+### Python Version
 Rhapso requires Python 3.11. Ensure this version is installed and active.
 
 ### Set Up Environment
@@ -72,14 +72,14 @@ pip show rhapso
 ```
 
 ### Prepare for Usage
-Once installed, refer to the Usage section below to determine which script to run based on your task.
+Once installed, refer to [Usage](#usage) to determine which script to run based on your task.
 
 ### AWS Glue Setup (Optional)
 To use Rhapso with the AWS Glue template:
 
-Ensure you have an active AWS account
-Enable the AWS Glue API
-Configure IAM roles and permissions for Glue jobs
+-**Ensure you have an active AWS account**
+-**Enable the AWS Glue API**
+-**Configure IAM roles and permissions for Glue jobs**
 
 ---
 
