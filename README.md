@@ -33,6 +33,43 @@ Rhapso is being developed in collaboration with Allen Institute Neural Dynamics 
 - [FAQ](#frequently-asked-questions)
 
 ---
+## Usage
+### Environments
+This package is designed to target three main environments:
+- Local
+- Cloud
+- SLURM
+> [!TIP]
+> Detailed instructions on how to run a sample end-to-end pipeline for each environment can be found on the [Wiki Page](https://github.com/AllenNeuralDynamics/Rhapso/wiki#example-pipelines).
+Sample pipeline instructions are provided for pre-made templates, but if you want to create your own template, you can do so based on the sample files available inside the `Rhapso/pipelines` folder.
+
+## Build Package Instructions
+
+### Build and Use the `.whl` File
+
+1. **Build the `.whl` File in the root of this repo:**
+  ```sh
+  cd /path/to/Rhapso
+  pip install setuptools wheel
+  python setup.py sdist bdist_wheel
+  ```
+  The `.whl` file will appear in the `dist` directory. Do not rename it to ensure compatibility (e.g., `rhapso-0.1-py3-none-any.whl`).
+
+2. **Install and Verify:**
+  ```sh
+  pip install dist/rhapso-0.1-py3-none-any.whl
+  pip show rhapso
+  ```
+
+3. **Run Rhapso CLI:**
+  ```sh
+  Rhapso -h
+  ```
+  **Or import the package for scriping use:**
+  ```python
+  import Rhapso
+  from Rhapso.solver.solver import Solver
+  ```
 
 ## Setup
 To get Rhapso running on your local machine or AWS Glue, follow the steps below:
@@ -81,12 +118,6 @@ To use Rhapso with the AWS Glue template:
 - **Enable the AWS Glue API**
 - **Configure IAM roles and permissions for Glue jobs**
 
----
-
-## Usage
-
----
-
 ## Components Walkthrough
 
 This guide offers a high-level overview of Rhapso components, explaining each component's role in the process. It’s designed for users who want to understand or modify Rhapso’s process.
@@ -118,52 +149,6 @@ To Do
   *  [As TIFF/XML](https://drive.google.com/file/d/1Qs3juqQgYlDc2KglbcFTFKzdAQxgS9zc/view?usp=sharing) 
 
 ---
-
-## Build Package
-
-To build the Rhapso package as a `.whl` file, follow these steps:
-
-1. **Navigate to the project directory:**
-   ```sh
-   cd /path/to/Rhapso
-   ```
-
-2. **Ensure you have the required build tools installed:**
-   ```sh
-   pip install setuptools wheel
-   ```
-
-3. **Build the package:**
-   ```sh
-   python setup.py sdist bdist_wheel
-   ```
-
-4. **The built `.whl` file will be located in the `dist` directory.**
-
-### Using the Built `.whl` File
-
-1. **Navigate to the `dist` directory:**
-   ```sh
-   cd dist
-   ```
-
-2. **Install the `.whl` file:**
-   ```sh
-   pip install rhapso-0.1-py3-none-any.whl
-   ```
-
-3. **Verify the installation:**
-   ```sh
-   pip show rhapso
-   ```
-
-4. **Run the Rhapso CLI:**
-   ```sh
-   Rhapso -h
-   ```
-
----
-
 
 ### Fully Local
 
