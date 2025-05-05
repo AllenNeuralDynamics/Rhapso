@@ -21,8 +21,10 @@ class GlobalOptimization:
 
         self.align_tile = AlignTiles(pmc, tiles, fixed_views)
 
-    # calculate fit quality per tile
     def update_cost(self, view, tile):
+        """
+        Computes and stores the average distance and weighted cost (fit quality) of point matches for a tile.
+        """
         total_distance = 0.0
         total_cost = 0.0
 
@@ -49,8 +51,10 @@ class GlobalOptimization:
             self.tiles[view]['distance'] = average_distance
             self.tiles[view]['cost'] = average_cost
     
-    # monitor convergence
     def update_errors(self):
+        """
+        Monitor convergence by updating cost metrics for all tiles and returns the average alignment error.
+        """
         total_distance = 0.0
         min_error = float('inf') 
         max_error = 0.0
@@ -74,6 +78,9 @@ class GlobalOptimization:
         return average_error
 
     def apply_damp(self, view, tile):
+        """
+        Applies dampening to point positions by blending transformed and target coordinates.
+        """
         model = tile['model']['a']  
         matches = tile['matches']
 
@@ -95,12 +102,18 @@ class GlobalOptimization:
             self.tiles[view]['matches'][index]['p1'] = new_position.tolist()
 
     def fit_model(self, view, tile):
+        """
+        Fits and updates affine and rigid models for a tile using its point matches.
+        """
         a = self.align_tile.affine_fit_model(tile['model']['a'], tile['matches'])
         b = self.align_tile.rigid_fit_model(tile['model']['b'], tile['matches'])
         self.tiles[view]['model']['a'] = a
         self.tiles[view]['model']['b'] = b
     
     def apply(self, view, tile):
+        """
+        Applies the affine transformation to all point matches in a tile.
+        """
         model = 'affine'
 
         if model == 'affine':
@@ -118,6 +131,9 @@ class GlobalOptimization:
             self.tiles[view]['matches'][index]['p1'] = transformed_p1.tolist()
     
     def optimize_silently(self):
+        """
+        Iteratively refines tile alignments using model fitting and dampening until convergence or max iterations.
+        """
         iteration = 0
         errors = []
 
@@ -149,7 +165,9 @@ class GlobalOptimization:
             print(f"Iteration {iteration}: Average Error = {current_error}")  
         
     def compute_tiles(self):
-      
+        """
+        Interface the types of optimization set with user params
+        """
         # 1 round simple
         if(self.alignment_option == 1):
             self.optimize_silently()
@@ -163,5 +181,8 @@ class GlobalOptimization:
             pass
 
     def run(self):
+        """
+        Executes the entry point of the script.
+        """
         self.compute_tiles()
         return self.tiles

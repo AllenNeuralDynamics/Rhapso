@@ -15,6 +15,9 @@ class ModelAndTileSetup():
         self.tiles = {}
 
     def create_tiles(self):
+        """
+        Initializes tile data structures with models, point matches, and connected view metadata.
+        """
         view_id_list = list(self.view_id_set)
         for view_id in view_id_list:
             view_id_key = f"timepoint: {view_id[0]}, setup: {view_id[1]}"
@@ -36,6 +39,9 @@ class ModelAndTileSetup():
             }
     
     def create_default_interpolated_affine_model_3d(self):
+        """
+        Returns a default 3D affine transformation model with identity rotation and zero translation.
+        """
         return {
             "m00": 1.0, "m01": 0.0, "m02": 0.0, "m03": 0.0,
             "m10": 0.0, "m11": 1.0, "m12": 0.0, "m13": 0.0,
@@ -48,6 +54,9 @@ class ModelAndTileSetup():
         }
     
     def create_default_rigid_model_3d(self):
+        """
+        Returns a default 3D rigid transformation model with identity rotation and zero translation.
+        """
         return {
             "m00": 1.0, "m01": 0.0, "m02": 0.0, "m03": 0.0,
             "m10": 0.0, "m11": 1.0, "m12": 0.0, "m13": 0.0,
@@ -60,6 +69,9 @@ class ModelAndTileSetup():
         }
 
     def create_default_affine_model_3d(self):
+        """
+        Returns a default 3D affine model with identity matrix and initialized inverse and cost.
+        """
         return {
             "m00": 1.0, "m01": 0.0, "m02": 0.0, "m03": 0.0,
             "m10": 0.0, "m11": 1.0, "m12": 0.0, "m13": 0.0,
@@ -72,6 +84,9 @@ class ModelAndTileSetup():
         }
     
     def create_models(self):
+        """
+        Initializes default transformation models and parameters for affine and rigid alignment.
+        """
         self.model = {
             'a' : self.create_default_affine_model_3d(),
             'affine' : self.create_default_interpolated_affine_model_3d(),
@@ -84,15 +99,17 @@ class ModelAndTileSetup():
         }
     
     def apply_transform(self, point, matrix):
+        """
+        Applies a 3D affine transformation matrix to a point using homogeneous coordinates.
+        """
         point_homogeneous = np.append(point, 1)
         transformed_point = matrix.dot(point_homogeneous)[:3]  
         return transformed_point
-    
-    def assign_point_matches(self):
-        for pair in self.pairs:
-            pass
 
     def setup_point_matches_from_interest_points(self):
+        """
+        Generates transformed interest point pairs between views for downstream matching.
+        """
         view_id_list = list(self.view_id_set)
 
         # Iterate and compare all viewIDs
@@ -147,9 +164,11 @@ class ModelAndTileSetup():
                     self.pairs.append(((key_i, key_j), inliers))
     
     def run(self):
+        """
+        Executes the entry point of the script.
+        """
         self.setup_point_matches_from_interest_points()
         self.create_models()
         self.create_tiles()
-        # self.assign_point_matches()
 
         return self.tiles, self.model, self.pairs
