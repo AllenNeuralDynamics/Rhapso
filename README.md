@@ -1,8 +1,14 @@
 # Rhapso
 
-Rhapso is a Python-based tool designed to robustly and efficiently align and fuse large-scale microscopy datasets. The tool is built with flexibility, scalability, and modularity in mind, making it suitable for cloud-native deployments, as well as on-prem or cluster-based executions. It aims to improve existing imaging pipelines by incorporating performance optimizations, enhanced robustness, and automation through machine learning.
+**Rhapso** is a versatile Python tool designed for aligning and fusing large-scale microscopy datasets. Its architecture is independent of specific run environments or 3D image data formats, allowing for extensive customization with user-defined data loaders and pipeline scripts. 
 
-Rhapso is being developed as part of the Allen Institute for Neurotechnology (AIND) and will be published as an open-source software component in the OCTO SDK for image processing. Initially, it will benefit AIND's ExaSPIM pipeline and the broader scientific community in their microscopy research.
+We have custom class templates available for usage of Rhapso in AWS Glue (Spark ETL) and on conventional machines (local machine, vm). As well as custom input classes for OME TIFF and Zarr data formats. 
+
+Rhapso supports scalable and efficient data processing, adaptable to both cloud and local computing resources. If you have a different 3D image file format or run environment, create your own custom data loader and pipeline script to get started.
+
+Rhapso is being developed in collaboration with Allen Institute Neural Dynamics (AIND). Initially, it will benefit AIND's ExaSPIM pipeline and the broader scientific community in their microscopy research.
+
+## Example Usage Media Content Coming Soon....
 
 [![License](https://img.shields.io/badge/license-MIT-brightgreen)](LICENSE)
 
@@ -10,9 +16,9 @@ Rhapso is being developed as part of the Allen Institute for Neurotechnology (AI
 <!-- UPDATE THIS WHEN OPEN SOURCED -->
   [Allen Institute Internal Coms](https://teams.microsoft.com/l/channel/19%3AIv_3CdryfboX3E0g1BbzCi3Y8KRgNCdAv3idJ9epV-k1%40thread.tacv2/Project%20Rhapso-Shared?groupId=87b91b48-bb2a-4a00-bc59-5245043a0708&tenantId=32669cd6-737f-4b39-8bdd-d6951120d3fc&ngc=true&allowXTenantAccess=true)
 
-
 ## Table of Contents
 - [Repository Structure](#repository-structure)
+- [Setup](#setup)
 - [Usage](#usage)
 - [Componenents Walkthrough](#components-walkthrough)
 - [Sample Data](#sample-data)
@@ -26,26 +32,27 @@ Rhapso is being developed as part of the Allen Institute for Neurotechnology (AI
 - [Cloud Deployment Plan](#cloud-deployment-plan)
 - [FAQ](#frequently-asked-questions)
 
-
 ---
-## Usage
 
+## Setup
+To get Rhapso running on your local machine or AWS Glue, follow the steps below:
 
-## Setup Instructions
-
-### Clone Git Repository
+### Clone the Repository
 ```sh
 git clone https://github.com/AllenNeuralDynamics/Rhapso.git
 cd Rhapso
 ```
 
-### Setup Python Virtual Environment
+### Python Version
+Rhapso requires Python 3.11. Ensure this version is installed and active.
+
+### Set Up Environment
+You can install dependencies either in a virtual environment or directly into your Python interpreter:
+
+**Using a virtual environment (recommended):**
 ```sh
-python -m venv virtenv
-# Windows
-virtenv\Scripts\activate
-# Mac/Linux
-source virtenv/bin/activate
+python3.11 -m venv venv
+source venv/bin/activate
 ```
 
 ### Download and Install Dependencies
@@ -64,23 +71,51 @@ pip install -e .
 pip show rhapso
 ```
 
-### Run Rhapso Package
-```sh
-# Using command line
-Rhapso alice
+### Prepare for Usage
+Once installed, refer to [Usage](#usage) to determine which script to run based on your task.
 
-# Using Python module
-python -m Rhapso
+### AWS Glue Setup (Optional)
+To use Rhapso with the AWS Glue template:
 
-# Using Python script
-import Rhapso
-print(Rhapso.__version__)
-```
+- **Ensure you have an active AWS account**
+- **Enable the AWS Glue API**
+- **Configure IAM roles and permissions for Glue jobs**
 
-### Uninstall Rhapso Package
-```sh
-pip uninstall rhapso
-```
+---
+
+## Usage
+
+---
+
+## Components Walkthrough
+
+This guide offers a high-level overview of Rhapso components, explaining each component's role in the process. It’s designed for users who want to understand or modify Rhapso’s process.
+
+### Interest Point Detection
+ Interest Point Detection involves detecting interest points by converting XML metadata into DataFrames, generating transformation matrices, detecting overlaps, loading and preprocessing image data,refining detected points, and saving the refined interest points for matching.
+
+For more in depth information, checkout the [Detection ReadMe](./Rhapso/detection/readme.md)
+
+### Interest Point Matching
+
+Interest Point Matching involves loading and filtering interest points, organizing views, setting up pairwise matching, applying the RANSAC algorithm, refining matches, and compiling and storing results for Solver.
+
+For more in depth information, checkout the [Matching ReadMe](./Rhapso/matching/readme.md)
+
+### Solver
+
+  Solver involves setting up models and tiles, aligning tiles using transformation models, performing optimization for consistency in preparation for Fusion.
+
+For more in depth information, checkout the [Solver ReadMe](./Rhapso/solver/readme.md)
+
+
+### Cloud Fusion
+To Do
+
+---
+
+## Sample Data
+  *  [As TIFF/XML](https://drive.google.com/file/d/1Qs3juqQgYlDc2KglbcFTFKzdAQxgS9zc/view?usp=sharing) 
 
 ---
 
@@ -381,38 +416,6 @@ Watch the execution in real-time and make any necessary adjustments based on the
 ### Cloud Deployment Image
 
 ![Cloud Deployment](docs/deployment.png)
-
----
-
-## Components Walkthrough
-
-This guide offers a high-level overview of Rhapso components, explaining each component's role in the process. It’s designed for users who want to understand or modify Rhapso’s process.
-
-### Interest Point Detection
- Interest Point Detection involves detecting interest points by converting XML metadata into DataFrames, generating transformation matrices, detecting overlaps, loading and preprocessing image data,refining detected points, and saving the refined interest points for matching.
-
-For more in depth information, checkout the [Detection ReadMe](./Rhapso/detection/readme.md)
-
-### Interest Point Matching
-
-Interest Point Matching involves loading and filtering interest points, organizing views, setting up pairwise matching, applying the RANSAC algorithm, refining matches, and compiling and storing results for Solver.
-
-For more in depth information, checkout the [Matching ReadMe](./Rhapso/matching/readme.md)
-
-### Solver
-
-  Solver involves setting up models and tiles, aligning tiles using transformation models, performing optimization for consistency in preparation for Fusion.
-
-For more in depth information, checkout the [Solver ReadMe](./Rhapso/solver/readme.md)
-
-
-### Cloud Fusion
-To Do
-
----
-
-## Sample Data
-To Do - add sample data sets for users to download
 
 ---
 
