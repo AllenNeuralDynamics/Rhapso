@@ -77,9 +77,9 @@ Once installed, refer to [Usage](#usage) to determine which script to run based 
 ### AWS Glue Setup (Optional)
 To use Rhapso with the AWS Glue template:
 
--**Ensure you have an active AWS account**
--**Enable the AWS Glue API**
--**Configure IAM roles and permissions for Glue jobs**
+- **Ensure you have an active AWS account**
+- **Enable the AWS Glue API**
+- **Configure IAM roles and permissions for Glue jobs**
 
 ---
 
