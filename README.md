@@ -2,7 +2,7 @@
 
 **Rhapso** is a modular Python toolkit for aligning and fusing large-scale microscopy datasets. Built from decoupled components, Rhapso separates data loading and execution logic from its core functionality, making it flexible and easy to adapt across environments and formats.
 
-To run Rhapso, users provide a data loader and a pipeline script that orchestrates the processing steps. We include example loaders and pipeline scripts to support both large-scale runs on AWS Glue (Spark ETL) and smaller-scale testing on local or conventional machines. Input formats like OME-TIFF and Zarr are supported out of the box.
+To run Rhapso, users can either provide a data loader and a pipeline script that orchestrates the processing steps or use one of ours. We include example loaders and pipeline scripts to support both large-scale runs on AWS Glue (Spark ETL) and smaller-scale testing on local or conventional machines. Input formats like OME-TIFF and Zarr are supported out of the box.
 
 Rhapso is developed in collaboration with the Allen Institute for Neural Dynamics (AIND), initially supporting AIND’s ExaSPIM pipeline and eventually broadly benefiting microscopy research.
 
