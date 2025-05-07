@@ -3,7 +3,6 @@ import json
 import os
 import numpy as np
 import s3fs
-import tensorstore as ts
 
 # This class fetches and preps data from n5
 
@@ -20,6 +19,9 @@ class DataPrep():
         self.label_map_global = {}
     
     def get_connected_views_from_n5(self):
+        """
+        Loads connected view mappings from N5 metadata, supporting both S3 and local sources.
+        """
         for _, row in self.interest_points_df.iterrows():
             view_id = f"timepoint: {row['timepoint']}, setup: {row['setup']}"
 
@@ -43,6 +45,9 @@ class DataPrep():
                     print(f"Attributes file not found for view {view_id}: {full_path}")
     
     def load_json_data(self, json_path):
+        """
+        Loads JSON data from either an S3 path or local filesystem.
+        """
         if json_path.startswith('s3://'):
             fs = s3fs.S3FileSystem(anon=False)  
             with fs.open(json_path, 'r') as file:
@@ -54,6 +59,9 @@ class DataPrep():
         return data
     
     def transform_points(self, view_id, corresponding_view_id, ip, corr_ip):
+        """
+        Transforms two points from local to world coordinates using their view transform matrices.
+        """
         transform_matrix = self.view_transform_matrices[view_id]
         corresponding_transform_matrix = self.view_transform_matrices[corresponding_view_id]
 
@@ -71,6 +79,9 @@ class DataPrep():
         return ip_world, corr_ip_world
         
     def get_corresponding_data_from_n5(self):
+        """
+        Parses and transforms corresponding interest point data from N5 format into world space coordinates.
+        """
         if self.file_source == 's3':
             s3 = s3fs.S3FileSystem(anon=False)
             store = s3fs.S3Map(root=self.data_prefix, s3=s3)
@@ -101,9 +112,6 @@ class DataPrep():
                 timepoint, setup, label = parts[0], parts[1], parts[2]
                 corresponding_view_id = f"timepoint: {timepoint}, setup: {setup}"
 
-                corr = int(corr_index)
-                ip = int(ip_index)
-
                 ip, corr_ip = self.transform_points(view_id, corresponding_view_id, self.interest_points[view_id][int(ip_index)], self.interest_points[corresponding_view_id][int(corr_index)])
 
                 if view_id not in self.corresponding_interest_points:
@@ -119,6 +127,9 @@ class DataPrep():
                 })
     
     def get_all_interest_points_from_n5(self):
+        """
+        Loads raw interest point coordinates from N5 storage into memory, keyed by view ID.
+        """
         if self.file_source == 's3':
             s3 = s3fs.S3FileSystem(anon=False)
             store = s3fs.S3Map(root=self.data_prefix, s3=s3)
@@ -140,6 +151,9 @@ class DataPrep():
                 self.interest_points[view_id] = interest_points
                             
     def build_label_map(self):
+        """
+        Constructs a mapping of labels for each view ID from the interest points dataframe.
+        """
         for _, row in self.interest_points_df.iterrows():
             view_id_key = f"timepoint: {row['timepoint']}, setup: {row['setup']}"
             
@@ -149,9 +163,15 @@ class DataPrep():
             self.label_map_global[view_id_key][row['label']] = 1.0
     
     def create_view_id_set(self):
+        """
+        Generates a set of unique (timepoint, setup) view ID pairs from the dataframe.
+        """
         self.view_id_set = set(zip(self.interest_points_df['timepoint'], self.interest_points_df['setup']))
     
     def run(self):
+        """
+        Executes the entry point of the script.
+        """
         self.create_view_id_set()
         self.build_label_map()
         self.get_all_interest_points_from_n5()

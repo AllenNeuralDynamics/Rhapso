@@ -11,6 +11,9 @@ class AlignTiles:
         self.min_matches = 3
 
     def invert_transformation(self, model):
+        """
+        Inverts a 3D affine transformation by computing the inverse rotation and translation.
+        """
         # Extract the rotation and translation components
         R = np.array([
             [model['m00'], model['m01'], model['m02']],
@@ -34,6 +37,10 @@ class AlignTiles:
         return model
     
     def translation_fit_model(self, transformation_matrix, matches):
+        """
+        Computes and sets the optimal translation to align two weighted point sets.
+        """
+
         pc = np.zeros(3)
         qc = np.zeros(3)
         total_weight = 0.0
@@ -62,6 +69,10 @@ class AlignTiles:
         return transformation_matrix
         
     def rigid_fit_model(self, rigid_model, matches):
+        """
+        Computes the best-fit rigid transformation (rotation + translation) between weighted point sets.
+        """
+
         # Calculate weighted centers of mass for p1 and p2
         sumW = sum(m['weight'] for m in matches)
         pc = np.sum([m['weight'] * np.array(m['p1']) for m in matches], axis=0) / sumW
@@ -106,6 +117,10 @@ class AlignTiles:
         return rigid_model
     
     def affine_fit_model(self, affine_model, matches):
+        """
+        Computes the best-fit affine transformation between point sets using least squares.
+        """
+
         # Calculate centers of mass for p and q
         pc = np.mean([m['p1'] for m in matches], axis=0)
         qc = np.mean([m['p2'] for m in matches], axis=0)
@@ -153,8 +168,11 @@ class AlignTiles:
 
         return affine_model
 
-    # Fit models to point matches
     def fit(self, tile, pm):
+        """
+        Fits multiple transformation models to a tile using provided point matches.
+        """
+
         tile = copy.deepcopy(tile)
         model = {
             'a': self.affine_fit_model(tile[1]['model']['a'], pm),
@@ -167,8 +185,11 @@ class AlignTiles:
 
         return tile
     
-    # find point matches between target and reference tile
     def get_connected_point_matches(self, target_tile, reference_tile):
+        """
+        Finds point matches in the target tile that connect to the reference tile.
+        """
+
         reference_matches = reference_tile[1]['matches']
         reference_points = []
         
@@ -176,20 +197,18 @@ class AlignTiles:
             reference_points.append(match['p1'])
         
         connected_point_matches = []
-        flipped_point_matches = []
 
         for match in target_tile[1]['matches']:
             if any(np.array_equal(match['p2'], ref_point) for ref_point in reference_points):
                 connected_point_matches.append(match)
-                # flipped_match = {'p1': match['p2'], 'p2': match['p1'], 'strength': 1.0, 'weight': 1.0}
-                # flipped_point_matches.append(flipped_match)
-        
-        # implement the flipping process here for the connected point matches
         
         return connected_point_matches
         
-    # Interface a pre-alignment process for the transformation matrices
     def pre_align(self):
+        """
+        Iteratively aligns tiles by fitting transformations using shared point matches with fixed tiles.
+        """
+
         aligned_tiles = []
         unaligned_tiles = []
         final_tiles = {}
@@ -230,6 +249,9 @@ class AlignTiles:
         return final_tiles, unaligned_tiles  
 
     def run(self):
+        """
+        Executes the entry point of the script.
+        """
         final_tiles, unaligned_tiles = self.pre_align()
         if len(unaligned_tiles) > 0:
             for tile in unaligned_tiles:
