@@ -28,7 +28,6 @@ Rhapso is developed in collaboration with the Allen Institute for Neural Dynamic
 - [Run Tests](#run-tests)
 - [Environments](#environments)
 - [Use Cases](#use-cases)
-- [Cloud Deployment Plan](#cloud-deployment-plan)
 - [FAQ](#frequently-asked-questions)
 
 ---
