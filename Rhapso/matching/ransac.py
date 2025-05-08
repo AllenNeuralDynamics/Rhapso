@@ -2,10 +2,12 @@ import numpy as np
 
 class RANSAC:
     def __init__(self, iterations=1000, threshold=10.0):
+        """Initialize RANSAC with iteration count and threshold"""
         self.iterations = iterations
         self.threshold = threshold
 
     def filter_matches(self, pointsA, pointsB, matches):
+        """Filter matches using RANSAC algorithm"""
         matches_arr = np.array(matches)
         diff_vectors = [pointsB[j] - pointsA[i] for i, j in matches_arr]
         diff_vectors = np.array(diff_vectors)
