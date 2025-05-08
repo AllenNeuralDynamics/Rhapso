@@ -8,7 +8,11 @@ import zarr
 import s3fs
 import os
 import numpy as np
-from Rhapso.matching.interest_point_matching import print_dataset_info, start_matching, fetch_xml_file, parse_xml, parse_and_read_datasets, perform_pairwise_matching, save_matches_as_n5
+from Rhapso.matching.xml_parser import XMLParser
+from Rhapso.matching.data_loader import DataLoader
+from Rhapso.matching.matcher import Matcher
+from Rhapso.matching.result_saver import ResultSaver
+from Rhapso.matching.ransac import RANSAC
 
 def print_dataset_info(store_path, dataset_prefix, print_data=False, num_points=30):
     print("\n=====================================")
@@ -89,29 +93,34 @@ def list_files_under_prefix(node, path):
                 print(f"Dataset: {new_path} - {node[new_path].shape}")
     except KeyError:
         print(f"No items found under the path {path}")
- 
-if __name__ == "__main__":
+
+def main(xml_file, n5_folder_base, output_path):
     try:
-        # Run output detection sanity check on BSS matching output
-        prefix = "tpId_18_viewSetupId_1/beads/correspondences/data/"
-        #n5_bss= "/mnt/c/Users/marti/Documents/allen/data/April Dataset for Interest Points As TIFF XML (unaligned)/BSS after detection, matching IP_TIFF_XML/interestpoints.n5"
-        #print_dataset_info(n5_bss, prefix, print_data=True, num_points='all') 
+        # Parse XML file
+        xml_parser = XMLParser(xml_file)
+        datasets = xml_parser.parse()
 
-        # Run Rhapso matching on local data
-        xml_path = "/mnt/c/Users/marti/Documents/allen/data/April Dataset for Interest Points As TIFF XML (unaligned)/BSS detection, rhapso matching/dataset.xml"
-        n5_base_path = "/mnt/c/Users/marti/Documents/allen/data/April Dataset for Interest Points As TIFF XML (unaligned)/BSS detection, rhapso matching/interestpoints.n5"
-        output_path = n5_base_path 
-        start_matching(xml_path, n5_base_path, output_path)
-        
-        # Run Rhapso matching on S3 data
-        #xml_path = "s3://rhapso-fused-zarr-output-data/matching_input_sample/dataset.xml"
-        #n5_base_path = "s3://rhapso-fused-zarr-output-data/matching_input_sample/interestpoints.n5"
-        #output_path = n5_base_path  # Set output path to be the same as input n5 data
-        #start_matching(xml_path, n5_base_path, output_path)
+        # Load data
+        data_loader = DataLoader(n5_folder_base)
+        data = data_loader.load(datasets)
 
-        # Check our output dataset
-        print_dataset_info(n5_base_path, prefix, print_data=True, num_points=30) 
+        # Perform matching
+        matcher = Matcher()
+        ransac = RANSAC(iterations=1000, threshold=10.0)
+        matches = matcher.match(data)
+        filtered_matches, translation = ransac.filter_matches(data['pointsA'], data['pointsB'], matches)
 
+        # Save results
+        result_saver = ResultSaver(output_path)
+        result_saver.save(filtered_matches)
+
+        print("✅ Matching process completed successfully.")
     except Exception as e:
-        print(f"❌ Unexpected error in script execution: {e}")
+        print(f"❌ Error during matching process: {e}")
         sys.exit(1)
+
+if __name__ == "__main__":
+    xml_file = "/path/to/dataset.xml"
+    n5_folder_base = "/path/to/n5/folder"
+    output_path = "/path/to/output"
+    main(xml_file, n5_folder_base, output_path)
