@@ -18,6 +18,9 @@ bioio>=1.3.0
 bioio-tifffile>=1.0.0
 tifffile==2025.1.10
 
+# Matching
+scikit-learn
+
 # Fusion multiscale
 aind-data-transfer==0.25.2
 kerchunk

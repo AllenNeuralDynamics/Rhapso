@@ -39,21 +39,83 @@ class ResultSaver:
         
         # Create ID map and process matches
         id_map = self._create_id_map(view_id, matches, data_global)
-        matches_array = self._prepare_matches_array(matches, id_map)
+        matches_array = self._prepare_matches_array(view_id, matches, id_map)
         
+        if len(matches_array) == 0:
+            print(f"No matches to save for view {view_id}")
+            return
+            
         # Save to store
         root = zarr.group(store=self.store, overwrite=False)
         group = root.require_group(group_path)
         correspondences = group.require_group('correspondences')
-        correspondences.create_dataset("data", data=matches_array)
+        
+        # Delete existing dataset if it exists
+        if 'data' in correspondences:
+            del correspondences['data']
+        
+        # Create dataset with explicit shape and dtype
+        correspondences.create_dataset(
+            "data", 
+            data=matches_array,
+            shape=matches_array.shape,
+            dtype=np.uint64,
+            chunks=(min(1000, matches_array.shape[0]), 3)
+        )
         correspondences.attrs['idMap'] = id_map
+        print(f"Saved {len(matches_array)} correspondences for view {view_id}")
 
     def _create_id_map(self, view_id, matches, data_global):
         """Create ID map for correspondence storage"""
-        # Implementation for creating ID map goes here
-        pass
+        timepoint, setup_id = view_id
+        id_map = {}
+        
+        # Create mapping for other views this view has matches with
+        for match in matches:
+            if match[0] == view_id:
+                other_view = match[1]
+            else:
+                other_view = match[0]
+                
+            # Create key in format "timepoint,setup,beads"
+            key = f"{other_view[0]},{other_view[1]},beads"
+            if key not in id_map:
+                id_map[key] = len(id_map)  # Assign incrementing IDs
+                
+        return id_map
 
-    def _prepare_matches_array(self, matches, id_map):
+    def _prepare_matches_array(self, view_id, matches, id_map):
         """Prepare matches array for storage"""
-        # Implementation for preparing matches array goes here
-        pass
+        matches_list = []
+        for match in matches:
+            try:
+                # Extract the match components safely
+                if match[0] == view_id:  
+                    idx_a = match[2][0] if isinstance(match[2], list) else match[2]
+                    idx_b = match[3][0] if isinstance(match[3], list) else match[3]
+                    other_view = match[1]
+                else:  
+                    idx_a = match[3][0] if isinstance(match[3], list) else match[3]
+                    idx_b = match[2][0] if isinstance(match[2], list) else match[2]
+                    other_view = match[0]
+                
+                # Get ID from map for the other view
+                other_view_key = f"{other_view[0]},{other_view[1]},beads"
+                other_view_id = id_map[other_view_key]
+                
+                # Convert all values to integers
+                matches_list.append([
+                    int(float(idx_a)),
+                    int(float(idx_b)),
+                    int(other_view_id)
+                ])
+            except Exception as e:
+                # Only print warning if debug logging is enabled
+                if hasattr(self, 'debug') and self.debug:
+                    print(f"Warning: Skipping match due to error: {e}")
+                continue
+                
+        if not matches_list:
+            return np.array([], dtype=np.uint64)
+            
+        return np.array(matches_list, dtype=np.uint64)

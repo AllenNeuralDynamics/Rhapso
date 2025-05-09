@@ -1,6 +1,6 @@
 from Rhapso.matching.xml_parser import XMLParser
 from Rhapso.matching.data_loader import DataLoader
-from Rhapso.matching.matcher import Matcher, TransformationModel, RegularizationModel
+from Rhapso.matching.matcher import Matcher
 from Rhapso.matching.result_saver import ResultSaver
 from Rhapso.matching.ransac import RANSAC
 
@@ -12,10 +12,10 @@ class MatchingPipeline:
         self.parser = XMLParser(xml_file)
         self.data_loader = DataLoader(n5_folder_base)
         
-        # Create matcher with explicit model parameters
+        # Create matcher with explicit model parameters using nested enums
         self.matcher = Matcher(
-            transform_model=TransformationModel.AFFINE,
-            reg_model=RegularizationModel.RIGID,
+            transform_model=Matcher.TransformationModel.AFFINE,
+            reg_model=Matcher.RegularizationModel.RIGID,
             lambda_val=0.1
         )
         self.ransac = RANSAC()
@@ -32,11 +32,8 @@ class MatchingPipeline:
         # Set up view groups using complete dataset info
         setup = self.parser.setup_groups(view_registrations)
         
-        # Build label map using complete dataset info
-        label_map_global = self.data_loader.build_label_map(
-            view_ids_global, 
-            data_global['sequenceDescription']
-        )
+        # Build label map using view IDs only
+        label_map_global = self.data_loader.build_label_map(view_ids_global)
         
         # TODO: in parallel
         all_results = []
@@ -85,7 +82,7 @@ def main(xml_file, n5_folder_base, output_path):
     pipeline.run()
 
 if __name__ == "__main__":
-    xml_file = "/path/to/dataset.xml"
-    n5_folder_base = "/path/to/n5/folder"
-    output_path = "/path/to/output"
+    xml_file = "/home/martin/Documents/Allen/Data/IP_TIFF_XML/dataset.xml"
+    n5_folder_base = "/home/martin/Documents/Allen/Data/IP_TIFF_XML/interestpoints.n5"
+    output_path = "/home/martin/Documents/Allen/Data/IP_TIFF_XML/matchingOutput.n5"
     main(xml_file, n5_folder_base, output_path)

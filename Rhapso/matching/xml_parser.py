@@ -78,15 +78,36 @@ class XMLParser:
 
     def setup_groups(self, view_registrations):
         """Set up view groups for pairwise matching"""
-        groups = {}
+        # Get all views from viewsInterestPoints
+        views = list(self.data_global['viewsInterestPoints'].keys())
+        
+        # Group views by timepoint
+        timepoint_groups = {}
+        for view in views:
+            timepoint, setup_id = view
+            if timepoint not in timepoint_groups:
+                timepoint_groups[timepoint] = []
+            timepoint_groups[timepoint].append(view)
+
+        # Create pairs within each timepoint
         pairs = []
-        # TODO: Implement grouping logic similar to BigStitcher's setupGroups
+        for timepoint, timepoint_views in timepoint_groups.items():
+            for i in range(len(timepoint_views)):
+                for j in range(i + 1, len(timepoint_views)):
+                    pairs.append((timepoint_views[i], timepoint_views[j]))
+
+        print(f"Created {len(pairs)} pairs for matching")
+        for pair in pairs[:5]:  # Print first 5 pairs as example
+            print(f"Pair: ViewId[{pair[0][0]},{pair[0][1]}] <=> ViewId[{pair[1][0]},{pair[1][1]}]")
+        if len(pairs) > 5:
+            print("... and more pairs")
+
         return {
-            'groups': groups,
+            'groups': timepoint_groups,
             'pairs': pairs,
             'rangeComparator': None,
             'subsets': None,
-            'views': None
+            'views': views
         }
 
     def get_data_global(self):
