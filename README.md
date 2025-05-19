@@ -19,7 +19,7 @@
 - [Summary](#summary)
 - [Build Package](#build-package)
   - [Using the Built `.whl` File](#using-the-built-whl-file)
-- [How to Run](#how-to-run)
+- [Usage](#usage)
 - [Componenents Walkthrough](#components-walkthrough)
 - [Command Line Usage](#command-line-usage)
 - [Setup Instructions](#setup-instructions)
@@ -78,7 +78,7 @@ Sample pipeline instructions are provided for pre-made templates, but if you wan
 
 ---
 
-## How to Run:
+## Usage:
 
 ### Python Pipeline Guide: Rhapso/pipelines/python_pipeline.py
 
