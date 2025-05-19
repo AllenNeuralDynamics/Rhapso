@@ -66,37 +66,7 @@ pip install -r requirements.txt
 
 ---
 
-## Build Package Instructions
-
-### Build and Use the `.whl` File
-
-1. **Build the `.whl` File in the root of this repo:**
-  ```sh
-  cd /path/to/Rhapso
-  pip install setuptools wheel
-  python setup.py sdist bdist_wheel
-  ```
-  The `.whl` file will appear in the `dist` directory. Do not rename it to ensure compatibility (e.g., `rhapso-0.1-py3-none-any.whl`).
-
-2. **Install and Verify:**
-  ```sh
-  pip install dist/rhapso-0.1-py3-none-any.whl
-  pip show rhapso
-  ```
-
-3. **Run Rhapso CLI:**
-  ```sh
-  Rhapso -h
-  ```
-  **Or import the package for scriping use:**
-  ```python
-  import Rhapso
-  from Rhapso.solver.solver import Solver
-  ```
-
----
-
-## Usage:
+## Usage
 
 ### Python Pipeline Guide: Rhapso/pipelines/python_pipeline.py
 
@@ -152,6 +122,36 @@ This pipeline enables the execution of Rhapso on production data using AWS Glue'
 
 ### Monitoring
 Watch the execution in real-time and make any necessary adjustments based on the job performance and outputs.
+
+---
+
+## Build Package Instructions
+
+### Build and Use the `.whl` File
+
+1. **Build the `.whl` File in the root of this repo:**
+  ```sh
+  cd /path/to/Rhapso
+  pip install setuptools wheel
+  python setup.py sdist bdist_wheel
+  ```
+  The `.whl` file will appear in the `dist` directory. Do not rename it to ensure compatibility (e.g., `rhapso-0.1-py3-none-any.whl`).
+
+2. **Install and Verify:**
+  ```sh
+  pip install dist/rhapso-0.1-py3-none-any.whl
+  pip show rhapso
+  ```
+
+3. **Run Rhapso CLI:**
+  ```sh
+  Rhapso -h
+  ```
+  **Or import the package for scriping use:**
+  ```python
+  import Rhapso
+  from Rhapso.solver.solver import Solver
+  ```
 
 ---
 
