@@ -2,12 +2,6 @@
 
 **Rhapso** is a modular Python toolkit for aligning and fusing large-scale microscopy datasets. 
 
-Built from decoupled components, Rhapso separates data loading and execution logic from its core functionality, making it flexible and easy to adapt across environments and formats.
-
-To run Rhapso, users can either provide a data loader and a pipeline script that orchestrates the processing steps or use one of ours. We include example loaders and pipeline scripts to support both large-scale runs on AWS Glue (Spark ETL) and smaller-scale testing on local or conventional machines. Input formats like OME-TIFF and Zarr are supported out of the box.
-
-Rhapso is developed in collaboration with the Allen Institute for Neural Dynamics (AIND), initially supporting AIND’s ExaSPIM pipeline and eventually broadly benefiting microscopy research.
-
 [![License](https://img.shields.io/badge/license-MIT-brightgreen)](LICENSE)
 [![Python Version](https://img.shields.io/badge/python-3.11-blue.svg)](https://www.python.org/downloads/release/python-3110/)
 [![Build Status](https://img.shields.io/github/actions/workflow/status/AllenNeuralDynamics/Rhapso/ci.yml?branch=main)](https://github.com/AllenNeuralDynamics/Rhapso/actions)
@@ -33,6 +27,12 @@ Rhapso is developed in collaboration with the Allen Institute for Neural Dynamic
 - [Use Cases](#use-cases)
 - [FAQ](#frequently-asked-questions)
 
+## Summary
+Built from decoupled components, Rhapso separates data loading and execution logic from its core functionality, making it flexible and easy to adapt across environments and formats.
+
+To run Rhapso, users can either provide a data loader and a pipeline script that orchestrates the processing steps or use one of ours. We include example loaders and pipeline scripts to support both large-scale runs on AWS Glue (Spark ETL) and smaller-scale testing on local or conventional machines. Input formats like OME-TIFF and Zarr are supported out of the box.
+
+Rhapso is developed in collaboration with the Allen Institute for Neural Dynamics (AIND), initially supporting AIND’s ExaSPIM pipeline and eventually broadly benefiting microscopy research.
 
 ### Environments
 This package is designed to target three main environments:
@@ -71,6 +71,20 @@ Sample pipeline instructions are provided for pre-made templates, but if you wan
   from Rhapso.solver.solver import Solver
   ```
 
+## How to Run a Full End-to-End Rhapso Run:
+
+### Local
+1. Install/setup Rhapso and sample data locally.
+2. Ensure local input/output paths are correct inside `python_pipeline.py` and run it:
+
+    `(venv) python Rhapso/Rhapso/pipelines/python_pipeline.py`
+
+### Cloud
+1. Create an AWS Glue 5.0 job.
+2. Copy and paste the contents of the following file into the Glue job:
+
+    `Rhapso/Rhapso/pipelines/spark_etl_pipeline.py`
+3. Run the Glue job.
 
 ## Components Walkthrough
 
