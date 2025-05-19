@@ -5,9 +5,9 @@ from Rhapso.matching.interest_point_matching import build_label_map
 class InputValidation:
 
     def __init__(self, data_global, reference_tp, registration_tp, labels, label_weights, fixed_views, group_illums,
-                group_channels, group_tiles, split_timepoints, disable_fixed_views, solver_source, image_loader_data):
+                group_channels, group_tiles, split_timepoints, disable_fixed_views, solver_source, image_loader_data, TO_REFERENCE_TIMEPOINT, TIMEPOINTS_INDIVIDUALLY):
+       
         self.data_global = data_global
-
         self.reference_tp = reference_tp
         self.labels = labels
         self.label_weights = label_weights
