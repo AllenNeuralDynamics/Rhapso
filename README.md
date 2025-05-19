@@ -11,21 +11,28 @@
 <!-- ## Example Usage Media Content Coming Soon....
 -- -->
 
+---
+
 ## Connect With Us
 <!-- UPDATE THIS WHEN OPEN SOURCED -->
   [Allen Institute Internal Coms](https://teams.microsoft.com/l/channel/19%3AIv_3CdryfboX3E0g1BbzCi3Y8KRgNCdAv3idJ9epV-k1%40thread.tacv2/Project%20Rhapso-Shared?groupId=87b91b48-bb2a-4a00-bc59-5245043a0708&tenantId=32669cd6-737f-4b39-8bdd-d6951120d3fc&ngc=true&allowXTenantAccess=true)
 
+---
+
 ## Table of Contents
-- [Componenents Walkthrough](#components-walkthrough)
-- [Sample Data](#sample-data)
-- [Command Line Usage](#command-line-usage)
-- [Setup Instructions](#setup-instructions)
+- [Summary](#summary)
 - [Build Package](#build-package)
   - [Using the Built `.whl` File](#using-the-built-whl-file)
+- [How to Run](#how-to-run)
+- [Componenents Walkthrough](#components-walkthrough)
+- [Command Line Usage](#command-line-usage)
+- [Setup Instructions](#setup-instructions)
 - [Run Tests](#run-tests)
 - [Environments](#environments)
 - [Use Cases](#use-cases)
 - [FAQ](#frequently-asked-questions)
+
+---
 
 ## Summary
 Built from decoupled components, Rhapso separates data loading and execution logic from its core functionality, making it flexible and easy to adapt across environments and formats.
@@ -42,6 +49,8 @@ This package is designed to target three main environments:
 > [!TIP]
 > Detailed instructions on how to run a sample end-to-end pipeline for each environment can be found on the [Wiki Page](https://github.com/AllenNeuralDynamics/Rhapso/wiki#example-pipelines).
 Sample pipeline instructions are provided for pre-made templates, but if you want to create your own template, you can do so based on the sample files available inside the `Rhapso/pipelines` folder.
+
+---
 
 ## Build Package Instructions
 
@@ -71,7 +80,9 @@ Sample pipeline instructions are provided for pre-made templates, but if you wan
   from Rhapso.solver.solver import Solver
   ```
 
-## How to Run a Full End-to-End Rhapso Run:
+---
+
+## How to Run:
 
 ### Python Pipeline Guide: Rhapso/pipelines/python_pipeline.py
 
@@ -128,7 +139,7 @@ This pipeline enables the execution of Rhapso on production data using AWS Glue'
 ### Monitoring
 Watch the execution in real-time and make any necessary adjustments based on the job performance and outputs.
 
---
+---
 
 ## Components Walkthrough
 
@@ -150,7 +161,6 @@ For more in depth information, checkout the [Matching ReadMe](./Rhapso/matching/
   Solver involves setting up models and tiles, aligning tiles using transformation models, performing optimization for consistency in preparation for Fusion.
 
 For more in depth information, checkout the [Solver ReadMe](./Rhapso/solver/readme.md) and the [detailed walkthrough on our wiki](https://github.com/AllenNeuralDynamics/Rhapso/wiki/3.-Solver).
-
 
 ### Cloud Fusion
 To Do
