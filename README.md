@@ -73,137 +73,6 @@ Sample pipeline instructions are provided for pre-made templates, but if you wan
 
 ## How to Run a Full End-to-End Rhapso Run:
 
-### Local
-1. Install/setup Rhapso and sample data locally.
-2. Ensure local input/output paths are correct inside `python_pipeline.py` and run it:
-
-    `(venv) python Rhapso/Rhapso/pipelines/python_pipeline.py`
-
-### Cloud
-1. Create an AWS Glue 5.0 job.
-2. Copy and paste the contents of the following file into the Glue job:
-
-    `Rhapso/Rhapso/pipelines/spark_etl_pipeline.py`
-3. Run the Glue job.
-
-## Components Walkthrough
-
-This guide offers a high-level overview of Rhapso components, explaining each component's role in the process. It’s designed for users who want to understand or modify Rhapso’s process.
-
-### Interest Point Detection
- Interest Point Detection involves detecting interest points by converting XML metadata into DataFrames, generating transformation matrices, detecting overlaps, loading and preprocessing image data,refining detected points, and saving the refined interest points for matching.
-
-For more in depth information, checkout the [Detection ReadMe](./Rhapso/detection/readme.md) and the [detailed walkthrough on our wiki](https://github.com/AllenNeuralDynamics/Rhapso/wiki/1.-Detection).
-
-### Interest Point Matching
-
-Interest Point Matching involves loading and filtering interest points, organizing views, setting up pairwise matching, applying the RANSAC algorithm, refining matches, and compiling and storing results for Solver.
-
-For more in depth information, checkout the [Matching ReadMe](./Rhapso/matching/readme.md) and the [detailed walkthrough on our wiki](https://github.com/AllenNeuralDynamics/Rhapso/wiki/2.-Matching).
-
-### Solver
-
-  Solver involves setting up models and tiles, aligning tiles using transformation models, performing optimization for consistency in preparation for Fusion.
-
-For more in depth information, checkout the [Solver ReadMe](./Rhapso/solver/readme.md) and the [detailed walkthrough on our wiki](https://github.com/AllenNeuralDynamics/Rhapso/wiki/3.-Solver).
-
-
-### Cloud Fusion
-To Do
-
-For more information about fusion, check out the [detailed walkthrough on our wiki](https://github.com/AllenNeuralDynamics/Rhapso/wiki/4.-Fusion).
-
----
-
-### Fully Local
-
-```sh
-pip install Rhapso
-Rhapso detect --i '../../dataset.zarr' --o '../dataset_with_ip.xml'
-```
-
-### Fully in Cloud
-
-Install Rhapso package and call it either via CLI, Python module, or as a Python library in scripts.
-
-### Cloud/Local Hybrid
-
-```sh
-pip install Rhapso
-aws configure
-Rhapso detect --i 's3://data.zarr' --o 's3://output/my_dataset.xml'
-```
-
-
-## Command Line Usage
-
-After installing Rhapso, you can use the following commands:
-
-### View General Help
-
-```bash
-Rhapso -h
-```
-
-### View Subcommand-Specific Help
-
-```bash
-Rhapso detect -h   # Detect Help  
-Rhapso match -h    # Match Help  
-Rhapso fuse -h     # Fuse Help  
-Rhapso solve -h    # Solve Help
-```
-
-## Example CLI Commands
-
-```bash
-# 1. Detect Interest Points
-Rhapso detect --sigma 1.8 --threshold 0.05 --medianFilter 10
-
-# 2. Match Features
-Rhapso match --x debug --l debug --method ICP \
-  --tiffPath "/home/martin/Documents/Allen/BigStitcherSpark Example Datasets/Interest Points (unaligned)/IP_TIFF_XML (after detection)/spim_TL18_Angle0.tif"
-
-# 3. Affine Fusion
-Rhapso fuse --scale 2.0 --output ./output/fused.tif --blend
-
-# 4. Solve Transformations
-Rhapso solve --method Affine --iterations 50 --tolerance 0.0005
-```
-
-### Example Commands:
-```sh
-# Example script run for import method
-python example.py 
-
-# Run locally with local xml file
-Rhapso --xmlToDataframe /mnt/c/Users/marti/Documents/Allen/repos/Rhapso-Sample-Data/IP_TIFF_XML/dataset.xml
-
-# Run locally with cloud s3 xml file (must run aws configure first, and give iam access with correct s3 permission) 
-Rhapso --xmlToDataframe s3://rhapso-dev/rhapso-sample-data/dataset.xml
-
-# Run overlap detection locally with a local xml file
-Rhapso --xmlToDataframe ../../demo/dataset.xml --runOverlapDetection
-
-# Run overlap detection locally with a aws s3 cloud xml file
-Rhapso --xmlToDataframe s3://rhapso-dev/rhapso-sample-data/dataset.xml --runOverlapDetection
-```
-Run overlap detection in Python script:
-
-```sh
-import Rhapso
-
-# Call the xmlToDataframe function
-# myDataframe = Rhapso.xmlToDataframe("/mnt/c/Users/marti/Documents/Allen/repos/Rhapso-Sample-Data/IP_TIFF_XML/dataset.xml")
-myDataframe = Rhapso.xmlToDataframe("s3://rhapso-dev/rhapso-sample-data/dataset.xml")
-print('myDataframe = ', myDataframe)
-
-# Call the runOverlapDetection function
-overlapDetection = Rhapso.OverlapDetection()
-output = overlapDetection.run(myDataframe)
-print("Overlap Detection Output: ", output)
-```
-
 ### Python Pipeline Guide: Rhapso/pipelines/python_pipeline.py
 
 ### Overview
@@ -259,9 +128,35 @@ This pipeline enables the execution of Rhapso on production data using AWS Glue'
 ### Monitoring
 Watch the execution in real-time and make any necessary adjustments based on the job performance and outputs.
 
+--
 
-## Cloud Deployment Plan
+## Components Walkthrough
 
-For more details on the cloud deployment plan and AWS access setup, see the [Wiki page](https://github.com/AllenNeuralDynamics/Rhapso/wiki#cloud-deployment-plan).
+This guide offers a high-level overview of Rhapso components, explaining each component's role in the process. It’s designed for users who want to understand or modify Rhapso’s process.
+
+### Interest Point Detection
+ Interest Point Detection involves detecting interest points by converting XML metadata into DataFrames, generating transformation matrices, detecting overlaps, loading and preprocessing image data,refining detected points, and saving the refined interest points for matching.
+
+For more in depth information, checkout the [Detection ReadMe](./Rhapso/detection/readme.md) and the [detailed walkthrough on our wiki](https://github.com/AllenNeuralDynamics/Rhapso/wiki/1.-Detection).
+
+### Interest Point Matching
+
+Interest Point Matching involves loading and filtering interest points, organizing views, setting up pairwise matching, applying the RANSAC algorithm, refining matches, and compiling and storing results for Solver.
+
+For more in depth information, checkout the [Matching ReadMe](./Rhapso/matching/readme.md) and the [detailed walkthrough on our wiki](https://github.com/AllenNeuralDynamics/Rhapso/wiki/2.-Matching).
+
+### Solver
+
+  Solver involves setting up models and tiles, aligning tiles using transformation models, performing optimization for consistency in preparation for Fusion.
+
+For more in depth information, checkout the [Solver ReadMe](./Rhapso/solver/readme.md) and the [detailed walkthrough on our wiki](https://github.com/AllenNeuralDynamics/Rhapso/wiki/3.-Solver).
+
+
+### Cloud Fusion
+To Do
+
+For more information about fusion, check out the [detailed walkthrough on our wiki](https://github.com/AllenNeuralDynamics/Rhapso/wiki/4.-Fusion).
+
+---
 
 ## Frequently Asked Questions
