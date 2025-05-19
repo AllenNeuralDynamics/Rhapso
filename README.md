@@ -59,6 +59,10 @@ Sample pipeline instructions are provided for pre-made templates, but if you wan
  ```sh
   git clone https://github.com/AllenNeuralDynamics/Rhapso.wiki.git
   ```
+### Downkoad and Install Dependencies
+ ```sh
+pip install -r requirements.txt
+  ```
 
 ---
 
