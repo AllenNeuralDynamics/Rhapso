@@ -1,6 +1,13 @@
 # Rhapso
 
-**Rhapso** is a modular Python toolkit for aligning and fusing large-scale microscopy datasets.  
+**Rhapso** is a modular Python toolkit for aligning and fusing large-scale microscopy datasets. 
+
+Built from decoupled components, Rhapso separates data loading and execution logic from its core functionality, making it flexible and easy to adapt across environments and formats.
+
+To run Rhapso, users can either provide a data loader and a pipeline script that orchestrates the processing steps or use one of ours. We include example loaders and pipeline scripts to support both large-scale runs on AWS Glue (Spark ETL) and smaller-scale testing on local or conventional machines. Input formats like OME-TIFF and Zarr are supported out of the box.
+
+Rhapso is developed in collaboration with the Allen Institute for Neural Dynamics (AIND), initially supporting AIND’s ExaSPIM pipeline and eventually broadly benefiting microscopy research.
+
 [![License](https://img.shields.io/badge/license-MIT-brightgreen)](LICENSE)
 [![Python Version](https://img.shields.io/badge/python-3.11-blue.svg)](https://www.python.org/downloads/release/python-3110/)
 [![Build Status](https://img.shields.io/github/actions/workflow/status/AllenNeuralDynamics/Rhapso/ci.yml?branch=main)](https://github.com/AllenNeuralDynamics/Rhapso/actions)
@@ -8,8 +15,6 @@
 [![Issues](https://img.shields.io/github/issues/AllenNeuralDynamics/Rhapso)](https://github.com/AllenNeuralDynamics/Rhapso/issues)
 
 <!-- ## Example Usage Media Content Coming Soon....
-
-
 -- -->
 
 ## Connect With Us
@@ -29,12 +34,6 @@
 - [FAQ](#frequently-asked-questions)
 
 
-## Usage
-Built from decoupled components, Rhapso separates data loading and execution logic from its core functionality, making it flexible and easy to adapt across environments and formats.
-
-To run Rhapso, users can either provide a data loader and a pipeline script that orchestrates the processing steps or use one of ours. We include example loaders and pipeline scripts to support both large-scale runs on AWS Glue (Spark ETL) and smaller-scale testing on local or conventional machines. Input formats like OME-TIFF and Zarr are supported out of the box.
-
-Rhapso is developed in collaboration with the Allen Institute for Neural Dynamics (AIND), initially supporting AIND’s ExaSPIM pipeline and eventually broadly benefiting microscopy research.
 ### Environments
 This package is designed to target three main environments:
 - Local
