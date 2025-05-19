@@ -59,7 +59,7 @@ git clone https://github.com/AllenNeuralDynamics/Rhapso.git
  ```sh
 git clone https://github.com/AllenNeuralDynamics/Rhapso.wiki.git
   ```
-### Downkoad and Install Dependencies
+### Download and Install Dependencies
  ```sh
 pip install -r requirements.txt
   ```
