@@ -11,13 +11,9 @@
 <!-- ## Example Usage Media Content Coming Soon....
 -- -->
 
----
-
 ## Connect With Us
 <!-- UPDATE THIS WHEN OPEN SOURCED -->
   [Allen Institute Internal Coms](https://teams.microsoft.com/l/channel/19%3AIv_3CdryfboX3E0g1BbzCi3Y8KRgNCdAv3idJ9epV-k1%40thread.tacv2/Project%20Rhapso-Shared?groupId=87b91b48-bb2a-4a00-bc59-5245043a0708&tenantId=32669cd6-737f-4b39-8bdd-d6951120d3fc&ngc=true&allowXTenantAccess=true)
-
----
 
 ## Table of Contents
 - [Summary](#summary)
