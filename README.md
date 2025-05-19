@@ -57,7 +57,7 @@ Sample pipeline instructions are provided for pre-made templates, but if you wan
   ```
 ### Clone Rhapso Wiki
  ```sh
-  git clone https://github.com/AllenNeuralDynamics/Rhapso.wiki,git
+  git clone https://github.com/AllenNeuralDynamics/Rhapso.wiki.git
   ```
 
 ---
