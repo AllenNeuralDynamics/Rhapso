@@ -48,6 +48,20 @@ Sample pipeline instructions are provided for pre-made templates, but if you wan
 
 ---
 
+## Getting Started
+
+### Clone Rhapso
+
+ ```sh
+  git clone https://github.com/AllenNeuralDynamics/Rhapso.git
+  ```
+### Clone Rhapso Wiki
+ ```sh
+  git clone https://github.com/AllenNeuralDynamics/Rhapso.wiki,git
+  ```
+
+---
+
 ## Build Package Instructions
 
 ### Build and Use the `.whl` File
