@@ -17,8 +17,6 @@ Rhapso is developed in collaboration with the Allen Institute for Neural Dynamic
   [Allen Institute Internal Coms](https://teams.microsoft.com/l/channel/19%3AIv_3CdryfboX3E0g1BbzCi3Y8KRgNCdAv3idJ9epV-k1%40thread.tacv2/Project%20Rhapso-Shared?groupId=87b91b48-bb2a-4a00-bc59-5245043a0708&tenantId=32669cd6-737f-4b39-8bdd-d6951120d3fc&ngc=true&allowXTenantAccess=true)
 
 ## Table of Contents
-- [Setup](#setup)
-- [Usage](#usage)
 - [Componenents Walkthrough](#components-walkthrough)
 - [Sample Data](#sample-data)
 - [Command Line Usage](#command-line-usage)
@@ -31,90 +29,6 @@ Rhapso is developed in collaboration with the Allen Institute for Neural Dynamic
 - [FAQ](#frequently-asked-questions)
 
 ---
-## Usage
-### Environments
-This package is designed to target three main environments:
-- Local
-- Cloud
-- SLURM
-> [!TIP]
-> Detailed instructions on how to run a sample end-to-end pipeline for each environment can be found on the [Wiki Page](https://github.com/AllenNeuralDynamics/Rhapso/wiki#example-pipelines).
-Sample pipeline instructions are provided for pre-made templates, but if you want to create your own template, you can do so based on the sample files available inside the `Rhapso/pipelines` folder.
-
-## Build Package Instructions
-
-### Build and Use the `.whl` File
-
-1. **Build the `.whl` File in the root of this repo:**
-  ```sh
-  cd /path/to/Rhapso
-  pip install setuptools wheel
-  python setup.py sdist bdist_wheel
-  ```
-  The `.whl` file will appear in the `dist` directory. Do not rename it to ensure compatibility (e.g., `rhapso-0.1-py3-none-any.whl`).
-
-2. **Install and Verify:**
-  ```sh
-  pip install dist/rhapso-0.1-py3-none-any.whl
-  pip show rhapso
-  ```
-
-3. **Run Rhapso CLI:**
-  ```sh
-  Rhapso -h
-  ```
-  **Or import the package for scriping use:**
-  ```python
-  import Rhapso
-  from Rhapso.solver.solver import Solver
-  ```
-
-## Setup
-To get Rhapso running on your local machine or AWS Glue, follow the steps below:
-
-### Clone the Repository
-```sh
-git clone https://github.com/AllenNeuralDynamics/Rhapso.git
-cd Rhapso
-```
-
-### Python Version
-Rhapso requires Python 3.11. Ensure this version is installed and active.
-
-### Set Up Environment
-You can install dependencies either in a virtual environment or directly into your Python interpreter:
-
-**Using a virtual environment (recommended):**
-```sh
-python3.11 -m venv venv
-source venv/bin/activate
-```
-
-### Download and Install Dependencies
-Before installing the Rhapso package, ensure all necessary dependencies are installed:
-```sh
-pip install -r requirements.txt
-```
-
-### Install Rhapso Package Locally
-```sh
-pip install -e .
-```
-
-### Check Installed Rhapso Version
-```sh
-pip show rhapso
-```
-
-### Prepare for Usage
-Once installed, refer to [Usage](#usage) to determine which script to run based on your task.
-
-### AWS Glue Setup (Optional)
-To use Rhapso with the AWS Glue template:
-
-- **Ensure you have an active AWS account**
-- **Enable the AWS Glue API**
-- **Configure IAM roles and permissions for Glue jobs**
 
 ## Components Walkthrough
 
@@ -140,11 +54,6 @@ For more in depth information, checkout the [Solver ReadMe](./Rhapso/solver/read
 
 ### Cloud Fusion
 To Do
-
----
-
-## Sample Data
-  *  [As TIFF/XML](https://drive.google.com/file/d/1Qs3juqQgYlDc2KglbcFTFKzdAQxgS9zc/view?usp=sharing) 
 
 ---
 
@@ -203,8 +112,6 @@ Rhapso fuse --scale 2.0 --output ./output/fused.tif --blend
 # 4. Solve Transformations
 Rhapso solve --method Affine --iterations 50 --tolerance 0.0005
 ```
-
-
 
 ### Example Commands:
 ```sh
