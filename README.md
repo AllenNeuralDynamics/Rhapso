@@ -1,16 +1,16 @@
 # Rhapso
 
-**Rhapso** is a modular Python toolkit for aligning and fusing large-scale microscopy datasets. Built from decoupled components, Rhapso separates data loading and execution logic from its core functionality, making it flexible and easy to adapt across environments and formats.
-
-To run Rhapso, users can either provide a data loader and a pipeline script that orchestrates the processing steps or use one of ours. We include example loaders and pipeline scripts to support both large-scale runs on AWS Glue (Spark ETL) and smaller-scale testing on local or conventional machines. Input formats like OME-TIFF and Zarr are supported out of the box.
-
-Rhapso is developed in collaboration with the Allen Institute for Neural Dynamics (AIND), initially supporting AIND’s ExaSPIM pipeline and eventually broadly benefiting microscopy research.
-
-## Example Usage Media Content Coming Soon....
-
+**Rhapso** is a modular Python toolkit for aligning and fusing large-scale microscopy datasets.  
 [![License](https://img.shields.io/badge/license-MIT-brightgreen)](LICENSE)
+[![Python Version](https://img.shields.io/badge/python-3.11-blue.svg)](https://www.python.org/downloads/release/python-3110/)
+[![Build Status](https://img.shields.io/github/actions/workflow/status/AllenNeuralDynamics/Rhapso/ci.yml?branch=main)](https://github.com/AllenNeuralDynamics/Rhapso/actions)
+[![Documentation](https://img.shields.io/badge/docs-wiki-blue)](https://github.com/AllenNeuralDynamics/Rhapso/wiki)
+[![Issues](https://img.shields.io/github/issues/AllenNeuralDynamics/Rhapso)](https://github.com/AllenNeuralDynamics/Rhapso/issues)
 
---
+<!-- ## Example Usage Media Content Coming Soon....
+
+
+-- -->
 
 ## Connect With Us
 <!-- UPDATE THIS WHEN OPEN SOURCED -->
@@ -28,7 +28,50 @@ Rhapso is developed in collaboration with the Allen Institute for Neural Dynamic
 - [Use Cases](#use-cases)
 - [FAQ](#frequently-asked-questions)
 
----
+
+## Usage
+Built from decoupled components, Rhapso separates data loading and execution logic from its core functionality, making it flexible and easy to adapt across environments and formats.
+
+To run Rhapso, users can either provide a data loader and a pipeline script that orchestrates the processing steps or use one of ours. We include example loaders and pipeline scripts to support both large-scale runs on AWS Glue (Spark ETL) and smaller-scale testing on local or conventional machines. Input formats like OME-TIFF and Zarr are supported out of the box.
+
+Rhapso is developed in collaboration with the Allen Institute for Neural Dynamics (AIND), initially supporting AIND’s ExaSPIM pipeline and eventually broadly benefiting microscopy research.
+### Environments
+This package is designed to target three main environments:
+- Local
+- Cloud
+- SLURM
+> [!TIP]
+> Detailed instructions on how to run a sample end-to-end pipeline for each environment can be found on the [Wiki Page](https://github.com/AllenNeuralDynamics/Rhapso/wiki#example-pipelines).
+Sample pipeline instructions are provided for pre-made templates, but if you want to create your own template, you can do so based on the sample files available inside the `Rhapso/pipelines` folder.
+
+## Build Package Instructions
+
+### Build and Use the `.whl` File
+
+1. **Build the `.whl` File in the root of this repo:**
+  ```sh
+  cd /path/to/Rhapso
+  pip install setuptools wheel
+  python setup.py sdist bdist_wheel
+  ```
+  The `.whl` file will appear in the `dist` directory. Do not rename it to ensure compatibility (e.g., `rhapso-0.1-py3-none-any.whl`).
+
+2. **Install and Verify:**
+  ```sh
+  pip install dist/rhapso-0.1-py3-none-any.whl
+  pip show rhapso
+  ```
+
+3. **Run Rhapso CLI:**
+  ```sh
+  Rhapso -h
+  ```
+  **Or import the package for scriping use:**
+  ```python
+  import Rhapso
+  from Rhapso.solver.solver import Solver
+  ```
+
 
 ## Components Walkthrough
 
@@ -37,23 +80,25 @@ This guide offers a high-level overview of Rhapso components, explaining each co
 ### Interest Point Detection
  Interest Point Detection involves detecting interest points by converting XML metadata into DataFrames, generating transformation matrices, detecting overlaps, loading and preprocessing image data,refining detected points, and saving the refined interest points for matching.
 
-For more in depth information, checkout the [Detection ReadMe](./Rhapso/detection/readme.md)
+For more in depth information, checkout the [Detection ReadMe](./Rhapso/detection/readme.md) and the [detailed walkthrough on our wiki](https://github.com/AllenNeuralDynamics/Rhapso/wiki/1.-Detection).
 
 ### Interest Point Matching
 
 Interest Point Matching involves loading and filtering interest points, organizing views, setting up pairwise matching, applying the RANSAC algorithm, refining matches, and compiling and storing results for Solver.
 
-For more in depth information, checkout the [Matching ReadMe](./Rhapso/matching/readme.md)
+For more in depth information, checkout the [Matching ReadMe](./Rhapso/matching/readme.md) and the [detailed walkthrough on our wiki](https://github.com/AllenNeuralDynamics/Rhapso/wiki/2.-Matching).
 
 ### Solver
 
   Solver involves setting up models and tiles, aligning tiles using transformation models, performing optimization for consistency in preparation for Fusion.
 
-For more in depth information, checkout the [Solver ReadMe](./Rhapso/solver/readme.md)
+For more in depth information, checkout the [Solver ReadMe](./Rhapso/solver/readme.md) and the [detailed walkthrough on our wiki](https://github.com/AllenNeuralDynamics/Rhapso/wiki/3.-Solver).
 
 
 ### Cloud Fusion
 To Do
+
+For more information about fusion, check out the [detailed walkthrough on our wiki](https://github.com/AllenNeuralDynamics/Rhapso/wiki/4.-Fusion).
 
 ---
 
@@ -204,109 +249,6 @@ Watch the execution in real-time and make any necessary adjustments based on the
 
 ## Cloud Deployment Plan
 
-### Pushing with GitHub Actions Workflow to S3 Bucket
-
-1. **Create an S3 Bucket:**
-   - Go to the AWS Management Console.
-   - Navigate to S3 and create a new bucket (e.g., `rhapso-deployments`).
-
-2. **Set Up IAM Role and Policy:**
-   - Create an IAM role with permissions to access the S3 bucket.
-   - Attach the following policy to the role:
-     ```json
-     {
-       "Version": "2012-10-17",
-       "Statement": [
-         {
-           "Effect": "Allow",
-           "Action": [
-             "s3:PutObject",
-             "s3:GetObject",
-             "s3:ListBucket"
-           ],
-           "Resource": [
-             "arn:aws:s3:::rhapso-deployments",
-             "arn:aws:s3:::rhapso-deployments/*"
-           ]
-         }
-       ]
-     }
-     ```
-
-3. **Configure GitHub Secrets:**
-   - Go to your GitHub repository settings.
-   - Add the following secrets:
-     - `AWS_ACCESS_KEY_ID`
-     - `AWS_SECRET_ACCESS_KEY`
-
-4. **GitHub Actions Workflow:**
-   - Create a GitHub Actions workflow file (e.g., `.github/workflows/deploy.yml`) with the following content:
-     ```yaml
-     name: Deploy to S3
-
-     on:
-       push:
-         branches:
-           - main
-
-     jobs:
-       deploy:
-         runs-on: ubuntu-latest
-         steps:
-           - name: Checkout code
-             uses: actions/checkout@v4
-
-           - name: Configure AWS credentials
-             uses: aws-actions/configure-aws-credentials@v1
-             with:
-               aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY_ID }}
-               aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
-               aws-region: us-west-2
-
-           - name: Sync files to S3
-             run: |
-               aws s3 sync . s3://rhapso-deployments --exclude ".git/*" --delete
-     ```
-
-### Setting Up Permissions with IAM
-
-1. **Create IAM User:**
-   - Go to the AWS Management Console.
-   - Navigate to IAM and create a new user (e.g., `rhapso-deployer`).
-   - Attach the following policy to the user:
-     ```json
-     {
-       "Version": "2012-10-17",
-       "Statement": [
-         {
-           "Effect": "Allow",
-           "Action": [
-             "s3:PutObject",
-             "s3:GetObject",
-             "s3:ListBucket"
-           ],
-           "Resource": [
-             "arn:aws:s3:::rhapso-deployments",
-             "arn:aws:s3:::rhapso-deployments/*"
-           ]
-         }
-       ]
-     }
-     ```
-
-2. **Generate Access Keys:**
-   - Generate access keys for the IAM user.
-   - Store the access keys securely and add them as GitHub secrets.
-
-3. **Revoking Credentials:**
-   - To revoke credentials, go to the IAM user in the AWS Management Console.
-   - Delete the access keys or deactivate the user.
-   - Generate new access keys and update the GitHub secrets.
-
-### Cloud Deployment Image
-
-![Cloud Deployment](docs/deployment.png)
-
----
+For more details on the cloud deployment plan and AWS access setup, see the [Wiki page](https://github.com/AllenNeuralDynamics/Rhapso/wiki#cloud-deployment-plan).
 
 ## Frequently Asked Questions
