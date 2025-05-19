@@ -53,11 +53,11 @@ Sample pipeline instructions are provided for pre-made templates, but if you wan
 ### Clone Rhapso
 
  ```sh
-  git clone https://github.com/AllenNeuralDynamics/Rhapso.git
+git clone https://github.com/AllenNeuralDynamics/Rhapso.git
   ```
 ### Clone Rhapso Wiki
  ```sh
-  git clone https://github.com/AllenNeuralDynamics/Rhapso.wiki.git
+git clone https://github.com/AllenNeuralDynamics/Rhapso.wiki.git
   ```
 ### Downkoad and Install Dependencies
  ```sh
