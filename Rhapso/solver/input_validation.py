@@ -3,8 +3,10 @@ from Rhapso.matching.interest_point_matching import build_label_map
 # This class implements an input validation process
 
 class InputValidation:
+
     def __init__(self, data_global, reference_tp, registration_tp, labels, label_weights, fixed_views, group_illums,
-                group_channels, group_tiles, split_timepoints, disable_fixed_views, solver_source, image_loader_data):
+                group_channels, group_tiles, split_timepoints, disable_fixed_views, solver_source, image_loader_data, TO_REFERENCE_TIMEPOINT, TIMEPOINTS_INDIVIDUALLY):
+       
         self.data_global = data_global
         self.reference_tp = reference_tp
         self.labels = labels
@@ -20,16 +22,21 @@ class InputValidation:
         self.disable_fixed_views = disable_fixed_views
         self.source_points = None
         self.solver_source = solver_source
+        self.TO_REFERENCE_TIMEPOINT = TO_REFERENCE_TIMEPOINT
+        self.TIMEPOINTS_INDIVIDUALLY = TIMEPOINTS_INDIVIDUALLY
         self.image_loader_data = image_loader_data  # Data_global and image loader are likely the same and may be able to be eliminated.
 
     def input_validation(self):
 
         self.init_registration_parameters()
 
-        if not self.setup_parameters(self.data_global, self.view_ids_global):
+        if not self.setup_parameters(self.image_loader_data, self.view_ids_global):
             return None
+        
+        label_map_global = build_label_map(
+                self.image_loader_data, self.view_ids_global, map
+            )
 
-        label_map_global = {}
         # If solver_source == IP set up variables for Interestpoints as source
         if self.source_points == self.solver_source["IP"]:
             if self.labels == None or len(self.labels) == 0:
@@ -51,9 +58,6 @@ class InputValidation:
                 map[self.labels[i]] = self.label_weights[i]
             print(f"labels & weights: {map}")
 
-            label_map_global = build_label_map(
-                self.data_global, self.view_ids_global, map
-            )
             # This section of conditionals may be able to be removed.
             if not self.group_illums:
                 self.group_illums = False
@@ -91,9 +95,7 @@ class InputValidation:
 
         if not self.fixed_view_ids or len(self.fixed_view_ids) == 0:
             # fix this - Not sure if needed
-            self.fixed_view_ids = self.assemble_fixed_auto(
-                self.view_ids_global, self.registration_tp, self.reference_TP
-            )
+            self.fixed_view_ids = self.assemble_fixed_auto()
         else:
             self.fixed_view_ids  # reset to data
 
@@ -147,59 +149,58 @@ class InputValidation:
     # Check if reference timepoint
     # sd doesnt get used
     # We might be able to trim this down to always just have the first view be the fixed point.
-    def assemble_fixed_auto(self, all_view_ids, registration_tp, reference_tp):
+    def assemble_fixed_auto(self, reference_tp):
         fixed = set()
 
-        all_view_ids.sort()
+        self.view_ids_global.sort()
 
         #  double check registrations types --> list of Ints
-        if registration_tp == self.TO_REFERENCE_TIMEPOINT:
-            for view_id in all_view_ids:
-                if view_id["timepoint"] == reference_tp:
+        if self.registration_tp == self.TO_REFERENCE_TIMEPOINT:
+            for view_id in self.view_ids_global:
+                if view_id["timepoint"] == self.reference_tp:
                     fixed.add(view_id)
                     break
-        elif registration_tp == self.TIMEPOINTS_INDIVIDUALLY:
+        elif self.registration_tp == self.TIMEPOINTS_INDIVIDUALLY:
             # it is sorted by timepoint
-            fixed.add(all_view_ids[0])
-            current_tp = all_view_ids[0]["timepoint"]
+            fixed.add(self.view_ids_global[0])
+            current_tp = self.view_ids_global[0]["timepoint"]
 
-            for view_id in all_view_ids:
+            for view_id in self.view_ids_global:
                 # next timepoint
                 if view_id["timepoint"] != current_tp:
                     fixed.add(view_id)
                     current_tp = view_id["timepoint"]
         else:
-            fixed.add(all_view_ids[0])  # always the first view is fixed
+            fixed.add(self.view_ids_global[0])  # always the first view is fixed
 
         return fixed
 
     def init_registration_parameters(self):
         # Retrieves data_global object
-        data_global = self.image_loader_data
 
-        if not data_global:
+        if not self.image_loader_data:
             raise ValueError("Couldn't load SpimData XML project.")
 
         # Should have timepoint and set up
-        view_ids_global = data_global["view_ids"]
+        view_ids_global = self.image_loader_data["view_ids"]
         # retrieves just viewIds
 
         if not view_ids_global or len(view_ids_global) == 0:
             raise ValueError("No ViewIds found.")
 
-        reference_tp = None  # Assuming referenceTP is initially None
+        self.reference_tp = None  # Assuming referenceTP is initially None
         registration_tp = (
             "TO_REFERENCE_TIMEPOINT"  # Assuming registrationTP is set to this value
         )
 
-        if not reference_tp:
+        if not self.reference_tp:
             # Get the timepoint of the first viewId in the list
-            reference_tp = view_ids_global[0]["timepoint"]
+            self.reference_tp = view_ids_global[0]["timepoint"]
         else:
             # Retrieve and sort all timepoints
             timepoint_to_process_list = []
 
-            for view in data_global:
+            for view in self.image_loader_data:
                 # This could be viewId[0]
                 timepoint_to_process_list.append(view["timepoint"])
             for view in view_ids_global:
@@ -207,13 +208,11 @@ class InputValidation:
 
             timepoint_to_process_set = set(sorted(timepoint_to_process_list))
 
-            if reference_tp not in timepoint_to_process_set:
+            if self.reference_tp not in timepoint_to_process_set:
                 raise ValueError(
                     "Specified reference timepoint is not part of the ViewIds that are processed."
                 )
         # I don't think this gets hit since it gets set to null in this case. May need to follow up about params.
-        if registration_tp == "TO_REFERENCE_TIMEPOINT":
-            print("Reference timepoint =", reference_tp)
 
     def run(self):
         self.input_validation()
