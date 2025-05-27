@@ -1,11 +1,15 @@
-from Rhapso.matching.interest_point_matching import build_label_map
 
 # This class implements an input validation process
+
+from Rhapso.matching.data_loader import DataLoader
+# from Rhapso.matching.data_loader import build_label_map
+
+
 
 class InputValidation:
 
     def __init__(self, data_global, reference_tp, registration_tp, labels, label_weights, fixed_views, group_illums,
-                group_channels, group_tiles, split_timepoints, disable_fixed_views, solver_source, image_loader_data, TO_REFERENCE_TIMEPOINT, TIMEPOINTS_INDIVIDUALLY):
+                group_channels, group_tiles, split_timepoints, disable_fixed_views, solver_source, image_loader_data, TO_REFERENCE_TIMEPOINT, TIMEPOINTS_INDIVIDUALLY, file_source):
        
         self.data_global = data_global
         self.reference_tp = reference_tp
@@ -24,6 +28,7 @@ class InputValidation:
         self.solver_source = solver_source
         self.TO_REFERENCE_TIMEPOINT = TO_REFERENCE_TIMEPOINT
         self.TIMEPOINTS_INDIVIDUALLY = TIMEPOINTS_INDIVIDUALLY
+        self.file_source = file_source
         self.image_loader_data = image_loader_data  # Data_global and image loader are likely the same and may be able to be eliminated.
 
     def input_validation(self):
@@ -33,7 +38,8 @@ class InputValidation:
         if not self.setup_parameters(self.image_loader_data, self.view_ids_global):
             return None
         
-        label_map_global = build_label_map(
+        data_loader = data_loader()
+        labelMapGlobal = data_loader.build_label_map(
                 self.image_loader_data, self.view_ids_global, map
             )
 
