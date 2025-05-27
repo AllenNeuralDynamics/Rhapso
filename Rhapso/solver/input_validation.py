@@ -2,7 +2,7 @@
 # This class implements an input validation process
 
 from Rhapso.matching.data_loader import DataLoader
-# from Rhapso.matching.data_loader import build_label_map
+from Rhapso.matching.data_loader import build_label_map
 
 
 
