@@ -22,14 +22,8 @@ class MatchingPipeline:
 
     def run(self):
         try:
-            # Load complete dataset information
+            # Load complete dataset xml information
             data_global = self.parser.parse()
-            
-            # Print parsed view information for debugging
-            view_ids_global = data_global['viewsInterestPoints']
-            print(f"Found {len(view_ids_global)} views in dataset:")
-            for view_id, info in view_ids_global.items():
-                print(f"  View {view_id}: {info}")
             
             # Use data_global for all subsequent operations
             view_ids_global = data_global['viewsInterestPoints']
@@ -42,14 +36,24 @@ class MatchingPipeline:
             label_map_global = self.data_loader.build_label_map(view_ids_global)
             
             # Process all view pairs for matching
-            all_results = []
-            total_pairs = len(setup['pairs'])
+            all_results = []  # Store all matching results across pairs
+            total_pairs = len(setup['pairs'])  # Total number of view pairs to process
+
+            # Iterate through each pair of views to perform matching
             for idx, pair in enumerate(setup['pairs'], 1):
-                viewA, viewB = pair
+                viewA, viewB = pair  # Unpack the current pair of view IDs
+
+                # Retrieve human-readable labels for each view, fallback to "Unknown" if missing
                 labelA = label_map_global.get(viewA, "Unknown")
                 labelB = label_map_global.get(viewB, "Unknown")
+
+                # Print progress and which pair is being processed
                 print(f"Processing pair {idx}/{total_pairs}: ({viewA}, {viewB}) with labels ({labelA}, {labelB})")
+
+                # Run the matching task for the current pair and get results
                 task_result = self._process_matching_task(pair, label_map_global)
+
+                # Add the results for this pair to the global results list (if any)
                 all_results.extend(task_result if task_result else [])
 
             print(f"Total matches found: {len(all_results)}")
@@ -75,35 +79,19 @@ class MatchingPipeline:
             view_data = data_global['viewsInterestPoints']
             view_registrations = data_global['viewRegistrations']
             
-            print(f"🔧 Processing viewA: {viewA}")
-            
-            # Get complete path to the 'loc' folder for interest points
-            view_info_A = view_data[viewA]
-            loc_path_A = f"{view_info_A['path']}/{view_info_A['label']}/interestpoints/loc"
-            print(f"loc_path_A: {loc_path_A}")
-            
-            # Debug: Show the store configuration
-            print(f"DataLoader base_path: {self.data_loader.base_path}")
-            print(f"DataLoader store type: {type(self.data_loader.store)}")
-            
-            # Load interest points directly from the 'loc' dataset
-            raw_pointsA = self.data_loader.load_interest_points_from_path(loc_path_A)
-            print(f"raw_pointsA shape: {raw_pointsA.shape}")
-            
-            transformA = self.data_loader.get_transformation_matrix(viewA, view_data, view_registrations)
-            print(f"transformA: {transformA}")
-            
-            pointsA = self.data_loader.transform_interest_points(raw_pointsA, transformA)
-            print(f"pointsA shape: {pointsA.shape}")
+            def get_transformed_points(view_id):
+                """Retrieve and transform interest points for a given view."""
+                view_info = view_data[view_id]
+                loc_path = f"{view_info['path']}/{view_info['label']}/interestpoints/loc"
+                raw_points = self.data_loader.load_interest_points_from_path(loc_path)
+                transform = self.data_loader.get_transformation_matrix(view_id, view_data, view_registrations)
+                return self.data_loader.transform_interest_points(raw_points, transform)
+
+            # Retrieve and transform interest points for both views
+            pointsA = get_transformed_points(viewA)
+            pointsB = get_transformed_points(viewB)
 
             print(f"Loaded {len(pointsA)} transformed points for viewA: {viewA}")
-
-            print(f"🔧 Processing viewB: {viewB}")
-            view_info_B = view_data[viewB]
-            loc_path_B = f"{view_info_B['path']}/{view_info_B['label']}/interestpoints/loc"
-            raw_pointsB = self.data_loader.load_interest_points_from_path(loc_path_B)
-            transformB = self.data_loader.get_transformation_matrix(viewB, view_data, view_registrations)
-            pointsB = self.data_loader.transform_interest_points(raw_pointsB, transformB)
             print(f"Loaded {len(pointsB)} transformed points for viewB: {viewB}")
             
             # # Get candidates using matcher
@@ -117,6 +105,7 @@ class MatchingPipeline:
             # filtered_matches = self.ransac.filter_matches(pointsA, pointsB, matches)
             
             return [(viewA, viewB, m[0], m[1]) for m in filtered_matches]
+        
         except Exception as e:
             print(f"ERROR: Failed in _process_matching_task for pair {pair}")
             print(f"Exception type: {type(e).__name__}")

@@ -61,47 +61,32 @@ class DataLoader:
 
     def load_interest_points_from_path(self, dataset_path):
         """Load data from any N5 dataset path"""
-        print(f"Attempting to load from dataset path: {dataset_path}")
-        
         try:
-            # Debug: Show what's available in the store
-            print(f"Store base path: {self.base_path}")
+            # Navigate to the dataset step by step
             root = zarr.open(self.store, mode='r')
-            print(f"Available top-level groups in store: {list(root.keys())}")
             
             # Calculate relative path from the store base
             if dataset_path.startswith(self.base_path):
                 relative_path = dataset_path.replace(self.base_path, '').lstrip('/')
             else:
-                # If dataset_path doesn't start with base_path, use it as relative path
                 relative_path = dataset_path.lstrip('/')
-                
-            print(f"Relative path in store: {relative_path}")
             
-            # Navigate to the dataset step by step
+            # Navigate to the dataset
             if relative_path:
                 path_parts = relative_path.split('/')
                 current_group = root
-                for i, part in enumerate(path_parts):
-                    if part in current_group:
-                        current_group = current_group[part]
-                        print(f"  Found part {i+1}/{len(path_parts)}: {part}")
-                    else:
-                        print(f"  ERROR: Missing part {i+1}/{len(path_parts)}: {part}")
-                        print(f"  Available in current group: {list(current_group.keys())}")
-                        raise KeyError(f"Path part '{part}' not found in {'/'.join(path_parts[:i])}")
+                for part in path_parts:
+                    current_group = current_group[part]
             else:
                 current_group = root
             
             # Load the actual data
             data_array = current_group[:]
-            print(f"Successfully loaded {len(data_array)} items from {dataset_path}")
             return data_array.astype(np.float64)
             
         except Exception as e:
             print(f"ERROR: Failed to load data from {dataset_path}")
             print(f"Error details: {e}")
-            print(f"Error type: {type(e).__name__}")
             raise e
 
     def transform_interest_points(self, interest_points, transform_matrix):
@@ -109,40 +94,41 @@ class DataLoader:
         if len(interest_points) == 0:
             return interest_points
             
-        print(f"🔢 BEFORE transformation - Point ID 0: {interest_points[0]}")
         print(f"⚙️ Starting matrix multiplication for {len(interest_points)} interest points")
         
         # Convert to homogeneous coordinates [x, y, z, 1]
         homogeneous_points = np.column_stack([interest_points, np.ones(len(interest_points))])
         
         # Apply transformation: transformed = matrix @ points.T
-        # This applies the transformation to ALL points at once
         transformed = (transform_matrix @ homogeneous_points.T).T
         
         # Return only x, y, z coordinates (drop homogeneous coordinate)
         transformed_points = transformed[:, :3]
         
-        print(f"✨ AFTER transformation - Point ID 0: {transformed_points[0]}")
         print(f"✅ Successfully transformed all {len(transformed_points)} points")
         
-        # Show a few more examples for verification
-        if len(transformed_points) > 1:
+        # Show sample transformations with proper formatting
+        if len(transformed_points) > 0:
             print(f"📍 Sample transformations:")
-            for i in range(min(3, len(transformed_points))):
-                print(f"   Point {i}: {interest_points[i]} → {transformed_points[i]}")
+            num_samples = min(3, len(transformed_points))
+            for i in range(num_samples):
+                # Format numbers to avoid scientific notation
+                before = [f"{x:.2f}" for x in interest_points[i]]
+                after = [f"{x:.2f}" for x in transformed_points[i]]
+                print(f"   Point {i}: [{', '.join(before)}] → [{', '.join(after)}]")
+            
+            # Show total count if there are more points than samples shown
+            if len(transformed_points) > num_samples:
+                remaining = len(transformed_points) - num_samples
+                print(f"   ... and {remaining} more")
+            print()  # Add blank line separator
         
         return transformed_points.astype(np.float64)
 
     def get_transformation_matrix(self, view_id, view_data, view_registrations=None):
         """Get transformation matrix for a specific view from parsed registrations"""
         if view_registrations is None:
-            print(f"No view registrations provided, using identity matrix for view {view_id}")
-            return np.array([
-                [1.0, 0.0, 0.0, 0.0],
-                [0.0, 1.0, 0.0, 0.0], 
-                [0.0, 0.0, 1.0, 0.0],
-                [0.0, 0.0, 0.0, 1.0]
-            ])
+            return np.eye(4)
         
         # Look up transformation for this view
         if view_id in view_registrations:
@@ -150,24 +136,15 @@ class DataLoader:
             transforms = registration.get('transforms', [])
             
             if transforms:
-                # Use the first transformation (or combine multiple if needed)
                 transform = transforms[0]
                 matrix = transform['matrix']
                 print(f"📐 Retrieved transformation matrix for view {view_id}: {transform['type']}")
                 print(f"Matrix: {matrix}")
+                print()  # Add blank line after matrix
                 return matrix
-            else:
-                print(f"No transforms found for view {view_id}, using identity")
-        else:
-            print(f"View {view_id} not found in registrations, using identity")
         
         # Default to identity matrix
-        return np.array([
-            [1.0, 0.0, 0.0, 0.0],
-            [0.0, 1.0, 0.0, 0.0], 
-            [0.0, 0.0, 1.0, 0.0],
-            [0.0, 0.0, 0.0, 1.0]
-        ])
+        return np.eye(4)
 
     def get_transformed_interest_points(self, view_id, view_data=None):
         """Get and transform interest points for a specific view"""
