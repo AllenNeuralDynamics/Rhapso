@@ -1,10 +1,13 @@
-'''
-Run with the following commands:
-    python -m venv myNewEnv
-    source myNewEnv/bin/activate
-    pip install .[matching]
-    python Rhapso/pipelines/matching/matching_test_pipeline.py 
-'''
+# -----------------------------------------------------------------------------
+# matching_test_pipeline.py – Matching pipeline test script
+#
+# Setup & run:
+#   1. python -m venv myNewEnv           # create a fresh Python virtual environment
+#   2. source myNewEnv/bin/activate      # activate the virtual environment
+#   3. pip install .[matching]           # install matching dependencies from setup.py
+#   4. python Rhapso/pipelines/matching/matching_test_pipeline.py
+#      # execute the test pipeline
+# -----------------------------------------------------------------------------
 
 from Rhapso.matching.xml_parser import XMLParser
 from Rhapso.matching.data_loader import DataLoader

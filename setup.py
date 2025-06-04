@@ -16,7 +16,15 @@ setup(
     version="0.1.8",
     packages=find_packages(),
     extras_require={
-        "matching": ["scikit-learn", "bioio-tifffile", "bioio", "pandas", "boto3"],
+        
+        "matching": [
+            "scikit-learn", 
+            "bioio-tifffile", 
+            "bioio", 
+            "pandas", 
+            "boto3"
+        ],
+
         "n5_reader": [
             "zarr==2.18.7", 
             "s3fs==0.4.2", 
@@ -25,6 +33,7 @@ setup(
             "dask==2025.5.1", 
             "tensorstore==0.1.75"
         ],
+        
     },
     entry_points={
         "console_scripts": [

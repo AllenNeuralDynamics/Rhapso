@@ -1,9 +1,14 @@
-'''
-python -m venv n5Venv
-source n5Venv/bin/activate
-pip install .[n5_reader]
-python Rhapso/data_prep/n5_reader.py 
-'''
+# -----------------------------------------------------------------------------
+# n5_reader.py – N5 data verification script
+#
+# Setup & run:
+#   1. python -m venv n5Venv             # create a fresh Python virtual environment
+#   2. source n5Venv/bin/activate        # activate the virtual environment
+#   3. pip install .[n5_reader]          # install n5_reader dependencies from setup.py
+#   4. python Rhapso/data_prep/n5_reader.py
+#      # run the N5 reader for inspecting datasets
+# -----------------------------------------------------------------------------
+
 import zarr
 import s3fs
 import os

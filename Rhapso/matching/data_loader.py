@@ -112,9 +112,9 @@ class DataLoader:
             print(f"📍 Sample transformations:")
             num_samples = min(3, len(transformed_points))
             for i in range(num_samples):
-                # Format numbers to avoid scientific notation
-                before = [f"{x:.2f}" for x in interest_points[i]]
-                after = [f"{x:.2f}" for x in transformed_points[i]]
+                # Display full numbers without cutting digits
+                before = [f"{x}" for x in interest_points[i]]
+                after = [f"{x}" for x in transformed_points[i]]
                 print(f"   Point {i}: [{', '.join(before)}] → [{', '.join(after)}]")
             
             # Show total count if there are more points than samples shown
@@ -122,8 +122,9 @@ class DataLoader:
                 remaining = len(transformed_points) - num_samples
                 print(f"   ... and {remaining} more")
             print()  # Add blank line separator
-        
+
         return transformed_points.astype(np.float64)
+
 
     def get_transformation_matrix(self, view_id, view_data, view_registrations=None):
         """Get transformation matrix for a specific view from parsed registrations"""
