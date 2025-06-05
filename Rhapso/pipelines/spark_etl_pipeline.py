@@ -16,7 +16,7 @@ from Rhapso.data_prep.deserialize_image_chunks import DeserializeImageChunks
 from Rhapso.detection.difference_of_gaussian import DifferenceOfGaussian
 from Rhapso.detection.advanced_refinement import AdvancedRefinement
 from Rhapso.detection.save_interest_points import SaveInterestPoints
-from Rhapso.matching.interest_point_matching import start_matching
+from Rhapso.pipelines.matching.matching_pipeline_classes import MatchingPipeline
 from Rhapso.solver.solver import Solver
 import sys
 import ast
@@ -192,7 +192,7 @@ output_path = n5_base_path
 # n5_base_path = output_file_path + '/interestpoints.n5'
 # output_path = n5_base_path
 
-start_matching(xml_input_file, n5_base_path, output_path)
+MatchingPipeline(xml_input_file, n5_base_path, output_path)
 
 # SOLVE
 # -------------------------

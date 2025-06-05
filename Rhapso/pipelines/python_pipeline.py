@@ -1,5 +1,5 @@
 from Rhapso.detection.interest_point_detection import InterestPointDetection
-from Rhapso.matching.interest_point_matching import start_matching
+from Rhapso.pipelines.matching.matching_pipeline_classes import MatchingPipeline
 from Rhapso.solver.solver import Solver
 import yaml
 
@@ -31,7 +31,7 @@ interest_point_detection.run()
 xml_input_file = config['xml_input_file']
 n5_base_path = config['n5_base_path']
 output_path = config['output_path']
-start_matching(xml_input_file, n5_base_path, output_path)
+MatchingPipeline(xml_input_file, n5_base_path, output_path)
 
 # SOLVER
 solver = Solver(
