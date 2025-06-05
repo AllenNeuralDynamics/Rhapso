@@ -9,7 +9,7 @@ import boto3
 from dask import delayed
 from dask import compute
 from memory_profiler import profile
-from Rhapso.pipelines.utils import fetch_local_xml
+from Rhapso.pipelines.utils import fetch_from_s3, fetch_local_xml
 
 strategy = "python"
 dsxy = 4
@@ -34,9 +34,9 @@ threshold = 0.008
 # Tiff - local
 file_type = "tiff"
 file_source = "local"
-xml_file_path = "/Users/seanfite/Desktop/AllenInstitute/Rhapso/Data/IP_TIFF_XML/dataset.xml"
-image_file_path = "/Users/seanfite/Desktop/AllenInstitute/Rhapso/Data/IP_TIFF_XML/"
-output_file_path = "/Users/seanfite/Desktop/AllenInstitute/Rhapso/Data/IP_TIFF_XML/output"
+xml_file_path = "/Users/ai/Desktop/IP_TIFF_XML_kb/dataset.xml"
+image_file_path = "/Users/ai/Desktop/IP_TIFF_XML_kb/"
+output_file_path = "/Users/ai/Desktop/IP_TIFF_XML_kb/output"
 xml_bucket_name = None
 image_bucket_name = None
 output_bucket_name = None
@@ -66,11 +66,6 @@ key = 'detection'
 
 # data input source
 s3 = boto3.client("s3")
-
-
-def fetch_from_s3(s3, bucket_name, input_file):
-    response = s3.get_object(Bucket=bucket_name, Key=input_file)
-    return response["Body"].read().decode("utf-8")
 
 
 # INTEREST POINT DETECTION

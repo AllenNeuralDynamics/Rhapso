@@ -7,7 +7,9 @@ from Rhapso.detection.advanced_refinement import AdvancedRefinement
 from Rhapso.detection.save_interest_points import SaveInterestPoints
 import boto3
 from dask import delayed
-from dask import compute 
+from dask import compute
+
+from Rhapso.pipelines.utils import fetch_from_s3, fetch_local_xml 
 
 # This class implements the interest point detection pipeline
 
@@ -36,14 +38,6 @@ class InterestPointDetection:
     def detection(self):
         # data input source
         s3 = boto3.client('s3')
-
-        def fetch_from_s3(s3, bucket_name, input_file):
-            response = s3.get_object(Bucket=bucket_name, Key=input_file)
-            return response['Body'].read().decode('utf-8')
-
-        def fetch_local_xml(file_path):
-            with open(file_path, 'r', encoding='utf-8') as file:
-                return file.read()
 
         # INTEREST POINT DETECTION
         # --------------------------

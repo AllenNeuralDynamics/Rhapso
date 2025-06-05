@@ -40,7 +40,7 @@ elif file_source == 'local':
     xml_file = fetch_local_xml(xml_file_path)
 
 # Load XML data into dataframes         
-processor = XMLToDataFrame(xml_file)
+processor = XMLToDataFrame(xml_file, "solve")
 dataframes = processor.run()
 print("XML loaded")
 
@@ -50,7 +50,7 @@ view_transform_matrices = create_models.run()
 print("Transforms models have been created")
 
 # Get data from n5 folders
-data_prep = DataPrep(dataframes['view_interest_points'], view_transform_matrices, fixed_views, data_prefix)
+data_prep = DataPrep(dataframes['view_interest_points'], view_transform_matrices, fixed_views, data_prefix, "local")
 connected_views, corresponding_interest_points, interest_points, label_map_global, view_id_set = data_prep.run()
 print("Data prep is complete")
 
