@@ -1,3 +1,14 @@
+# -----------------------------------------------------------------------------
+# n5_reader.py – N5 data verification script
+#
+# Setup & run:
+#   1. python -m venv n5Venv             # create a fresh Python virtual environment
+#   2. source n5Venv/bin/activate        # activate the virtual environment
+#   3. pip install .[n5_reader]          # install n5_reader dependencies from setup.py
+#   4. python Rhapso/data_prep/n5_reader.py
+#      # run the N5 reader for inspecting datasets
+# -----------------------------------------------------------------------------
+
 import zarr
 import s3fs
 import os
@@ -63,7 +74,7 @@ def compare_n5_stores():
     # print("\nN5 Store:")
     # print_dataset_info(path5, prefix)
 
-compare_n5_stores()
+# compare_n5_stores()
 
 def open_n5_dataset(n5_path):
     # Check if the direct path exists
@@ -92,6 +103,47 @@ def open_n5_dataset(n5_path):
                             n5_path = alt_path
                             break
 
-# open_n5_dataset('/Users/seanfite/Desktop/IP_TIFF_XML/interestpoints.n5/')  
+# open_n5_dataset('/Users/seanfite/Desktop/IP_TIFF_XML/interestpoints.n5/')
+
+def read_n5_data(n5_path):
+    import zarr, s3fs, os
+
+    # guard missing local path
+    if not n5_path.startswith("s3://") and not os.path.isdir(n5_path):
+        print(f"❌ Local N5 path not found: {n5_path}")
+        return
+
+    # open the store (S3 or local N5)
+    if n5_path.startswith("s3://"):
+        s3 = s3fs.S3FileSystem(anon=False)
+        store = s3fs.S3Map(root=n5_path, s3=s3)
+    else:
+        store = zarr.N5Store(n5_path)
+
+    print(f"\n🔍 Reading N5 data at: {n5_path}")
+    root = zarr.open(store, mode='r')
+
+    def visit_fn(path, node):
+        if isinstance(node, zarr.Array):
+            print(f"\n📂 Dataset: {path}")
+            print(f"  🔢 dtype: {node.dtype}")
+            shape = node.shape
+            print(f"  📏 shape: {shape}")
+            if len(shape) > 1:
+                print(f"  📊 count: {shape[0]} arrays of shape {shape[1:]}")
+            else:
+                print(f"  📊 count: {shape[0]} elements")
+            print(f"  🗂 chunks: {node.chunks}")
+            print(f"  🛠 compressor: {node.compressor}")
+
+            print("  🔎 first 5 entries:")
+            sample = node[:5]
+            for i, entry in enumerate(sample, start=1):
+                # ensure nested array is printed clearly
+                val = entry.tolist() if hasattr(entry, "tolist") else entry
+                print(f"    {i}. {val}")
+
+    root.visititems(visit_fn)
 
 
+read_n5_data('/home/martin/Documents/Allen/Data/IP_TIFF_XML_2/interestpoints.n5')
