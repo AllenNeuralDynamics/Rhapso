@@ -82,7 +82,7 @@ def main(xml_file, n5_folder_base, output_path):
     pipeline.run()
 
 if __name__ == "__main__":
-    xml_file = "/Users/ai/Desktop/IP_TIFF_XML_kb/output/dataset-detection.xml"
-    n5_folder_base = "/Users/ai/Desktop/IP_TIFF_XML_kb/output/interestpoints.n5"
-    output_path = "/Users/ai/Desktop/IP_TIFF_XML(5)/output/matching.n5"
+    xml_file = "/home/martin/Documents/Allen/Data/IP_TIFF_XML/dataset.xml"
+    n5_folder_base = "/home/martin/Documents/Allen/Data/IP_TIFF_XML/interestpoints.n5"
+    output_path = "/home/martin/Documents/Allen/Data/IP_TIFF_XML/matchingOutput.n5"
     main(xml_file, n5_folder_base, output_path)

@@ -34,9 +34,9 @@ threshold = 0.008
 # Tiff - local
 file_type = "tiff"
 file_source = "local"
-xml_file_path = "/Users/ai/Desktop/IP_TIFF_XML_kb/dataset.xml"
-image_file_path = "/Users/ai/Desktop/IP_TIFF_XML_kb/"
-output_file_path = "/Users/ai/Desktop/IP_TIFF_XML_kb/output"
+xml_file_path = "/Users/seanfite/Desktop/AllenInstitute/Rhapso/Data/IP_TIFF_XML/dataset.xml"
+image_file_path = "/Users/seanfite/Desktop/AllenInstitute/Rhapso/Data/IP_TIFF_XML/"
+output_file_path = "/Users/seanfite/Desktop/AllenInstitute/Rhapso/Data/IP_TIFF_XML/output"
 xml_bucket_name = None
 image_bucket_name = None
 output_bucket_name = None

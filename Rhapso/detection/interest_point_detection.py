@@ -8,7 +8,6 @@ from Rhapso.detection.save_interest_points import SaveInterestPoints
 import boto3
 from dask import delayed
 from dask import compute
-
 from Rhapso.pipelines.utils import fetch_from_s3, fetch_local_xml 
 
 # This class implements the interest point detection pipeline

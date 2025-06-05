@@ -1,5 +1,3 @@
-
-
 import zarr
 import s3fs
 import numpy as np

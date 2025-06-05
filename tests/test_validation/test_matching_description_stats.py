@@ -1,7 +1,6 @@
 import unittest
 from unittest.mock import patch
 import numpy as np
-
 from Rhapso.Validation.matching_descriptors import DescriptiveStatsMatching
 
 class TestDescriptiveStatsMatching(unittest.TestCase):
@@ -10,7 +9,6 @@ class TestDescriptiveStatsMatching(unittest.TestCase):
         self.stats = DescriptiveStatsMatching({('30', '5'):[ {'p1': np.array([1288.26358115,  822.34935865,   59.33322283]), 'p2': np.array([1291.87676123,  612.10384713,   15.05991703])},
                                                              {'p1': np.array([676.14930295, 930.68295147,  85.59932219]), 'p2': np.array([680.98046159, 739.46465793,   4.11655491])}]}, 2)
         self.stats.get_matches()
-
 
     def test_get_matches(self):
         result = DescriptiveStatsMatching({('30', '5'):[ {'p1': np.array([1288.26358115,  822.34935865,   59.33322283]), 'p2': np.array([1291.87676123,  612.10384713,   15.05991703])},
@@ -22,16 +20,13 @@ class TestDescriptiveStatsMatching(unittest.TestCase):
         x,y,z = self.stats.get_plane_coordinates()
 
         self.assertEqual(x, [1288.26358115,1291.87676123, 676.14930295, 680.98046159])
-        
         self.assertEqual(y, [822.34935865, 612.10384713,930.68295147, 739.46465793])
-
         self.assertEqual(z, [59.33322283, 15.05991703, 85.59932219, 4.11655491])
 
     def test_get_bounding_box(self):
         min_bb, max_bb = self.stats.get_bounding_box()
         self.assertEqual(min_bb, {"x": 676.14930295, "y": 612.10384713, "z": 4.11655491})
         self.assertEqual(max_bb, {"x": 1291.87676123, 'y': 930.68295147, 'z': 85.59932219})
-
 
     def test_get_standard_deviation(self):
         sd_x, sd_y, sd_z = self.stats.get_standard_deviation()
@@ -62,7 +57,6 @@ class TestDescriptiveStatsMatching(unittest.TestCase):
         """
 
         self.assertEqual(result, expected_output)
-
 
     def test_get_matches_raises_error_when_empty(self):
         no_matches = {}

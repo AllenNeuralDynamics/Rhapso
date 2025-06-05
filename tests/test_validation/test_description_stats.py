@@ -1,8 +1,6 @@
-
 import unittest
 from unittest.mock import patch
 from Rhapso.Validation.alignment_displacement import DescriptiveStatsAlignment
-
 
 class TestDescriptiveStats(unittest.TestCase):
     def test_typical_case(self):
