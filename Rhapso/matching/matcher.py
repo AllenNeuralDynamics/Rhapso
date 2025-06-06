@@ -43,17 +43,29 @@ class Matcher:
 
     def match(self, pointsA, pointsB):
         """Complete matching pipeline from candidates to RANSAC filtering"""
-        # Get initial candidates using KD-tree matching
-        candidates = self._get_candidates(pointsA, pointsB)
-        
-        # Compute initial correspondences
-        correspondences = self._compute_match(candidates, pointsA, pointsB)
-        print(f"Found {len(correspondences)} initial correspondences")
-        
-        # Filter correspondences using RANSAC
-        inliers = self._compute_ransac(correspondences, pointsA, pointsB)
-        print(f"RANSAC filtering retained {len(inliers)} inlier matches")
-        return inliers
+        try:
+            # Get initial candidates using KD-tree matching
+            candidates = self._get_candidates(pointsA, pointsB)
+        except Exception as e:
+            print(f"Error in _get_candidates: {e}")
+            return []
+
+        try:
+            # Compute initial correspondences
+            correspondences = self._compute_match(candidates, pointsA, pointsB)
+            print(f"Found {len(correspondences)} initial correspondences")
+        except Exception as e:
+            print(f"Error in _compute_match: {e}")
+            return []
+
+        try:
+            # Filter correspondences using RANSAC
+            inliers = self._compute_ransac(correspondences, pointsA, pointsB)
+            print(f"RANSAC filtering retained {len(inliers)} inlier matches")
+            return inliers
+        except Exception as e:
+            print(f"Error in _compute_ransac: {e}")
+            return []
 
     def _get_candidates(self, pointsA, pointsB):
         """Find candidate matches using simple distance comparison (temporary)"""
