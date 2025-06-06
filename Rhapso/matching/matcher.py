@@ -63,19 +63,18 @@ class Matcher:
     def _compute_matching(self, descriptorsA, descriptorsB, lookup_tree, difference_threshold, ratio_of_distance):
         """Compute matching using KNN search and Lowe's ratio test
         
-        Uses sklearn KDTree which provides equivalent functionality to ImgLib2's Eytzinger layout KDTree:
-        - Both support k-nearest neighbor queries with Euclidean distance
-        - Both return sorted distances and indices
-        - Both handle edge cases properly
+        Uses sklearn KDTree which provides equivalent functionality to ImgLib2's Eytzinger layout KDTree
         """
         correspondences = []
         
-        print(f"\n🔍 _compute_matching() - Applying Lowe's ratio test:")
+        print(f"\n🔍 _compute_matching() - Input Parameters:")
+        print(f"  📊 descriptors_A size: {len(descriptorsA)}")
+        print(f"  📊 descriptors_B size: {lookup_tree.data.shape[0]}")
+        print(f"  📊 difference_threshold: {difference_threshold}")
         print(f"  📊 ratio_of_distance: {ratio_of_distance}")
-        print(f"  🌳 KDTree contains {lookup_tree.data.shape[0]} descriptors with {lookup_tree.data.shape[1]} dimensions")
         
         debug_count = 0
-        max_debug_prints = 3
+        max_debug_prints = 15  # Increase this to see more matches
         
         # Tracking variables for summary
         processed_descriptors = 0
@@ -100,7 +99,6 @@ class Matcher:
                     continue
                 
                 # Search for 2 nearest neighbors in descriptor space
-                # This is equivalent to ImgLib2's KDTree.search(point, k=2) functionality
                 k_neighbors = min(2, lookup_tree.data.shape[0])  # Handle case where tree has < 2 points
                 distances, indices = lookup_tree.query([query_point], k=k_neighbors)
                 
@@ -119,10 +117,37 @@ class Matcher:
                     continue
                 
                 # Apply Lowe's ratio test to filter ambiguous matches
-                # This matches the standard computer vision approach used in ImgLib2
-                ratio_test = best_distance / second_best_distance if second_best_distance > 0 else float('inf')
+                # EXACTLY matching BigStitcherSpark's implementation:
+                # best * ratioOfDistance <= secondBest
+                ratio_test_value = best_distance * ratio_of_distance
                 
-                if best_distance < difference_threshold and ratio_test <= (1.0 / ratio_of_distance):
+                # Print detailed debugging info for understanding the ratio test
+                if debug_count < max_debug_prints:
+                    point_a_id = desc_a['point_index']
+                    point_b_id = descriptorsB[best_match_idx]['point_index']
+                    
+                    if best_distance < difference_threshold and ratio_test_value <= second_best_distance:
+                        print(f"✅ ACCEPTED: PointA[{point_a_id}] ↔ PointB[{point_b_id}] | " +
+                              f"best={best_distance:.6f} < threshold={difference_threshold:.6f} && " +
+                              f"ratio_test={ratio_test_value:.6f} <= second_best={second_best_distance:.6f}")
+                        print(f"   📊 Detailed: best={best_distance:.6f}, secondBest={second_best_distance:.6f}, " +
+                              f"best/secondBest={best_distance/second_best_distance:.6f}, " +
+                              f"1/ratio={1.0/ratio_of_distance:.6f}")
+                        debug_count += 1
+                    elif best_distance >= difference_threshold:
+                        print(f"❌ REJECTED (distance threshold): PointA[{point_a_id}] ↔ PointB[{point_b_id}] | " +
+                              f"best={best_distance:.6f} >= threshold={difference_threshold:.6f}")
+                        debug_count += 1
+                    else:
+                        print(f"❌ REJECTED (ratio test): PointA[{point_a_id}] ↔ PointB[{point_b_id}] | " +
+                              f"ratio_test={ratio_test_value:.6f} > second_best={second_best_distance:.6f}")
+                        print(f"   📊 Detailed: best={best_distance:.6f}, secondBest={second_best_distance:.6f}, " +
+                              f"best/secondBest={best_distance/second_best_distance:.6f}, " +
+                              f"1/ratio={1.0/ratio_of_distance:.6f}")
+                        debug_count += 1
+                
+                # BigStitcherSpark implementation: best * ratioOfDistance <= secondBest
+                if best_distance < difference_threshold and ratio_test_value <= second_best_distance:
                     # Accept the match
                     ratio_test_passed += 1
                     desc_b = descriptorsB[best_match_idx]
@@ -135,22 +160,10 @@ class Matcher:
                         'pointA_idx': desc_a['point_index'],
                         'pointB_idx': desc_b['point_index'],
                         'distance': best_distance,
-                        'ratio': ratio_test
+                        'ratio': best_distance / second_best_distance if second_best_distance > 0 else float('inf')
                     }
                     correspondences.append(correspondence)
                     final_correspondences += 1
-                    
-                    if debug_count < max_debug_prints:
-                        print(f"✅ ACCEPTED: PointA[{desc_a['point_index']}] ↔ PointB[{desc_b['point_index']}] | "
-                              f"best={best_distance:.6f} < threshold={difference_threshold:.6f} && "
-                              f"ratio_test={ratio_test:.6f} <= threshold={1.0/ratio_of_distance:.6f}")
-                        debug_count += 1
-                else:
-                    # Reject the match
-                    if debug_count < max_debug_prints:
-                        print(f"❌ REJECTED (ratio test): PointA[{desc_a['point_index']}] ↔ PointB[{descriptorsB[best_match_idx]['point_index']}] | "
-                              f"ratio_test={ratio_test:.6f} > threshold={1.0/ratio_of_distance:.6f}")
-                        debug_count += 1
                     
             except Exception as e:
                 if debug_count < max_debug_prints:
@@ -290,7 +303,7 @@ class Matcher:
                                     neighbor_points.append(points_array[neighbor_global_idx])
                                     neighbor_ids.append(neighbor_global_idx)
                                 
-                                # Create 6D descriptor from the 3 neighbors
+                                # Create 6D descriptor with explanations
                                 descriptor_6d = self._create_6d_descriptor(
                                     point, neighbor_points[0], neighbor_points[1], neighbor_points[2]
                                 )
@@ -330,22 +343,6 @@ class Matcher:
         
         print(f"🔢 Total descriptors created: {len(descriptors)}")
         return descriptors
-
-    def _create_6d_descriptor(self, center, p1, p2, p3):
-        """Create 6D geometric descriptor from center point and 3 neighbors"""
-        # Calculate distances between all pairs
-        d01 = np.linalg.norm(p1 - center)
-        d02 = np.linalg.norm(p2 - center) 
-        d03 = np.linalg.norm(p3 - center)
-        d12 = np.linalg.norm(p2 - p1)
-        d13 = np.linalg.norm(p3 - p1)
-        d23 = np.linalg.norm(p3 - p2)
-        
-        # Sort distances to create invariant descriptor
-        distances = [d01, d02, d03, d12, d13, d23]
-        distances.sort()
-        
-        return np.array(distances, dtype=np.float64)
 
     def _compute_ransac(self, correspondences, pointsA, pointsB):
         """Apply RANSAC to filter correspondences"""
@@ -394,3 +391,58 @@ class Matcher:
         return np.linalg.norm(
             (model['pointB'] - model['pointA']) - (candidate['pointB'] - candidate['pointA'])
         )
+
+    def _create_6d_descriptor(self, center, p1, p2, p3):
+        """Compute 6D descriptor following BigStitcherSpark algorithm."""
+        # compute relative vectors
+        v1 = p1 - center
+        v2 = p2 - center
+        v3 = p3 - center
+        
+        # distances to basis
+        d1 = np.linalg.norm(v1); d2 = np.linalg.norm(v2); d3 = np.linalg.norm(v3)
+        dist_list = [d1, d2, d3]
+        
+        # identify farthest neighbor
+        far_idx = int(np.argmax(dist_list))
+        dist_f = dist_list[far_idx]
+        
+        # reorder vectors: farthest, second, third
+        vectors = [v1, v2, v3]
+        others = [i for i in (0,1,2) if i != far_idx]
+        sec_idx, thr_idx = others
+        
+        v_f = vectors[far_idx]
+        v_sec = vectors[sec_idx]
+        v_thr = vectors[thr_idx]
+        
+        # build local coordinate axes
+        X = v_f / dist_f
+        Z = np.cross(v_f, v_sec)
+        Z = Z / np.linalg.norm(Z)
+        Y = np.cross(Z, X)
+        
+        # project neighbors into local frame
+        x2, y2 = np.dot(v_sec, X), np.dot(v_sec, Y)
+        x3, y3, z3 = np.dot(v_thr, X), np.dot(v_thr, Y), np.dot(v_thr, Z)
+
+        # Apply sign conventions to match BigStitcherSpark
+        y2 = -y2   # Negate the Y-coordinate of the second neighbor
+        y3 = abs(y3)  # Use absolute value for the Y-coordinate of the third neighbor
+        z3 = abs(z3)  # Use absolute value for the Z-coordinate of the third neighbor
+
+        # print detailed breakdown with more information
+        print("    🧮 Mathematical breakdown for this 6D descriptor:")
+        print(f"      📍 Farthest neighbor index: {far_idx} at distance {dist_f:.6f}")
+        print(f"      🔄 X-axis = {X.tolist()}")
+        print(f"      🧭 Y-axis = {Y.tolist()}")
+        print(f"      ⚓ Z-axis = {Z.tolist()}")
+        print(f"      📏 Local coords of second neighbor: [x2={x2:.6f}, y2={y2:.6f}]")
+        print(f"      📏 Local coords of third  neighbor: [x3={x3:.6f}, y3={y3:.6f}, z3={z3:.6f}]")
+        print(f"      📐 Original vectors:")
+        print(f"         v1 = {v1.tolist()} (length={d1:.6f})")
+        print(f"         v2 = {v2.tolist()} (length={d2:.6f})")
+        print(f"         v3 = {v3.tolist()} (length={d3:.6f})")
+        
+        # assemble final descriptor
+        return np.array([dist_f, x2, y2, x3, y3, z3], dtype=np.float64)
