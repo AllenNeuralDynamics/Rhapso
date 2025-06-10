@@ -60,6 +60,10 @@ from Rhapso.matching.matcher import Matcher
 from Rhapso.matching.result_saver import ResultSaver
 from Rhapso.matching.ransac import RANSAC
 import os
+import sys
+import datetime
+import io
+from contextlib import redirect_stdout
 
 class MatchingPipeline:
     def __init__(self, xml_file, interest_points_folder, logging=None):
@@ -69,6 +73,7 @@ class MatchingPipeline:
             'interest_point_transformation': True,
             'ratio_test_output': True,
             'basis_point_details': 3,  # Number of basis points to show details for
+            'save_logs_to_view_folder': False,  # Default is not to save logs to view folder
         }
         
         # Update with user-provided logging settings
@@ -76,10 +81,18 @@ class MatchingPipeline:
             self.logging.update(logging)
             
         self.xml_file = xml_file
+        self.xml_dir = os.path.dirname(xml_file)
+        self.logs_dir = os.path.join(self.xml_dir, 'logs')
+        
+        # Create logs directory if saving logs is enabled
+        if self.logging.get('save_logs_to_view_folder', False):
+            os.makedirs(self.logs_dir, exist_ok=True)
+            print(f"📝 Log directory created at: {self.logs_dir}")
+            
         self.parser = XMLParser(xml_file)
         # Pass both the interest_points_folder and xml_file directory
         self.data_loader = DataLoader(interest_points_folder, logging=self.logging)
-        self.data_loader.xml_base_path = os.path.dirname(xml_file)  # Store XML directory
+        self.data_loader.xml_base_path = self.xml_dir  # Store XML directory
         
         # Create matcher with explicit model parameters using nested enums
         self.matcher = Matcher(
@@ -88,6 +101,25 @@ class MatchingPipeline:
             lambda_val=0.1,
             logging=self.logging
         )
+
+    def _get_view_log_path(self, viewA, viewB):
+        """Create a log file path for a specific view pair."""
+        if not self.logging.get('save_logs_to_view_folder', False):
+            return None
+            
+        # Format views as strings, regardless of their original type
+        viewA_str = f"{viewA[0]}_{viewA[1]}" if isinstance(viewA, tuple) else str(viewA)
+        viewB_str = f"{viewB[0]}_{viewB[1]}" if isinstance(viewB, tuple) else str(viewB)
+        
+        # Create a view-specific directory
+        view_dir = os.path.join(self.logs_dir, f"view_{viewA_str}_to_{viewB_str}")
+        os.makedirs(view_dir, exist_ok=True)
+        
+        # Generate a timestamped log file
+        timestamp = datetime.datetime.now().strftime("%Y%m%d_%H%M%S")
+        log_file = os.path.join(view_dir, f"matching_log_{timestamp}.txt")
+        
+        return log_file
 
     def run(self):
         try:
@@ -140,9 +172,45 @@ class MatchingPipeline:
 
     def _process_matching_task(self, pair, label_map):
         """Process a single matching task"""
+        viewA, viewB = pair
+        
+        # Get log file path if logging to files is enabled
+        log_file_path = self._get_view_log_path(viewA, viewB)
+        
+        # If logging to file, capture all standard output
+        captured_output = io.StringIO()
+        
+        # Use the context manager to redirect stdout to our StringIO object
         try:
-            viewA, viewB = pair
+            if log_file_path:
+                with redirect_stdout(captured_output):
+                    result = self._run_matching_task(viewA, viewB, label_map)
+                
+                # Write the captured output to the log file
+                with open(log_file_path, 'w') as log_file:
+                    log_file.write(f"=== MATCHING LOG: View {viewA} to {viewB} ===\n")
+                    log_file.write(f"Date: {datetime.datetime.now().strftime('%Y-%m-%d %H:%M:%S')}\n\n")
+                    log_file.write(captured_output.getvalue())
+                
+                # Print a confirmation message about the log file
+                print(f"📝 Log saved to: {log_file_path}")
+                
+                return result
+            else:
+                # Run normally without redirection if logging is disabled
+                return self._run_matching_task(viewA, viewB, label_map)
+                
+        except Exception as e:
+            print(f"❌ ERROR: Failed in _process_matching_task for pair {pair}")
+            print(f"Exception type: {type(e).__name__}")
+            print(f"Exception details: {str(e)}")
+            import traceback
+            traceback.print_exc()
+            return []
 
+    def _run_matching_task(self, viewA, viewB, label_map):
+        """Run the actual matching task without any I/O redirection"""
+        try:
             # Get view data for path lookup
             data_global = self.parser.get_data_global()
             view_data = data_global['viewsInterestPoints']
@@ -190,7 +258,7 @@ class MatchingPipeline:
             return [(viewA, viewB, m[0], m[1]) for m in filtered_matches]
         
         except Exception as e:
-            print(f"❌ ERROR: Failed in _process_matching_task for pair {pair}")
+            print(f"❌ ERROR: Failed in _run_matching_task for views {viewA} and {viewB}")
             print(f"Exception type: {type(e).__name__}")
             print(f"Exception details: {str(e)}")
             import traceback
@@ -205,7 +273,7 @@ def main(xml_file):
     
     # Configure the logging options
     logging_config = {
-        'save_logs_to_view_folder': True,  # Create a 'logs' folder with a subfolder for each view "(18, 1)" and save logs there
+        'save_logs_to_view_folder': False,  # Enable saving logs to view-specific folders
         'basis_points_details': 3,          # Show details for first 3 basis points
         'detailed_descriptor_breakdown': False,  # Turn off detailed descriptor calculations
         'interest_point_transformation': 10,     # Show only first 10 point transformations

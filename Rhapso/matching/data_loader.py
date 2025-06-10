@@ -160,9 +160,8 @@ class DataLoader:
         
     def transform_interest_points(self, points, transformation_matrix):
         """Transform interest points using the given transformation matrix"""
-        if points is None or len(points) == 0:
-            print("⚠️ No points to transform")
-            return np.array([])
+        if len(points) == 0:
+            return []
         
         # Print transformation matrix in the corrected format
         matrix = transformation_matrix

@@ -65,13 +65,30 @@ class Matcher:
             return []
 
         try:
+            # Deduplicate correspondences before RANSAC
+            unique_candidates = self._deduplicate_correspondences(candidates)
+            print(f"Deduplicated to {len(unique_candidates)} unique point pairs")
+            
             # Filter correspondences using RANSAC
-            inliers = self._compute_ransac(candidates, pointsA, pointsB)
-            print(f"RANSAC filtering retained {len(inliers)} inlier matches")
+            inliers = self._compute_ransac(unique_candidates, pointsA, pointsB)
             return inliers
         except Exception as e:
             print(f"Error in _compute_ransac: {e}")
             return []
+
+    def _deduplicate_correspondences(self, correspondences):
+        """Deduplicate correspondences to ensure unique point pairs"""
+        unique_pairs = {}
+        
+        # For each correspondence, keep only the one with the smallest distance
+        for corr in correspondences:
+            pair_key = (corr['pointA_idx'], corr['pointB_idx'])
+            
+            # If the pair doesn't exist yet, or this match has a smaller distance than the existing one
+            if pair_key not in unique_pairs or corr['distance'] < unique_pairs[pair_key]['distance']:
+                unique_pairs[pair_key] = corr
+                
+        return list(unique_pairs.values())
 
     def _compute_matching(self, descriptorsA, descriptorsB, lookup_tree, difference_threshold, ratio_of_distance):
         """Compute matching using KNN search and Lowe's ratio test
@@ -400,32 +417,56 @@ class Matcher:
                 'indices': (corr['pointA_idx'], corr['pointB_idx'])
             })
             
-        inliers = self._filter_with_ransac(candidates)
+        inliers, avg_error = self._filter_with_ransac(candidates)
+        
+        # Calculate percentage of inliers
+        inlier_percentage = (len(inliers) / len(candidates) * 100) if candidates else 0
+        
+        # Format the output message with inlier statistics
+        print(f"Remaining inliers after RANSAC: {len(inliers)} of {len(candidates)} " +
+              f"({inlier_percentage:.0f}%) with average error {avg_error:.16f}")
+        
         return [(c['indices'][0], c['indices'][1]) for c in inliers]
 
     def _filter_with_ransac(self, candidates, max_iterations=1000, inlier_threshold=5.0):
         """Apply RANSAC to find best model and inlier set"""
         if not candidates:
-            return []
+            return [], 0.0
             
         best_inliers = []
         best_model = None
+        best_avg_error = float('inf')
         
         for _ in range(max_iterations):
             sample_idx = np.random.choice(len(candidates))
             model_candidate = candidates[sample_idx]
             
             inliers = []
+            total_error = 0.0
+            
             for candidate in candidates:
                 error = self._compute_geometric_error(model_candidate, candidate)
                 if error < inlier_threshold:
                     inliers.append(candidate)
+                    total_error += error
                     
-            if len(inliers) > len(best_inliers):
+            # Calculate average error for this model
+            avg_error = total_error / len(inliers) if inliers else float('inf')
+            
+            # Update best model based on number of inliers (primary) and average error (secondary)
+            if len(inliers) > len(best_inliers) or (len(inliers) == len(best_inliers) and avg_error < best_avg_error):
                 best_inliers = inliers
                 best_model = model_candidate
+                best_avg_error = avg_error
+    
+        # Recalculate average error for the best model's inliers
+        if best_inliers:
+            total_error = sum(self._compute_geometric_error(best_model, inlier) for inlier in best_inliers)
+            best_avg_error = total_error / len(best_inliers)
+        else:
+            best_avg_error = 0.0
                 
-        return best_inliers
+        return best_inliers, best_avg_error
 
     def _compute_geometric_error(self, model, candidate):
         """Calculate geometric error between model and candidate match"""
