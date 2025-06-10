@@ -22,13 +22,26 @@ class Matcher:
                  transform_model=TransformationModel.AFFINE,
                  reg_model=RegularizationModel.RIGID,
                  lambda_val=0.1,
-                 ransac_params=None):
+                 ransac_params=None,
+                 logging=None):
         """Initialize matcher with model parameters"""
         self.transform_model = transform_model
         self.reg_model = reg_model
         self.lambda_val = lambda_val
         self.ransac_params = ransac_params or {}
         self.model = self._create_model()
+        
+        # Set default logging configuration if none provided
+        self.logging = {
+            'detailed_descriptor_breakdown': True,
+            'ratio_test_output': True,
+            'basis_point_details': 3,  # Number of basis points to show details for
+        }
+        
+        # Update with user-provided logging settings
+        if logging is not None:
+            self.logging.update(logging)
+            
         print(f"Created matcher with model type: {self.model['type']}")
 
     def _create_model(self):
@@ -74,7 +87,14 @@ class Matcher:
         print(f"  📊 ratio_of_distance: {ratio_of_distance}")
         
         debug_count = 0
-        max_debug_prints = 15  # Increase this to see more matches
+        # Use the logging configuration to determine how many ratio tests to print
+        max_debug_prints = self.logging.get('ratio_test_output', True)
+        if max_debug_prints is True:
+            max_debug_prints = float('inf')  # Print all
+        elif max_debug_prints is False:
+            max_debug_prints = 0  # Print none
+        else:
+            max_debug_prints = int(max_debug_prints)  # Print specific number
         
         # Tracking variables for summary
         processed_descriptors = 0
@@ -171,7 +191,7 @@ class Matcher:
                     debug_count += 1
                 continue
                 
-        if debug_count >= max_debug_prints:
+        if debug_count >= max_debug_prints and max_debug_prints > 0:
             print(f"... (showing first {max_debug_prints} ratio test results, continuing silently)")
         
         # Print comprehensive summary
@@ -191,8 +211,8 @@ class Matcher:
         
         try:
             # Create descriptors for both point sets
-            descriptorsA = self._create_descriptors(pointsA, redundancy)
-            descriptorsB = self._create_descriptors(pointsB, redundancy)
+            descriptorsA = self._create_descriptors(pointsA, redundancy, "A")
+            descriptorsB = self._create_descriptors(pointsB, redundancy, "B")
             
             print(f"📊 Created {len(descriptorsA)} descriptors for A, {len(descriptorsB)} descriptors for B")
             
@@ -225,8 +245,7 @@ class Matcher:
             print(f"🌳 Built KDTree with {lookup_tree.data.shape[0]} nodes, {lookup_tree.data.shape[1]} dimensions")
             
             # Find correspondences using KNN search and apply Lowe's ratio test
-            correspondences = self._compute_matching(descriptorsA, descriptorsB, lookup_tree, 
-                                                  difference_threshold, ratio_of_distance)
+            correspondences = self._compute_matching(descriptorsA, descriptorsB, lookup_tree, difference_threshold, ratio_of_distance)
             
             print(f"\n🎯 Found {len(correspondences)} correspondence candidates after Lowe's ratio test")
             return correspondences
@@ -237,11 +256,12 @@ class Matcher:
             traceback.print_exc()
             return []
 
-    def _create_descriptors(self, points, redundancy=4):
+    def _create_descriptors(self, points, redundancy=4, view_label=""):
         """Create local coordinate system descriptors for each point"""
-        print("🛠️ Creating descriptors...")
+        print(f"🛠️ Creating descriptors for View {view_label}...")
         descriptors = []
         points_array = np.array(points)
+        total_basis_points = len(points)
         
         if len(points) < 4:
             print(f"⚠️ Not enough points ({len(points)}) to create descriptors (need at least 4)")
@@ -255,7 +275,18 @@ class Matcher:
             num_neighbors_needed = 3  # We need exactly 3 neighbors for each descriptor
             max_neighbors_to_find = redundancy + 1  # +1 for the point itself
             
-            print(f"🔍 Creating descriptors with {redundancy} redundancy")
+            print(f"🔍 Creating descriptors with {redundancy} redundancy for {total_basis_points} basis points")
+            
+            # Determine how many basis points to show details for - check both parameter names
+            basis_point_details = self.logging.get('basis_points_details', 
+                              self.logging.get('basis_point_details', 3))
+            
+            if basis_point_details is True:
+                basis_point_details = float('inf')  # Show all
+            elif basis_point_details is False:
+                basis_point_details = 0  # Show none
+            else:
+                basis_point_details = int(basis_point_details)  # Show specific number
             
             for basis_point_index, point in enumerate(points_array):
                 try:
@@ -270,8 +301,8 @@ class Matcher:
                     if len(neighbor_indices) < num_neighbors_needed:
                         continue  # Skip if not enough neighbors
                     
-                    # Only print detailed information for first 3 basis points
-                    if basis_point_index < 3:
+                    # Only print detailed information for the first N basis points (configurable)
+                    if basis_point_index < basis_point_details:
                         print(f"🎯 Basis Point {basis_point_index}: [{point[0]:.3f}, {point[1]:.3f}, {point[2]:.3f}]")
                         
                         # Show only the first 4 neighbors (matching Java output)
@@ -305,7 +336,9 @@ class Matcher:
                                 
                                 # Create 6D descriptor with explanations
                                 descriptor_6d = self._create_6d_descriptor(
-                                    point, neighbor_points[0], neighbor_points[1], neighbor_points[2]
+                                    point, neighbor_points[0], neighbor_points[1], neighbor_points[2],
+                                    print_details=(basis_point_index < basis_point_details and 
+                                                  self.logging.get('detailed_descriptor_breakdown', True))
                                 )
                                 
                                 descriptor_entry = {
@@ -315,10 +348,19 @@ class Matcher:
                                     'base_point': point
                                 }
                                 
+                                # Print detailed descriptor entry information
+                                if basis_point_index < basis_point_details:
+                                    print(f"  📝 Adding descriptor to list with details:")
+                                    print(f"    🔹 Basis point index: {descriptor_entry['point_index']}")
+                                    print(f"    🔹 Base point coordinates: [{point[0]:.3f}, {point[1]:.3f}, {point[2]:.3f}]")
+                                    print(f"    🔹 Neighbor indices: {descriptor_entry['neighbor_indices']}")
+                                    print(f"    🔹 6D descriptor: [{descriptor_6d[0]:.6f}, {descriptor_6d[1]:.6f}, {descriptor_6d[2]:.6f}, " +
+                                          f"{descriptor_6d[3]:.6f}, {descriptor_6d[4]:.6f}, {descriptor_6d[5]:.6f}]")
+                                
                                 descriptors.append(descriptor_entry)
                                 
-                                # Print descriptor details for first 3 basis points
-                                if basis_point_index < 3:
+                                # Print descriptor details for configured number of basis points
+                                if basis_point_index < basis_point_details:
                                     # Convert neighbor local indices to 1-indexed format (matching Java output)
                                     neighbor_display_ids = [idx + 1 for idx in neighbor_combo]
                                     print(f"  ✅ 6D descriptor [{neighbor_display_ids[0]},{neighbor_display_ids[1]},{neighbor_display_ids[2]}]: " +
@@ -326,12 +368,12 @@ class Matcher:
                                           f"{descriptor_6d[3]:.6f}, {descriptor_6d[4]:.6f}, {descriptor_6d[5]:.6f}]")
                             
                             except Exception as e:
-                                if basis_point_index < 3:
+                                if basis_point_index < basis_point_details:
                                     print(f"  ❌ Failed to create descriptor: {e}")
                                 continue
                     
                 except Exception as e:
-                    if basis_point_index < 3:
+                    if basis_point_index < basis_point_details:
                         print(f"❌ Error creating descriptors for point {basis_point_index}: {e}")
                     continue
                     
@@ -392,7 +434,7 @@ class Matcher:
             (model['pointB'] - model['pointA']) - (candidate['pointB'] - candidate['pointA'])
         )
 
-    def _create_6d_descriptor(self, center, p1, p2, p3):
+    def _create_6d_descriptor(self, center, p1, p2, p3, print_details=True):
         """Compute 6D descriptor following BigStitcherSpark algorithm."""
         # compute relative vectors
         v1 = p1 - center
@@ -418,8 +460,31 @@ class Matcher:
         
         # build local coordinate axes
         X = v_f / dist_f
+        
+        # Calculate cross product for Z-axis
         Z = np.cross(v_f, v_sec)
-        Z = Z / np.linalg.norm(Z)
+        
+        # Check for zero or near-zero norm to avoid divide-by-zero
+        z_norm = np.linalg.norm(Z)
+        if z_norm < 1e-10:  # Use a small epsilon value
+            # Vectors are nearly parallel, try with third vector instead
+            Z = np.cross(v_f, v_thr)
+            z_norm = np.linalg.norm(Z)
+            
+            # If still problematic, create an arbitrary perpendicular vector
+            if z_norm < 1e-10:
+                # Find non-zero component in v_f to create perpendicular vector
+                if abs(X[0]) > 1e-10:
+                    Z = np.array([0, 1, 0])
+                else:
+                    Z = np.array([1, 0, 0])
+                Z = Z - X * np.dot(Z, X)  # Make it perpendicular to X
+                z_norm = np.linalg.norm(Z)
+        
+        # Now normalize Z safely
+        Z = Z / z_norm if z_norm > 1e-10 else np.array([0.0, 0.0, 1.0])
+        
+        # Continue with Y calculation
         Y = np.cross(Z, X)
         
         # project neighbors into local frame
@@ -431,18 +496,19 @@ class Matcher:
         y3 = abs(y3)  # Use absolute value for the Y-coordinate of the third neighbor
         z3 = abs(z3)  # Use absolute value for the Z-coordinate of the third neighbor
 
-        # print detailed breakdown with more information
-        print("    🧮 Mathematical breakdown for this 6D descriptor:")
-        print(f"      📍 Farthest neighbor index: {far_idx} at distance {dist_f:.6f}")
-        print(f"      🔄 X-axis = {X.tolist()}")
-        print(f"      🧭 Y-axis = {Y.tolist()}")
-        print(f"      ⚓ Z-axis = {Z.tolist()}")
-        print(f"      📏 Local coords of second neighbor: [x2={x2:.6f}, y2={y2:.6f}]")
-        print(f"      📏 Local coords of third  neighbor: [x3={x3:.6f}, y3={y3:.6f}, z3={z3:.6f}]")
-        print(f"      📐 Original vectors:")
-        print(f"         v1 = {v1.tolist()} (length={d1:.6f})")
-        print(f"         v2 = {v2.tolist()} (length={d2:.6f})")
-        print(f"         v3 = {v3.tolist()} (length={d3:.6f})")
+        # Print detailed breakdown if enabled
+        if print_details:
+            print("🧮 Mathematical breakdown for this 6D descriptor:")
+            print(f"      📍 Farthest neighbor index: {far_idx} at distance {dist_f:.6f}")
+            print(f"      🔄 X-axis = {X.tolist()}")
+            print(f"      🧭 Y-axis = {Y.tolist()}")
+            print(f"      ⚓ Z-axis = {Z.tolist()}")
+            print(f"      📏 Local coords of second neighbor: [x2={x2:.6f}, y2={y2:.6f}]")
+            print(f"      📏 Local coords of third  neighbor: [x3={x3:.6f}, y3={y3:.6f}, z3={z3:.6f}]")
+            print(f"      📐 Original vectors:")
+            print(f"         v1 = {v1.tolist()} (length={d1:.6f})")
+            print(f"         v2 = {v2.tolist()} (length={d2:.6f})")
+            print(f"         v3 = {v3.tolist()} (length={d3:.6f})")
         
         # assemble final descriptor
         return np.array([dist_f, x2, y2, x3, y3, z3], dtype=np.float64)

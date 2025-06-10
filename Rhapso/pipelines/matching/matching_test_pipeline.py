@@ -8,6 +8,51 @@
 #   4. python Rhapso/pipelines/matching/matching_test_pipeline.py
 #      # execute the test pipeline
 # -----------------------------------------------------------------------------
+'''
+Good ctrl+f search points:
+
+PROCESSING VIEW PAIR:
+
+... transform interest points ...
+
+📊 SUMMARY:
+   View A ((18, 0)): 2755 transformed points
+   View B ((18, 1)): 3149 transformed points
+
+🔗 Matching points between viewA (18, 0) and viewB (18, 1)...
+🔍 Finding candidates between point sets of size 2755 and 3149
+🛠️ Creating descriptors...
+🔍 Creating descriptors with 4 redundancy
+🎯 Basis Point 0: [...]
+
+... print all basis point analysis used to create descriptor(s) ...
+
+🔢 Total descriptors created: 12596
+📊 Created 11020 descriptors for A, 12596 descriptors for B
+🌳 Built KDTree with 12596 nodes, 6 dimensions
+
+🔍 _compute_matching() - Input Parameters:
+  📊 descriptors_A size: 11020
+  📊 descriptors_B size: 12596
+  📊 difference_threshold: inf
+  📊 ratio_of_distance: 3.0
+
+... print every Lowe's ratio test ...
+
+✅ _compute_matching() - Results:
+  📊 Processed descriptors: 11020
+  📊 Matches passed Lowe's ratio test: 785
+  📊 Unique pairs after deduplication: 316
+  📊 Final correspondences added: 785
+  📊 Total correspondences in list: 785
+
+🎯 Found 785 correspondence candidates after Lowe's ratio test
+Found 785 correspondence candidates after Lowe's ratio test
+RANSAC filtering retained 564 inlier matches
+Processing pair 2/42: ((18, 0), (18, 2)) with labels ({'beads': 1.0}, {'beads': 1.0})
+
+finished, now we process the next pair 
+'''
 
 from Rhapso.matching.xml_parser import XMLParser
 from Rhapso.matching.data_loader import DataLoader
@@ -17,18 +62,31 @@ from Rhapso.matching.ransac import RANSAC
 import os
 
 class MatchingPipeline:
-    def __init__(self, xml_file, interest_points_folder):
+    def __init__(self, xml_file, interest_points_folder, logging=None):
+        # Set default logging configuration if none provided
+        self.logging = {
+            'detailed_descriptor_breakdown': True,
+            'interest_point_transformation': True,
+            'ratio_test_output': True,
+            'basis_point_details': 3,  # Number of basis points to show details for
+        }
+        
+        # Update with user-provided logging settings
+        if logging is not None:
+            self.logging.update(logging)
+            
         self.xml_file = xml_file
         self.parser = XMLParser(xml_file)
         # Pass both the interest_points_folder and xml_file directory
-        self.data_loader = DataLoader(interest_points_folder)
+        self.data_loader = DataLoader(interest_points_folder, logging=self.logging)
         self.data_loader.xml_base_path = os.path.dirname(xml_file)  # Store XML directory
         
         # Create matcher with explicit model parameters using nested enums
         self.matcher = Matcher(
             transform_model=Matcher.TransformationModel.AFFINE,
             reg_model=Matcher.RegularizationModel.RIGID,
-            lambda_val=0.1
+            lambda_val=0.1,
+            logging=self.logging
         )
 
     def run(self):
@@ -140,13 +198,21 @@ class MatchingPipeline:
             return []
 
 def main(xml_file):
-
     # Get directory of xml_file and add 'interestpoints.n5'
     xml_dir = os.path.dirname(xml_file)
     interest_points_folder = os.path.join(xml_dir, 'interestpoints.n5')
     print(f"Derived interest points input n5 folder location: {interest_points_folder}")
     
-    pipeline = MatchingPipeline(xml_file, interest_points_folder)
+    # Configure the logging options
+    logging_config = {
+        'save_logs_to_view_folder': True,  # Create a 'logs' folder with a subfolder for each view "(18, 1)" and save logs there
+        'basis_points_details': 3,          # Show details for first 3 basis points
+        'detailed_descriptor_breakdown': False,  # Turn off detailed descriptor calculations
+        'interest_point_transformation': 10,     # Show only first 10 point transformations
+        'ratio_test_output': 15                   # Show only first 15 ratio test calculations
+    }
+    
+    pipeline = MatchingPipeline(xml_file, interest_points_folder, logging=logging_config)
     pipeline.run()
 
 if __name__ == "__main__":

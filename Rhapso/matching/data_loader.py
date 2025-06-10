@@ -4,10 +4,19 @@ import numpy as np
 import os
 
 class DataLoader:
-    def __init__(self, base_path):
+    def __init__(self, base_path, logging=None):
         """Initialize data loader with base path"""
         self.base_path = base_path
         self.store = self._initialize_store()
+        
+        # Set default logging configuration if none provided
+        self.logging = {
+            'interest_point_transformation': True,  # Show all by default
+        }
+        
+        # Update with user-provided logging settings
+        if logging is not None:
+            self.logging.update(logging)
 
     def _initialize_store(self):
         """Initialize appropriate storage backend (S3 or local)"""
@@ -172,15 +181,20 @@ class DataLoader:
         # Convert back to 3D coordinates (remove homogeneous coordinate)
         transformed_points = transformed_homogeneous[:, :3]
         
+        # Limit the number of point transformations printed based on logging configuration
+        max_points_to_show = self.logging.get('interest_point_transformation', len(points))
+        if max_points_to_show > 0:
+            print(f"📍 Sample transformations (showing up to {max_points_to_show} points):")
+            for i in range(min(max_points_to_show, len(points))):
+                before = points[i]
+                after = transformed_points[i]
+                print(f"🔢 Point {i}: {before} → {after}")
+            
+            if max_points_to_show < len(points):
+                print(f"  ... ({len(points) - max_points_to_show} more points transformed)")
+        
         print(f"✅ Successfully transformed all {len(transformed_points)} points")
-        
-        # Print detailed before/after for each point
-        print(f"📍 Point-by-point transformations:")
-        for i in range(len(points)):
-            before = points[i]
-            after = transformed_points[i]
-            print(f"🔢 Point {i+1} (ID: {i}) BEFORE: [{before[0]:.6f}, {before[1]:.6f}, {before[2]:.6f}] → AFTER: [{after[0]:.6f}, {after[1]:.6f}, {after[2]:.6f}]")
-        
+
         return transformed_points.astype(np.float64)
 
 
@@ -239,9 +253,9 @@ class DataLoader:
             matrix_4x4 = np.eye(4)
             matrix_4x4[:3, :] = matrix_3x4
             
-            print(f"  ✅ Parsed affine matrix (3x4 → 4x4):")
-            for i, row in enumerate(matrix_4x4):
-                print(f"    [{row[0]:f}, {row[1]:f}, {row[2]:f}, {row[3]:f}]")
+            # print(f"  ✅ Parsed affine matrix (3x4 → 4x4):")
+            # for i, row in enumerate(matrix_4x4):
+            #     print(f"    [{row[0]:f}, {row[1]:f}, {row[2]:f}, {row[3]:f}]")
             
             return matrix_4x4
             
