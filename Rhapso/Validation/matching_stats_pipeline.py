@@ -1,6 +1,8 @@
 import numpy as np
 from Rhapso.Validation.Match_retrieval import MatchProcessor
 from Rhapso.Validation.matching_descriptors import DescriptiveStatsMatching
+from Rhapso.Validation.matching_voxel_vis import VoxelVis
+from Rhapso.Validation.matching_voxelization import Voxelizer
 
 file_source = 'local'
 xml_file_path_output = "IP_TIFF_XML/dataset9.xml"
@@ -13,11 +15,13 @@ matches, total_matches = processor.run(processor)
 
 descriptive_stats = DescriptiveStatsMatching(matches, total_matches)
 
-results = descriptive_stats.results()
-
 descriptive_stats.get_matches()
-results = descriptive_stats.results()
+points =  descriptive_stats.results()
 
+voxelization = Voxelizer(points, 10)
 
+voxel_info = voxelization.compute_statistics()
 
+voxel_vis = VoxelVis(('30', '0'), matches)
+voxel_vis.run_voxel_vis()
 
