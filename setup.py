@@ -18,6 +18,7 @@ setup(
     name="Rhapso",
     version="0.1.8",
     packages=find_packages(),
+    install_requires=[],
     extras_require={
         
         "detection":[
@@ -39,7 +40,11 @@ setup(
             "bioio-tifffile", 
             "bioio", 
             "pandas", 
-            "boto3"
+            "boto3",
+            "numpy",
+            "zarr==2.18.7",
+            "h5py",
+            "numcodecs"
         ],
 
         "n5_reader": [

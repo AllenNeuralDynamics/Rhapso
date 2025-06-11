@@ -59,14 +59,17 @@ from Rhapso.matching.data_loader import DataLoader
 from Rhapso.matching.matcher import Matcher
 from Rhapso.matching.result_saver import ResultSaver
 from Rhapso.matching.ransac import RANSAC
+from Rhapso.matching.data_saver import save_correspondences
 import os
 import sys
 import datetime
 import io
 from contextlib import redirect_stdout
+import boto3
+from Rhapso.pipelines.utils import fetch_local_xml
 
 class MatchingPipeline:
-    def __init__(self, xml_file, interest_points_folder, logging=None):
+    def __init__(self, xml_content, interest_points_folder, logging=None, xml_file_path=None, n5_output_path=None):
         # Set default logging configuration if none provided
         self.logging = {
             'detailed_descriptor_breakdown': True,
@@ -76,12 +79,26 @@ class MatchingPipeline:
             'save_logs_to_view_folder': False,  # Default is not to save logs to view folder
         }
         
+        # Store the n5_output_path for later use
+        self.n5_output_path = n5_output_path
+        
         # Update with user-provided logging settings
         if logging is not None:
             self.logging.update(logging)
+        
+        # Store XML content and path information    
+        self.xml_content = xml_content
+        
+        # Determine the base path for logs and other operations
+        self.xml_file_path = xml_file_path
+        
+        # If we have a file path, use it to set up log directories
+        if xml_file_path:
+            self.xml_dir = os.path.dirname(xml_file_path)
+        else:
+            # If no path provided, use current directory
+            self.xml_dir = os.getcwd()
             
-        self.xml_file = xml_file
-        self.xml_dir = os.path.dirname(xml_file)
         self.logs_dir = os.path.join(self.xml_dir, 'logs')
         
         # Create logs directory if saving logs is enabled
@@ -89,8 +106,10 @@ class MatchingPipeline:
             os.makedirs(self.logs_dir, exist_ok=True)
             print(f"📝 Log directory created at: {self.logs_dir}")
             
-        self.parser = XMLParser(xml_file)
-        # Pass both the interest_points_folder and xml_file directory
+        # Initialize parser with XML content rather than file path
+        self.parser = XMLParser(xml_content)
+        
+        # Pass both the interest_points_folder and xml_dir
         self.data_loader = DataLoader(interest_points_folder, logging=self.logging)
         self.data_loader.xml_base_path = self.xml_dir  # Store XML directory
         
@@ -159,12 +178,9 @@ class MatchingPipeline:
 
             print(f"Total matches found: {len(all_results)}")
 
-            # Save correspondences for each view that has matches
-            # for view_id in view_ids_global:
-            #     corresponding_matches = [r for r in all_results if r[0] == view_id or r[1] == view_id]
-            #     if corresponding_matches:
-            #         self.saver.save_correspondences_for_view(view_id, corresponding_matches, data_global)
-            
+            # Save results to N5 format using the path provided during initialization
+            self.save_n5_results(all_results, self.n5_output_path)
+
             # Matching is now finished!
 
         except Exception as e:
@@ -265,24 +281,138 @@ class MatchingPipeline:
             traceback.print_exc()
             return []
 
-def main(xml_file):
-    # Get directory of xml_file and add 'interestpoints.n5'
-    xml_dir = os.path.dirname(xml_file)
-    interest_points_folder = os.path.join(xml_dir, 'interestpoints.n5')
+    def create_matched_views(self, reference_timepoint, reference_view_setup, reference_label, target_view_setups):
+        """
+        Create the matched_views list for correspondences saving.
+        
+        Args:
+            reference_timepoint: Reference timepoint ID
+            reference_view_setup: Reference view setup ID
+            reference_label: Reference label (e.g., "beads")
+            target_view_setups: List of target view setup IDs
+            
+        Returns:
+            List of tuples containing (timepoint, viewSetup, label)
+        """
+        matched_views = [(reference_timepoint, reference_view_setup, reference_label)]
+        matched_views.extend([(reference_timepoint, vs, reference_label) for vs in target_view_setups])
+        return matched_views
+
+    def save_n5_results(self, all_results, n5_output_path):
+        """
+        Save the matching results to an N5 file format.
+        
+        Args:
+            all_results: List of all matching results across pairs
+            n5_output_path: Path to the output N5 file/directory
+        """
+        # Define reference variables
+        reference_timepoint = 0  # Update this with your actual reference timepoint
+        reference_view = 2  # Default reference view ID, change as needed for your specific dataset
+        reference_view_setup = reference_view
+        reference_label = "beads"  # Update this with your actual label
+        
+        # Define the target view setups - extract all view IDs except the reference view
+        data_global = self.parser.get_data_global()
+        all_view_ids = set()
+        
+        # Extract all setup IDs from the viewsInterestPoints data
+        for (timepoint, setup_id), _ in data_global['viewsInterestPoints'].items():
+            if timepoint == reference_timepoint and setup_id != reference_view_setup:
+                all_view_ids.add(setup_id)
+        
+        # Convert to sorted list for consistent processing
+        target_view_setups = sorted(list(all_view_ids))
+        print(f"Automatically detected target view setups: {target_view_setups}")
+        
+        # Create matched_views list using the helper function
+        matched_views = self.create_matched_views(
+            reference_timepoint=reference_timepoint,
+            reference_view_setup=reference_view_setup,
+            reference_label=reference_label,
+            target_view_setups=target_view_setups
+        )
+        
+        # Save correspondences
+        save_correspondences(
+            n5_output_path=n5_output_path,
+            reference_tp=reference_timepoint,
+            reference_vs=reference_view_setup,
+            ref_label=reference_label,
+            correspondences=all_results,  # Using all_results instead of matching_results
+            matched_views=matched_views
+        )
+
+def get_xml_content(xml_file):
+    """
+    Fetches XML content from either S3 or local filesystem based on path prefix.
+    
+    Args:
+        xml_file: Path to XML file (local path or s3:// URL)
+        
+    Returns:
+        Tuple containing (XML content as string, interest points folder path)
+    """
+    # Determine the directory and interest points folder based on path type
+    if xml_file.startswith('s3://'):
+        # Parse S3 URL components
+        s3_path = xml_file[5:]  # Remove 's3://'
+        parts = s3_path.split('/', 1)
+        bucket_name = parts[0]
+        file_key = parts[1]
+        
+        print(f"Detected S3 path. Fetching from bucket: {bucket_name}, key: {file_key}")
+        
+        # Initialize S3 client and fetch content
+        s3_client = boto3.client('s3')
+        response = s3_client.get_object(Bucket=bucket_name, Key=file_key)
+        xml_content = response["Body"].read().decode("utf-8")
+        
+        # Create S3 path for interest points folder
+        xml_dir = os.path.dirname(file_key)
+        interest_points_folder = f"s3://{bucket_name}/{xml_dir}/interestpoints.n5"
+    else:
+        print(f"Detected local path: {xml_file}")
+        xml_content = fetch_local_xml(xml_file)
+        
+        # Create local path for interest points folder
+        xml_dir = os.path.dirname(xml_file)
+        interest_points_folder = os.path.join(xml_dir, 'interestpoints.n5')
+    
+    return xml_content, interest_points_folder
+        
+def main():
+    # local input / local output
+    xml_input_path = "/home/martin/Documents/Allen/Data/IP_TIFF_XML_2/dataset.xml"
+    n5_output_path = '/home/martin/Documents/Allen/Data/IP_TIFF_XML_2/new_n5output/'
+    
+    # s3 input / s3 output
+    # xml_input_path = 's3://martin-test-bucket/output/dataset-detection.xml'
+    # n5_output_path = 's3://martin-test-bucket/matching_output/'
+    
+    # Get XML content and interest points folder location
+    xml_content, interest_points_folder = get_xml_content(xml_input_path)
+    
     print(f"Derived interest points input n5 folder location: {interest_points_folder}")
     
     # Configure the logging options
     logging_config = {
         'save_logs_to_view_folder': False,  # Enable saving logs to view-specific folders
-        'basis_points_details': 3,          # Show details for first 3 basis points
+        'basis_points_details': False,          # Show details for first 3 basis points
         'detailed_descriptor_breakdown': False,  # Turn off detailed descriptor calculations
-        'interest_point_transformation': 10,     # Show only first 10 point transformations
-        'ratio_test_output': 15                   # Show only first 15 ratio test calculations
+        'interest_point_transformation': False,     # Show only first 10 point transformations
+        'ratio_test_output': False                   # Show only first 15 ratio test calculations
     }
     
-    pipeline = MatchingPipeline(xml_file, interest_points_folder, logging=logging_config)
+    # Pass both the XML content and the original file path
+    pipeline = MatchingPipeline(
+        xml_content=xml_content, 
+        interest_points_folder=interest_points_folder,
+        logging=logging_config, 
+        xml_file_path=xml_input_path,
+        n5_output_path=n5_output_path  # Pass the n5_output_path to the pipeline
+    )
     pipeline.run()
 
 if __name__ == "__main__":
-    xml_file = "/home/martin/Documents/Allen/Data/IP_TIFF_XML_2/dataset.xml"
-    main(xml_file)
+    main()

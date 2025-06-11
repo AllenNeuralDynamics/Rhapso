@@ -3,24 +3,35 @@ import numpy as np
 
 class XMLParser:
     def __init__(self, xml_file):
-        """Initialize XML parser with file path"""
+        """Initialize XML parser with file path or XML content string"""
         self.xml_file = xml_file
         self.data_global = None  # Will hold complete dataset info
 
     def parse(self):
-        """Parse XML file and create complete dataset object"""
-        tree = ET.parse(self.xml_file)
-        root = tree.getroot()
-        
-        # Create comprehensive data_global structure
-        self.data_global = {
-            'basePathURI': root.find(".//BasePath").text,
-            'boundingBoxes': self._parse_bounding_boxes(root),
-            'viewRegistrations': self._parse_view_registrations(root),
-            'viewsInterestPoints': self._parse_view_paths(root),
-            'sequenceDescription': self._parse_sequence_description(root)
-        }
-        return self.data_global
+        """Parse XML file or string and create complete dataset object"""
+        try:
+            # Check if the input is a string containing XML content
+            if self.xml_file.strip().startswith('<?xml') or self.xml_file.strip().startswith('<'):
+                # Parse XML from string content
+                root = ET.fromstring(self.xml_file)
+            else:
+                # Parse XML from file path
+                tree = ET.parse(self.xml_file)
+                root = tree.getroot()
+            
+            # Create comprehensive data_global structure
+            self.data_global = {
+                'basePathURI': root.find(".//BasePath").text if root.find(".//BasePath") is not None else "",
+                'boundingBoxes': self._parse_bounding_boxes(root),
+                'viewRegistrations': self._parse_view_registrations(root),
+                'viewsInterestPoints': self._parse_view_paths(root),
+                'sequenceDescription': self._parse_sequence_description(root)
+            }
+            return self.data_global
+            
+        except Exception as e:
+            print(f"❌ Error parsing XML content: {e}")
+            raise
 
     def _parse_sequence_description(self, root):
         """Parse sequence metadata from XML root"""
