@@ -48,7 +48,13 @@ class InterestPointDetectionGlue:
 
     def detection(self):
         # data input source
+        def fetch_from_s3(bucket_name, input_file):
+            response = self.s3.get_object(Bucket=bucket_name, Key=input_file)
+            return response['Body'].read().decode('utf-8')
 
+        def fetch_local_xml(file_path):
+            with open(file_path, 'r', encoding='utf-8') as file:
+                return file.read()
 
         # INTEREST POINT DETECTION
         # --------------------------

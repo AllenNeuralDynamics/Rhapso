@@ -67,6 +67,9 @@ key = 'detection'
 # data input source
 s3 = boto3.client("s3")
 
+def fetch_from_s3(s3, bucket_name, input_file):
+    response = s3.get_object(Bucket=bucket_name, Key=input_file)
+    return response["Body"].read().decode("utf-8")
 
 # INTEREST POINT DETECTION
 # --------------------------

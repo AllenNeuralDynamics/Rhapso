@@ -40,7 +40,7 @@ elif file_source == 'local':
     xml_file = fetch_local_xml(xml_file_path)
 
 # Load XML data into dataframes         
-processor = XMLToDataFrame(xml_file, "solve")
+processor = XMLToDataFrame(xml_file, file_source)
 dataframes = processor.run()
 print("XML loaded")
 
