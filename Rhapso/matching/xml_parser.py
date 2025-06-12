@@ -1,4 +1,5 @@
 import xml.etree.ElementTree as ET
+import numpy as np
 
 class XMLParser:
     def __init__(self, xml_file):
@@ -35,21 +36,82 @@ class XMLParser:
         """Parse view registration parameters and transformations"""
         registrations = {}
         for reg in root.findall(".//ViewRegistration"):
-            # TODO: Parse registration parameters and transformation models
-            pass
+            timepoint = int(reg.attrib['timepoint'])
+            setup_id = int(reg.attrib['setup'])
+            view_key = (timepoint, setup_id)
+            
+            # Find ViewTransform elements
+            transforms = []
+            for transform in reg.findall(".//ViewTransform"):
+                transform_type = transform.attrib.get('type', 'unknown')
+                
+                # Parse affine transformation matrix
+                if transform_type == 'affine':
+                    affine_elem = transform.find('affine')
+                    if affine_elem is not None:
+                        matrix_text = affine_elem.text.strip()
+                        # Parse matrix values (typically space or comma separated)
+                        matrix_values = [float(x) for x in matrix_text.replace(',', ' ').split()]
+                        
+                        # Reshape to 3x4 matrix (typical for affine transforms)
+                        if len(matrix_values) == 12:
+                            matrix_3x4 = np.array(matrix_values).reshape(3, 4)
+                            # Convert to 4x4 homogeneous matrix
+                            matrix_4x4 = np.eye(4)
+                            matrix_4x4[:3, :] = matrix_3x4
+                        else:
+                            # Default to identity if parsing fails
+                            matrix_4x4 = np.eye(4)
+                        
+                        transforms.append({
+                            'type': transform_type,
+                            'matrix': matrix_4x4
+                        })
+            
+            registrations[view_key] = {
+                'timepoint': timepoint,
+                'setup': setup_id,
+                'transforms': transforms
+            }
+            
+        print(f"Parsed {len(registrations)} ViewRegistration entries")
         return registrations
 
     def _parse_view_paths(self, root):
         """Parse view interest point file paths"""
         view_paths = {}
         for vip in root.findall(".//ViewInterestPointsFile"):
-            setup_id = vip.attrib['setup']
+            # Parse attributes correctly - setup is a string, convert timepoint to int
+            setup_id = int(vip.attrib['setup'])  # Convert setup to int for consistency
             timepoint = int(vip.attrib['timepoint'])
+            label = vip.attrib.get('label', 'beads')  # Default to 'beads' if not specified
+            params = vip.attrib.get('params', '')
+            
+            # Get the path text and clean it
             path = vip.text.strip()
+            
+            # Remove /beads suffix if present to get base path
             if path.endswith("/beads"):
                 path = path[:-len("/beads")]
+            
+            # Create key as tuple (timepoint, setup_id)
             key = (timepoint, setup_id)
-            view_paths[key] = {'timepoint': timepoint, 'path': path, 'setup': setup_id}
+            
+            # Store comprehensive view information
+            view_paths[key] = {
+                'timepoint': timepoint, 
+                'setup': setup_id,
+                'label': label,
+                'params': params,
+                'path': path
+            }
+            
+        print(f"Parsed {len(view_paths)} ViewInterestPointsFile entries")
+        for key, info in list(view_paths.items())[:3]:  # Show first 3 entries
+            print(f"  View {key}: timepoint={info['timepoint']}, setup={info['setup']}, label={info['label']}")
+        if len(view_paths) > 3:
+            print(f"  ... and {len(view_paths) - 3} more views")
+            
         return view_paths
 
     def parse_timepoints(self):
