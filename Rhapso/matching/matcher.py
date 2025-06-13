@@ -2,6 +2,7 @@ from enum import Enum
 import numpy as np
 from sklearn.neighbors import KDTree
 from .data_saver import save_correspondences
+import sys
 
 class Matcher:
     """Handles all matching operations including model creation and geometric matching"""
@@ -63,7 +64,7 @@ class Matcher:
             print(f"Found {len(candidates)} correspondence candidates after Lowe's ratio test")
         except Exception as e:
             print(f"Error in _get_candidates: {e}")
-            return []
+            sys.exit(1)
 
         try:
             # Deduplicate correspondences before RANSAC
@@ -75,7 +76,7 @@ class Matcher:
             return inliers
         except Exception as e:
             print(f"Error in _compute_ransac: {e}")
-            return []
+            sys.exit(1)
 
     def _deduplicate_correspondences(self, correspondences):
         """Deduplicate correspondences to ensure unique point pairs"""
@@ -272,7 +273,7 @@ class Matcher:
             print(f"❌ Error in _get_candidates: {e}")
             import traceback
             traceback.print_exc()
-            return []
+            sys.exit(1)
 
     def _create_descriptors(self, points, redundancy=4, view_label=""):
         """Create local coordinate system descriptors for each point"""
@@ -399,7 +400,7 @@ class Matcher:
             print(f"❌ Error in _create_descriptors: {e}")
             import traceback
             traceback.print_exc()
-            return descriptors
+            sys.exit(1)
         
         print(f"🔢 Total descriptors created: {len(descriptors)}")
         return descriptors

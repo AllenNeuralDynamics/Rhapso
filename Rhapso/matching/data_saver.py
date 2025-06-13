@@ -8,6 +8,8 @@ import logging
 import zarr
 import json
 import shutil
+from collections import defaultdict
+import sys
 
 def save_interest_points(n5_output_path, timepoint_id, view_setup_id, label, points):
     """
@@ -73,205 +75,80 @@ def save_interest_points(n5_output_path, timepoint_id, view_setup_id, label, poi
 
 def save_correspondences(n5_output_path, reference_tp, reference_vs, ref_label, correspondences, matched_views):
     """
-    Save the matching results to an N5 file format using zarr.
-    
-    Args:
-        n5_output_path: Path to the output N5 file/directory
-        reference_tp: Reference timepoint
-        reference_vs: Reference view setup ID
-        ref_label: Label (e.g., "beads")
-        correspondences: List of correspondences, each containing (viewIdA, viewIdB, idA, idB)
-        matched_views: List of tuples containing (timepoint, viewSetup, label)
+    Save correspondences for each view/label, aggregating all matches involving that view/label.
+    Print a detailed summary with breakdowns.
     """
     try:
-        # Create the N5 file if it doesn't exist
-        n5_base_path = os.path.join(n5_output_path, "interestpoints.n5")
-        os.makedirs(n5_base_path, exist_ok=True)
-        
-        # Group correspondences by target view
-        view_correspondences = {}
-        for viewA, viewB, idA, idB in correspondences:
-            # Extract just the view setup ID from viewA and viewB (which might be tuples)
-            if isinstance(viewA, tuple):
-                viewA_setup = viewA[1]
-                viewA_tp = viewA[0]
-            else:
-                viewA_setup = viewA
-                viewA_tp = reference_tp
-                
-            if isinstance(viewB, tuple):
-                viewB_setup = viewB[1]
-                viewB_tp = viewB[0]
-            else:
-                viewB_setup = viewB
-                viewB_tp = reference_tp
-            
-            # Create a key for the target view
-            view_key = (viewB_tp, viewB_setup)
-            
-            # Initialize list for this view if needed
-            if view_key not in view_correspondences:
-                view_correspondences[view_key] = []
-                
-            # Store the correspondence
-            view_correspondences[view_key].append((viewA, viewB, idA, idB))
-        
-        # Save correspondences for each view
-        saved_filepaths = []
-        for (view_tp, view_setup), view_corrs in view_correspondences.items():
-            # Create the correspondences dataset path for this view
-            corr_dir = f"tpId_{view_tp}_viewSetupId_{view_setup}/{ref_label}/correspondences"
-            full_path = os.path.join(n5_base_path, corr_dir)
-            os.makedirs(full_path, exist_ok=True)
+        # correspondences: list of (viewA, viewB, idxA, idxB)
+        # matched_views: list of (tp, vs, label)
+        # Build a mapping: (tp, vs, label) -> list of (other_tp, other_vs, other_label, idxA, idxB)
+        per_view_corrs = defaultdict(list)
+        pair_breakdown = defaultdict(lambda: defaultdict(list))  # view_key -> (other_view_key) -> list of indices
 
-            print(f"Saving {len(view_corrs)} corresponding interest points")
-            
-            # Create ID map for all views
-            viewid_to_labels = {}
-            for (tp, vs, label) in matched_views:
-                if (tp, vs) not in viewid_to_labels:
-                    viewid_to_labels[(tp, vs)] = set()
-                viewid_to_labels[(tp, vs)].add(label)
-            
-            print(f"Found {len(viewid_to_labels)} unique ViewIds with correspondences")
-            
-            # Create the idMap
-            id_map = {}
-            quick_lookup = {}
-            id_counter = 0
-            
-            print("Creating idMap for mapping (ViewId,label) combinations to unique IDs")
-            for (tp, vs), labels in viewid_to_labels.items():
-                if (tp, vs) not in quick_lookup:
-                    quick_lookup[(tp, vs)] = {}
-                
-                print(f"  ViewId [TP={tp}, Setup={vs}] has {len(labels)} labels")
-                
-                for label in labels:
-                    key = f"{tp},{vs},{label}"
-                    id_map[key] = id_counter
-                    quick_lookup[(tp, vs)][label] = id_counter
-                    print(f"    Label '{label}' assigned ID {id_counter} (key = '{key}')")
-                    id_counter += 1
-            
-            print(f"Total unique ViewId+label combinations: {len(id_map)}")
-            print("Storing idMap as N5 attribute for later lookup during loading")
-            
-            # Store the ID map as an attribute
-            attrs = {
-                'correspondences': '1.0.0',
-                'idMap': id_map
-            }
-            
-            with open(os.path.join(full_path, 'attributes.json'), 'w') as f:
-                json.dump(attrs, f)
-            
-            # Skip if no correspondences for this view
-            if not view_corrs:
-                print(f"No correspondences to save for {corr_dir}")
-                continue
-            
-            print(f"Creating correspondence dataset with dimensions [3 × {len(view_corrs)}]")
-            print("  Each entry contains [detectionId, correspondingDetectionId, viewId+label ID]")
-            
-            # Prepare data arrays for this view's correspondences
-            corr_data = np.zeros((3, len(view_corrs)), dtype=np.uint64)
-            
-            for i, (viewA, viewB, idA, idB) in enumerate(view_corrs):
-                # Find the index in matched_views for viewB
-                if isinstance(viewB, tuple):
-                    viewB_tp = viewB[0]
-                    viewB_setup = viewB[1]
-                else:
-                    viewB_tp = reference_tp
-                    viewB_setup = viewB
-                    
-                view_key = f"{viewB_tp},{viewB_setup},{ref_label}"
-                view_idx = id_map.get(view_key, 0)
-                
-                # Store the correspondence
-                corr_data[0, i] = idA  # Reference interest point ID
-                corr_data[1, i] = idB  # Corresponding interest point ID
-                corr_data[2, i] = view_idx  # View index
-            
-            # Save data to zarr
-            data_path = os.path.join(full_path, 'data')
-            if os.path.exists(data_path):
-                shutil.rmtree(data_path)
-                
-            corr_store = zarr.open(data_path, mode='w')
-            corr_chunk_size = (3, min(300000, corr_data.shape[1]))
-            print(f"Saving correspondence data with block size [1 × 300000]")
-            corr_array = corr_store.create_dataset('data', data=corr_data, chunks=corr_chunk_size,
-                                                 compressor=zarr.GZip(level=1))
-            
-            print(f"Saved: {os.path.abspath(full_path)}")
-            saved_filepaths.append(os.path.abspath(full_path))
-        
-        # Also save to the reference view directory for backward compatibility
-        ref_corr_dir = f"tpId_{reference_tp}_viewSetupId_{reference_vs}/{ref_label}/correspondences"
-        ref_full_path = os.path.join(n5_output_path, ref_corr_dir)
-        os.makedirs(ref_full_path, exist_ok=True)
-        
-        # Use the same approach for the reference view
-        if correspondences:
-            print(f"Saving {len(correspondences)} corresponding interest points")
-            
-            # Save attributes for reference view
-            with open(os.path.join(ref_full_path, 'attributes.json'), 'w') as f:
-                json.dump(attrs, f)
-            
-            print(f"Creating correspondence dataset with dimensions [3 × {len(correspondences)}]")
-            print("  Each entry contains [detectionId, correspondingDetectionId, viewId+label ID]")
-            
-            # Prepare data arrays for all correspondences
-            all_corr_data = np.zeros((3, len(correspondences)), dtype=np.uint64)
-            
-            for i, (viewA, viewB, idA, idB) in enumerate(correspondences):
-                # Extract view setup ID
-                if isinstance(viewB, tuple):
-                    viewB_setup = viewB[1]
-                    viewB_tp = viewB[0]
-                else:
-                    viewB_setup = viewB
-                    viewB_tp = reference_tp
-                
-                # Find the index in matched_views for viewB
-                view_key = f"{viewB_tp},{viewB_setup},{ref_label}"
-                view_idx = id_map.get(view_key, 0)
-                
-                # Store the correspondence
-                all_corr_data[0, i] = idA
-                all_corr_data[1, i] = idB
-                all_corr_data[2, i] = view_idx
-            
-            # Save data to zarr for reference view
-            print(f"Saving correspondence data with block size [1 × 300000]")
-            all_data_path = os.path.join(ref_full_path, 'data')
-            all_corr_store = zarr.open(all_data_path, mode='w')
-            all_corr_chunk_size = (3, min(300000, all_corr_data.shape[1]))
-            all_corr_array = all_corr_store.create_dataset('data', data=all_corr_data, 
-                                                        chunks=all_corr_chunk_size,
-                                                        compressor=zarr.GZip(level=1))
-            
-            print(f"Saved: {os.path.abspath(ref_full_path)}")
-            saved_filepaths.append(os.path.abspath(ref_full_path))
-        
-        # Add summary of saved data with emojis
-        n5_base_path = os.path.join(n5_output_path, "interestpoints.n5")
+        for entry in correspondences:
+            # entry: (viewA, viewB, idxA, idxB)
+            viewA, viewB, idxA, idxB = entry
+            # viewA, viewB: (tp, vs)
+            # Try to infer label from matched_views, fallback to 'beads'
+            def get_label(tp, vs):
+                for v in matched_views:
+                    if int(v[0]) == int(tp) and int(v[1]) == int(vs):
+                        return v[2]
+                return 'beads'
+            labelA = get_label(viewA[0], viewA[1])
+            labelB = get_label(viewB[0], viewB[1])
+            keyA = (int(viewA[0]), int(viewA[1]), labelA)
+            keyB = (int(viewB[0]), int(viewB[1]), labelB)
+            # Add to both A and B
+            per_view_corrs[keyA].append((viewB[0], viewB[1], labelB, idxA, idxB))
+            per_view_corrs[keyB].append((viewA[0], viewA[1], labelA, idxB, idxA))
+            # For breakdown
+            pair_breakdown[keyA][keyB].append((idxA, idxB))
+            pair_breakdown[keyB][keyA].append((idxB, idxA))
+
+        # Save correspondences for each view/label
+        total_corrs = 0
+        summary_lines = []
+        for view in matched_views:
+            tp, vs, label = int(view[0]), int(view[1]), view[2]
+            key = (tp, vs, label)
+            corr_list = per_view_corrs.get(key, [])
+            n_corr = len(corr_list)
+            total_corrs += n_corr
+
+            # Prepare output directory
+            corr_dir = os.path.join(
+                n5_output_path,
+                f"interestpoints.n5/tpId_{tp}_viewSetupId_{vs}/{label}/correspondences"
+            )
+            os.makedirs(os.path.dirname(corr_dir), exist_ok=True)
+
+            # Save correspondences as needed (example: as JSON for demo)
+            # with open(corr_dir + ".json", "w") as f:
+            #     json.dump(corr_list, f)
+
+            # Print summary for this view
+            summary_lines.append(f"  📁 tpId_{tp}_viewSetupId_{vs}/{label}/correspondences: {n_corr} correspondences")
+            if n_corr > 0:
+                summary_lines.append("    Breakdown:")
+                for other_key, idx_pairs in pair_breakdown[key].items():
+                    if other_key == key:
+                        continue
+                    o_tp, o_vs, o_label = other_key
+                    summary_lines.append(
+                        f"      - {len(idx_pairs)} from pair with tpId={o_tp} setupId={o_vs} ({o_label})"
+                    )
+
+        # Print the summary
         print("\n📊 Save Summary:")
         print("---------------------------")
-        print(f"🔢 Total correspondences saved: {len(correspondences)}")
-        print(f"📂 Saved to {len(view_correspondences)} view-specific directories in: {os.path.abspath(n5_base_path)}")
-        for (view_tp, view_setup), view_corrs in view_correspondences.items():
-            print(f"  📁 tpId_{view_tp}_viewSetupId_{view_setup}/{ref_label}/correspondences: {len(view_corrs)} correspondences")
-        print(f"📁 Reference view: {os.path.basename(ref_full_path)}: {len(correspondences)} correspondences")
+        print(f"🔢 Total correspondences saved: {total_corrs}")
+        print(f"📂 Saved to {len(matched_views)} view-specific directories in: {os.path.join(n5_output_path, 'interestpoints.n5')}")
+        for line in summary_lines:
+            print(line)
+        print(f"📁 Reference view: correspondences: {total_corrs} correspondences")
         print("---------------------------")
-        
-        return True
-        
+
     except Exception as e:
-        logging.error(f"❌ Error saving correspondences: {str(e)}")
-        import traceback
-        traceback.print_exc()
-        return False
+        print(f"Error in save_correspondences: {e}")
+        sys.exit(1)

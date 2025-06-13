@@ -182,9 +182,9 @@ class MatchingPipeline:
             self.save_n5_results(all_results, self.n5_output_path)
 
             # Matching is now finished!
-
         except Exception as e:
             print(f"Error during matching pipeline execution: {e}")
+            sys.exit(1)
 
     def _process_matching_task(self, pair, label_map):
         """Process a single matching task"""
@@ -215,14 +215,13 @@ class MatchingPipeline:
             else:
                 # Run normally without redirection if logging is disabled
                 return self._run_matching_task(viewA, viewB, label_map)
-                
         except Exception as e:
             print(f"❌ ERROR: Failed in _process_matching_task for pair {pair}")
             print(f"Exception type: {type(e).__name__}")
             print(f"Exception details: {str(e)}")
             import traceback
             traceback.print_exc()
-            return []
+            sys.exit(1)
 
     def _run_matching_task(self, viewA, viewB, label_map):
         """Run the actual matching task without any I/O redirection"""
@@ -272,14 +271,13 @@ class MatchingPipeline:
             filtered_matches = matches  # matches are already filtered by RANSAC
             
             return [(viewA, viewB, m[0], m[1]) for m in filtered_matches]
-        
         except Exception as e:
             print(f"❌ ERROR: Failed in _run_matching_task for views {viewA} and {viewB}")
             print(f"Exception type: {type(e).__name__}")
             print(f"Exception details: {str(e)}")
             import traceback
             traceback.print_exc()
-            return []
+            sys.exit(1)
 
     def create_matched_views(self, reference_timepoint, reference_view_setup, reference_label, target_view_setups):
         """
@@ -306,40 +304,24 @@ class MatchingPipeline:
             all_results: List of all matching results across pairs
             n5_output_path: Path to the output N5 file/directory
         """
-        # Define reference variables
-        reference_timepoint = 0  # Update this with your actual reference timepoint
-        reference_view = 2  # Default reference view ID, change as needed for your specific dataset
-        reference_view_setup = reference_view
-        reference_label = "beads"  # Update this with your actual label
-        
-        # Define the target view setups - extract all view IDs except the reference view
+        # Gather all unique (timepoint, setup, label) from the dataset
         data_global = self.parser.get_data_global()
-        all_view_ids = set()
-        
-        # Extract all setup IDs from the viewsInterestPoints data
-        for (timepoint, setup_id), _ in data_global['viewsInterestPoints'].items():
-            if timepoint == reference_timepoint and setup_id != reference_view_setup:
-                all_view_ids.add(setup_id)
-        
-        # Convert to sorted list for consistent processing
-        target_view_setups = sorted(list(all_view_ids))
-        print(f"Automatically detected target view setups: {target_view_setups}")
-        
-        # Create matched_views list using the helper function
-        matched_views = self.create_matched_views(
-            reference_timepoint=reference_timepoint,
-            reference_view_setup=reference_view_setup,
-            reference_label=reference_label,
-            target_view_setups=target_view_setups
-        )
-        
+        views_interest_points = data_global['viewsInterestPoints']
+        matched_views = []
+        for (tp, setup), view_info in views_interest_points.items():
+            label = view_info.get('label', 'beads')
+            matched_views.append((int(tp), int(setup), label))
+
+        # Print detected matched views for debugging
+        print(f"Detected matched views: {matched_views}")
+
         # Save correspondences
         save_correspondences(
             n5_output_path=n5_output_path,
-            reference_tp=reference_timepoint,
-            reference_vs=reference_view_setup,
-            ref_label=reference_label,
-            correspondences=all_results,  # Using all_results instead of matching_results
+            reference_tp=None,  # Not needed for new logic
+            reference_vs=None,
+            ref_label=None,
+            correspondences=all_results,
             matched_views=matched_views
         )
 
