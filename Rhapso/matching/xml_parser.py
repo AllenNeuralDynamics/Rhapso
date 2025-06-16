@@ -3,24 +3,35 @@ import numpy as np
 
 class XMLParser:
     def __init__(self, xml_file):
-        """Initialize XML parser with file path"""
+        """Initialize XML parser with file path or XML content string"""
         self.xml_file = xml_file
         self.data_global = None  # Will hold complete dataset info
 
     def parse(self):
-        """Parse XML file and create complete dataset object"""
-        tree = ET.parse(self.xml_file)
-        root = tree.getroot()
-        
-        # Create comprehensive data_global structure
-        self.data_global = {
-            'basePathURI': root.find(".//BasePath").text,
-            'boundingBoxes': self._parse_bounding_boxes(root),
-            'viewRegistrations': self._parse_view_registrations(root),
-            'viewsInterestPoints': self._parse_view_paths(root),
-            'sequenceDescription': self._parse_sequence_description(root)
-        }
-        return self.data_global
+        """Parse XML file or string and create complete dataset object"""
+        try:
+            # Check if the input is a string containing XML content
+            if self.xml_file.strip().startswith('<?xml') or self.xml_file.strip().startswith('<'):
+                # Parse XML from string content
+                root = ET.fromstring(self.xml_file)
+            else:
+                # Parse XML from file path
+                tree = ET.parse(self.xml_file)
+                root = tree.getroot()
+            
+            # Create comprehensive data_global structure
+            self.data_global = {
+                'basePathURI': root.find(".//BasePath").text if root.find(".//BasePath") is not None else "",
+                'boundingBoxes': self._parse_bounding_boxes(root),
+                'viewRegistrations': self._parse_view_registrations(root),
+                'viewsInterestPoints': self._parse_view_paths(root),
+                'sequenceDescription': self._parse_sequence_description(root)
+            }
+            return self.data_global
+            
+        except Exception as e:
+            print(f"❌ Error parsing XML content: {e}")
+            raise
 
     def _parse_sequence_description(self, root):
         """Parse sequence metadata from XML root"""
@@ -33,49 +44,57 @@ class XMLParser:
         return {}
 
     def _parse_view_registrations(self, root):
-        """Parse view registration parameters and transformations"""
-        registrations = {}
-        for reg in root.findall(".//ViewRegistration"):
-            timepoint = int(reg.attrib['timepoint'])
-            setup_id = int(reg.attrib['setup'])
-            view_key = (timepoint, setup_id)
-            
-            # Find ViewTransform elements
-            transforms = []
-            for transform in reg.findall(".//ViewTransform"):
-                transform_type = transform.attrib.get('type', 'unknown')
+        """Parse ViewRegistration entries from XML"""
+        print("🔍 Parsing ViewRegistration entries...")
+        
+        view_registrations = {}
+        
+        # Find all ViewRegistration elements
+        for view_reg in root.findall(".//ViewRegistration"):
+            try:
+                # Extract timepoint and setup
+                timepoint = int(view_reg.get('timepoint'))
+                setup = int(view_reg.get('setup'))
+                view_id = (timepoint, setup)
                 
-                # Parse affine transformation matrix
-                if transform_type == 'affine':
-                    affine_elem = transform.find('affine')
-                    if affine_elem is not None:
-                        matrix_text = affine_elem.text.strip()
-                        # Parse matrix values (typically space or comma separated)
-                        matrix_values = [float(x) for x in matrix_text.replace(',', ' ').split()]
+                print(f"🔍 Processing ViewRegistration for view {view_id}")
+                
+                # Parse all ViewTransform elements for this view
+                transforms = []
+                for transform_elem in view_reg.findall(".//ViewTransform"):
+                    transform_type = transform_elem.get('type', 'unknown')
+                    
+                    # Extract the Name element
+                    name_elem = transform_elem.find('Name')
+                    transform_name = name_elem.text.strip() if name_elem is not None and name_elem.text else f"Unnamed_{transform_type}"
+                    
+                    # Extract the affine transformation matrix
+                    affine_elem = transform_elem.find('affine')
+                    if affine_elem is not None and affine_elem.text:
+                        affine_text = affine_elem.text.strip()
                         
-                        # Reshape to 3x4 matrix (typical for affine transforms)
-                        if len(matrix_values) == 12:
-                            matrix_3x4 = np.array(matrix_values).reshape(3, 4)
-                            # Convert to 4x4 homogeneous matrix
-                            matrix_4x4 = np.eye(4)
-                            matrix_4x4[:3, :] = matrix_3x4
-                        else:
-                            # Default to identity if parsing fails
-                            matrix_4x4 = np.eye(4)
-                        
-                        transforms.append({
+                        transform_data = {
                             'type': transform_type,
-                            'matrix': matrix_4x4
-                        })
-            
-            registrations[view_key] = {
-                'timepoint': timepoint,
-                'setup': setup_id,
-                'transforms': transforms
-            }
-            
-        print(f"Parsed {len(registrations)} ViewRegistration entries")
-        return registrations
+                            'name': transform_name,
+                            'affine': affine_text
+                        }
+                        transforms.append(transform_data)
+                        print(f"  ✅ Added transform: type='{transform_type}', name='{transform_name}'")
+                    else:
+                        print(f"  ⚠️ No affine data found for transform type='{transform_type}', name='{transform_name}'")
+                
+                if transforms:
+                    view_registrations[view_id] = transforms
+                    print(f"📝 Stored {len(transforms)} transforms for view {view_id}")
+                else:
+                    print(f"⚠️ No valid transforms found for view {view_id}")
+                    
+            except Exception as e:
+                print(f"❌ Error parsing ViewRegistration: {e}")
+                continue
+        
+        print(f"Parsed {len(view_registrations)} ViewRegistration entries")
+        return view_registrations
 
     def _parse_view_paths(self, root):
         """Parse view interest point file paths"""

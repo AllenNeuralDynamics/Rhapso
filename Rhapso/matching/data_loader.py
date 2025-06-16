@@ -4,10 +4,19 @@ import numpy as np
 import os
 
 class DataLoader:
-    def __init__(self, base_path):
+    def __init__(self, base_path, logging=None):
         """Initialize data loader with base path"""
         self.base_path = base_path
         self.store = self._initialize_store()
+        
+        # Set default logging configuration if none provided
+        self.logging = {
+            'interest_point_transformation': True,  # Show all by default
+        }
+        
+        # Update with user-provided logging settings
+        if logging is not None:
+            self.logging.update(logging)
 
     def _initialize_store(self):
         """Initialize appropriate storage backend (S3 or local)"""
@@ -89,63 +98,104 @@ class DataLoader:
             print(f"Error details: {e}")
             raise e
 
-    def transform_interest_points(self, interest_points, transform_matrix):
-        """Apply transformation matrix to interest points"""
-        if len(interest_points) == 0:
-            return interest_points
+    def get_transformation_matrix(self, view_id, view_data, view_registrations):
+        """Get the complete transformation matrix for a view by composing all ViewTransforms"""
+        try:
+            print(f"📐 Computing transformation matrix for view {view_id}")
             
-        print(f"⚙️ Starting matrix multiplication for {len(interest_points)} interest points")
+            # Get all transforms for this view
+            transforms = view_registrations.get(view_id, [])
+            if not transforms:
+                print(f"⚠️ No transforms found for view {view_id}, using identity matrix")
+                return np.eye(4)
+            
+            print(f"🔗 Found {len(transforms)} transforms to compose:")
+            
+            # Start with identity matrix
+            final_matrix = np.eye(4)
+            
+            # Compose all transforms in order
+            for i, transform in enumerate(transforms):
+                # Handle missing name field gracefully
+                transform_type = transform.get('type', 'unknown')
+                transform_name = transform.get('name', f'Transform_{i+1}')
+                
+                print(f"  📐 Transform {i+1}: type='{transform_type}', name='{transform_name}'")
+                
+                # Get the matrix data - could be stored as 'matrix' or 'affine'
+                matrix_data = transform.get('matrix') or transform.get('affine')
+                if matrix_data is None:
+                    print(f"  ⚠️ No matrix data found in transform {i+1}, skipping")
+                    continue
+                    
+                print(f"  🔍 Raw affine text: '{matrix_data}'")
+                
+                # Parse the affine transform
+                if isinstance(matrix_data, str):
+                    matrix = self._parse_affine_matrix(matrix_data)
+                else:
+                    # Assume it's already a matrix
+                    matrix = np.array(matrix_data)
+                    if matrix.shape == (3, 4):
+                        # Convert 3x4 to 4x4
+                        matrix = np.vstack([matrix, [0, 0, 0, 1]])
+                        
+                print(f"  ✅ Successfully parsed to 4x4 matrix:")
+                for row_idx, row in enumerate(matrix):
+                    print(f"    Row {row_idx}: [{row[0]:f}, {row[1]:f}, {row[2]:f}, {row[3]:f}]")
+                
+                # Compose with previous transforms (matrix multiplication)
+                final_matrix = final_matrix @ matrix
+                print(f"  🔗 Composed with previous transforms")
+            
+            print(f"🎯 Final composed transformation matrix:")
+            for row_idx, row in enumerate(final_matrix):
+                print(f"  Row {row_idx}: [{row[0]:f}, {row[1]:f}, {row[2]:f}, {row[3]:f}]")
+            
+            return final_matrix
+        except Exception as e:
+            print(f"❌ Error in get_transformation_matrix for view {view_id}: {e}")
+            print(f"Error type: {type(e).__name__}")
+            raise
         
-        # Convert to homogeneous coordinates [x, y, z, 1]
-        homogeneous_points = np.column_stack([interest_points, np.ones(len(interest_points))])
+    def transform_interest_points(self, points, transformation_matrix):
+        """Transform interest points using the given transformation matrix"""
+        if len(points) == 0:
+            return []
         
-        # Apply transformation: transformed = matrix @ points.T
-        transformed = (transform_matrix @ homogeneous_points.T).T
+        # Print transformation matrix in the corrected format
+        matrix = transformation_matrix
+        print(f"   Matrix: ({matrix[0,0]:g}, {matrix[0,1]:g}, {matrix[0,2]:g}, {matrix[0,3]:g}), "
+              f"({matrix[1,0]:g}, {matrix[1,1]:g}, {matrix[1,2]:g}, {matrix[1,3]:g}), "
+              f"({matrix[2,0]:g}, {matrix[2,1]:g}, {matrix[2,2]:g}, {matrix[2,3]:g})")
         
-        # Return only x, y, z coordinates (drop homogeneous coordinate)
-        transformed_points = transformed[:, :3]
+        print(f"⚙️ Starting matrix multiplication for {len(points)} interest points")
+        
+        # Convert points to homogeneous coordinates (add 1 as 4th coordinate)
+        homogeneous_points = np.column_stack([points, np.ones(len(points))])
+        
+        # Apply transformation: result = matrix @ points.T, then transpose back
+        transformed_homogeneous = (transformation_matrix @ homogeneous_points.T).T
+        
+        # Convert back to 3D coordinates (remove homogeneous coordinate)
+        transformed_points = transformed_homogeneous[:, :3]
+        
+        # Limit the number of point transformations printed based on logging configuration
+        max_points_to_show = self.logging.get('interest_point_transformation', len(points))
+        if max_points_to_show > 0:
+            print(f"📍 Sample transformations (showing up to {max_points_to_show} points):")
+            for i in range(min(max_points_to_show, len(points))):
+                before = points[i]
+                after = transformed_points[i]
+                print(f"🔢 Point {i}: {before} → {after}")
+            
+            if max_points_to_show < len(points):
+                print(f"  ... ({len(points) - max_points_to_show} more points transformed)")
         
         print(f"✅ Successfully transformed all {len(transformed_points)} points")
-        
-        # Show sample transformations with proper formatting
-        if len(transformed_points) > 0:
-            print(f"📍 Sample transformations:")
-            num_samples = min(3, len(transformed_points))
-            for i in range(num_samples):
-                # Display full numbers without cutting digits
-                before = [f"{x}" for x in interest_points[i]]
-                after = [f"{x}" for x in transformed_points[i]]
-                print(f"   Point {i}: [{', '.join(before)}] → [{', '.join(after)}]")
-            
-            # Show total count if there are more points than samples shown
-            if len(transformed_points) > num_samples:
-                remaining = len(transformed_points) - num_samples
-                print(f"   ... and {remaining} more")
-            print()  # Add blank line separator
 
         return transformed_points.astype(np.float64)
 
-
-    def get_transformation_matrix(self, view_id, view_data, view_registrations=None):
-        """Get transformation matrix for a specific view from parsed registrations"""
-        if view_registrations is None:
-            return np.eye(4)
-        
-        # Look up transformation for this view
-        if view_id in view_registrations:
-            registration = view_registrations[view_id]
-            transforms = registration.get('transforms', [])
-            
-            if transforms:
-                transform = transforms[0]
-                matrix = transform['matrix']
-                print(f"📐 Retrieved transformation matrix for view {view_id}: {transform['type']}")
-                print(f"Matrix: {matrix}")
-                print()  # Add blank line after matrix
-                return matrix
-        
-        # Default to identity matrix
-        return np.eye(4)
 
     def get_transformed_interest_points(self, view_id, view_data=None):
         """Get and transform interest points for a specific view"""
@@ -185,3 +235,30 @@ class DataLoader:
         """Clear existing correspondences for a view"""
         # TODO: Implement correspondence clearing
         pass
+
+    def _parse_affine_matrix(self, affine_text):
+        """Parse affine transformation matrix from text string"""
+        try:
+            # Split the affine text into float values
+            values = [float(x) for x in affine_text.strip().split()]
+            
+            if len(values) != 12:
+                raise ValueError(f"Expected 12 values for 3x4 affine matrix, got {len(values)}")
+            
+            # Reshape into 3x4 matrix (row-major order)
+            matrix_3x4 = np.array(values).reshape(3, 4)
+            
+            # Convert to 4x4 homogeneous matrix by adding bottom row [0, 0, 0, 1]
+            matrix_4x4 = np.eye(4)
+            matrix_4x4[:3, :] = matrix_3x4
+            
+            # print(f"  ✅ Parsed affine matrix (3x4 → 4x4):")
+            # for i, row in enumerate(matrix_4x4):
+            #     print(f"    [{row[0]:f}, {row[1]:f}, {row[2]:f}, {row[3]:f}]")
+            
+            return matrix_4x4
+            
+        except Exception as e:
+            print(f"❌ Error parsing affine matrix from '{affine_text}': {e}")
+            # Return identity matrix as fallback
+            return np.eye(4)

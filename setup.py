@@ -9,20 +9,42 @@ To install certain dependencies, use the following commands:
 - For n5 reader libraries:
   pip install .[n5_reader]
 
+- For detection-related libraries:
+  pip install .[detection]
+
 '''
 
 setup(
     name="Rhapso",
     version="0.1.8",
     packages=find_packages(),
+    install_requires=[],
     extras_require={
+        
+        "detection":[
+            "numpy",
+            "bioio",
+            "bioio-tifffile",
+            "zarr==2.18.7",
+            "s3fs==0.4.2",
+            "dask==2025.5.1",
+            "scipy",
+            "scikit-image",
+            "boto3",
+            "memory-profiler",
+            "matplotlib"
+        ],
         
         "matching": [
             "scikit-learn", 
             "bioio-tifffile", 
             "bioio", 
             "pandas", 
-            "boto3"
+            "boto3",
+            "numpy",
+            "zarr==2.18.7",
+            "h5py",
+            "numcodecs"
         ],
 
         "n5_reader": [
