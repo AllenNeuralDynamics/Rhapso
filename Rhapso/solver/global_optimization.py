@@ -63,12 +63,6 @@ class GlobalOptimization:
 
         for view, tile in self.tiles.items():
             self.update_cost(view, tile)
-            if "distance" not in tile:
-                print("Tile is missing distance.")
-                self.min_error = float('inf')
-                self.max_error = 0
-                self.mean_error = 0
-                return
             if len(self.tiles) == 0:
                 print("There are no tiles to get information from.")
                 return
