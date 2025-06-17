@@ -11,6 +11,8 @@ from Rhapso.detection.save_interest_points import SaveInterestPoints
 import boto3
 import ast
 
+from Rhapso.pipelines.utils import fetch_from_s3, fetch_local_xml
+
 # This class implements the interest point detection pipeline
 
 class InterestPointDetectionGlue:
@@ -46,7 +48,6 @@ class InterestPointDetectionGlue:
 
     def detection(self):
         # data input source
-
         def fetch_from_s3(bucket_name, input_file):
             response = self.s3.get_object(Bucket=bucket_name, Key=input_file)
             return response['Body'].read().decode('utf-8')
@@ -60,8 +61,10 @@ class InterestPointDetectionGlue:
 
         # Fetch xml data
         if self.file_source == 's3':
+            # data input source
             xml_file = fetch_from_s3(self.xml_bucket_name, self.xml_file_path) 
         elif self.file_source == 'local':
+            # data input source
             xml_file = fetch_local_xml(self.xml_file_path)
 
         # Load XML data into dataframes         

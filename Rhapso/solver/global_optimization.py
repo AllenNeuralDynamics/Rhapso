@@ -1,3 +1,4 @@
+import datetime
 from Rhapso.solver.align_tiles import AlignTiles
 import numpy as np
 
@@ -32,8 +33,8 @@ class GlobalOptimization:
             sum_weight = 0.0
 
             for match in tile['matches']:
-                p1 = np.array(match['p1'])
-                p2 = np.array(match['p2'])
+                p1 = match['p1']
+                p2 = match['p2']
                 distance = np.linalg.norm(np.array(p1) - np.array(p2))
 
                 squared_dist = np.sum((p1 - p2) ** 2)
@@ -62,6 +63,9 @@ class GlobalOptimization:
 
         for view, tile in self.tiles.items():
             self.update_cost(view, tile)
+            if len(self.tiles) == 0:
+                print("There are no tiles to get information from.")
+                return
             distance = tile['distance']
             
             if distance < min_error:
@@ -75,7 +79,11 @@ class GlobalOptimization:
         else:
             average_error = 0
 
-        return average_error
+        print( f"({datetime.datetime.now()}): Min Error: {min_error}px")
+        print( f"({datetime.datetime.now()}): Max Error: {max_error}px")
+        print( f"({datetime.datetime.now()}): Mean Error: {average_error}px")    
+
+        return average_error, min_error, max_error
 
     def apply_damp(self, view, tile):
         """
@@ -148,7 +156,7 @@ class GlobalOptimization:
                 self.fit_model(view, tile)
                 self.apply_damp(view, tile)
 
-            current_error = self.update_errors()
+            current_error, min_error, max_error = self.update_errors()
             errors.append(current_error)
 
             if current_error < self.max_allowed_error:
