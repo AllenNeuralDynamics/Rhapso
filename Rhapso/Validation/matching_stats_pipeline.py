@@ -1,5 +1,7 @@
 import numpy as np
+from Rhapso.Validation.KDE import MatchingKDE1
 from Rhapso.Validation.Match_retrieval import MatchProcessor
+from Rhapso.Validation.matching_KDE import MatchingKDE
 from Rhapso.Validation.matching_descriptors import DescriptiveStatsMatching
 from Rhapso.Validation.matching_voxel_vis import VoxelVis
 from Rhapso.Validation.matching_voxelization import Voxelizer
@@ -22,6 +24,15 @@ voxelization = Voxelizer(points, 10)
 
 voxel_info = voxelization.compute_statistics()
 
-voxel_vis = VoxelVis(('30', '0'), matches)
-voxel_vis.run_voxel_vis()
+# voxel_vis = VoxelVis(('30', '0'), matches)
+# voxel_vis.run_voxel_vis()
+
+
+# bandwidth can be a float, "scott", or "Silverman", default is scott.
+kde = MatchingKDE(matches, "pair", None, None, None)
+kde.get_data()
+
+# KDE_1 = MatchingKDE1(matches ,None,  None)
+# KDE_1.get_data()
+
 
