@@ -1,4 +1,5 @@
 import unittest
+from unittest.mock import patch
 import numpy as np
 from Rhapso.solver.align_tiles import AlignTiles
 from Rhapso.solver.global_optimization import GlobalOptimization
@@ -425,9 +426,116 @@ class TestGlobalOptimization(unittest.TestCase):
         self.assertGreaterEqual(self.tiles["timepoint: 18, setup: 1"]["distance"], 0)
         self.assertGreaterEqual(self.tiles["timepoint: 18, setup: 1"]["cost"], 0)
 
-    def test_update_errors(self):
-        average_error = self.optimizer.update_errors()
-        self.assertGreaterEqual(average_error, 0)
+    def test_typical_case(self):
+        tiles = {
+        "timepoint: 18, setup: 0":{"matches":[ {
+                        "p1": np.array([-534.0, -308.0, -72.495679]),
+                        "p2": np.array([-538.0, 156.85459177, 278.72318544]),
+                        "strength": 1.0,
+                        "weight": 1.0,
+                    },
+                    {
+                        "p1": np.array([286.0, -348.0, 80.702737]),
+                        "p2": np.array([282.0, 293.46650184, 198.67981787]),
+                        "strength": 1.0,
+                        "weight": 1.0,
+                    },
+                    {
+                        "p1": np.array([-670.0, -95.49213541, 74.21349207]),
+                        "p2": np.array([-666.0, 58.7381151, 110.96751239]),
+                        "strength": 1.0,
+                        "weight": 1.0,
+                    }],
+                    "distance": 10},
+        "timepoint: 18, setup: 1":{"matches":[ {
+                        "p1": np.array([-534.0, -308.0, -72.495679]),
+                        "p2": np.array([-538.0, 196.85459177, 278.72318544]),
+                        "strength": 1.0,
+                        "weight": 1.0,
+                    },
+                    {
+                        "p1": np.array([286.0, -348.0, 80.702737]),
+                        "p2": np.array([282.0, 293.46650184, 198.67981787]),
+                        "strength": 1.0,
+                        "weight": 1.0,
+                    },
+                    {
+                        "p1": np.array([-670.0, -915.49213541, 74.21349207]),
+                        "p2": np.array([-666.0, 58.7381151, 110.96751239]),
+                        "strength": 1.0,
+                        "weight": 1.0,
+                    }],"distance": 20},
+        "timepoint: 18, setup: 2":{"matches":[ {
+                        "p1": np.array([-534.0, -308.0, -72.495679]),
+                        "p2": np.array([-538.0, 15.85459177, 278.72318544]),
+                        "strength": 1.0,
+                        "weight": 1.0,
+                    },
+                    {
+                        "p1": np.array([286.0, -348.0, 80.702737]),
+                        "p2": np.array([282.0, 294.46650184, 198.67981787]),
+                        "strength": 1.0,
+                        "weight": 1.0,
+                    },
+                    {
+                        "p1": np.array([-670.0, -95.49213541, 74.21349207]),
+                        "p2": np.array([-666.0, 58.7381151, 115.96751239]),
+                        "strength": 1.0,
+                        "weight": 1.0,
+                    }],"distance": 30}
+        }
+
+        self.optimizer = GlobalOptimization(
+            tiles,
+            self.pmc,
+            self.fixed_views,
+            self.data_prefix,
+            self.alignment_option,
+            self.relative_threshold,
+            self.absolute_threshold,
+            self.min_matches,
+            self.damp,
+            self.max_iterations,
+            self.max_allowed_error,
+            self.max_plateauwidth,
+            self.model,
+        )
+        average_error, min_error, max_error = self.optimizer.update_errors()
+        self.assertEqual(np.round(min_error,2), np.float64(430.27))
+        self.assertEqual(np.round(max_error, 2), np.float64(747.4))
+        self.assertEqual(np.round(average_error,2), np.float64(547.39))
+
+
+    def test_uniform_distances(self):
+        tiles = {
+        "timepoint: 18, setup: 0":{"matches":[{
+                        "p1": np.array([0,0,0]),
+                        "p2": np.array([2.888,2.888,2.888]),
+                        "strength": 1.0,
+                        "weight": 1.0,
+                    }],
+"distance": 5},
+        }
+
+        self.optimizer = GlobalOptimization(
+            tiles,
+            self.pmc,
+            self.fixed_views,
+            self.data_prefix,
+            self.alignment_option,
+            self.relative_threshold,
+            self.absolute_threshold,
+            self.min_matches,
+            self.damp,
+            self.max_iterations,
+            self.max_allowed_error,
+            self.max_plateauwidth,
+            self.model,
+        )
+        average_error, min_error, max_error = self.optimizer.update_errors()
+        self.assertAlmostEqual(np.round(min_error,2), 5.0)
+        self.assertAlmostEqual(np.round(max_error, 2), 5.0)
+        self.assertAlmostEqual(np.round(average_error,2), 5.0)
 
     def test_apply_damp(self):
         self.optimizer.apply_damp(
