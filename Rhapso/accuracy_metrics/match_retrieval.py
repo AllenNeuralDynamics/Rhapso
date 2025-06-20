@@ -4,7 +4,7 @@ import s3fs
 import numpy as np
 import pandas as pd
 from Rhapso.data_prep.xml_to_dataframe import XMLToDataFrame
-from Rhapso.pipelines.utils import fetch_local_xml
+
 
 class MatchProcessor:
     def __init__(self, base_path, xml_file_path, file_source, xml_bucket_name):
@@ -16,7 +16,7 @@ class MatchProcessor:
         self.result = {}
         self.store = self.initialize_store()
         self.total_matches = 0
-        self.s3 = boto3.client('s3')
+        self.s3 = boto3.client("s3")
         self.xml_bucket_name = xml_bucket_name
 
     def initialize_store(self):
@@ -30,19 +30,23 @@ class MatchProcessor:
         response = s3.get_object(Bucket=bucket_name, Key=input_file)
         return response["Body"].read().decode("utf-8")
 
-    def load_dataframe(self, file_source):
-        
-        if self.file_source == 's3':
-            xml_file = self.fetch_from_s3(self.s3, self.xml_bucket_name, self.xml_file_path) 
-        elif self.file_source == 'local':
-            xml_file = fetch_local_xml(self.xml_file_path)
+    def fetch_local_xml(self, file_path):
+        with open(file_path, "r", encoding="utf-8") as file:
+            return file.read()
 
-        xml_file = fetch_local_xml(self.xml_file_path)
+    def load_dataframe(self, file_source):
+        if self.file_source == "s3":
+            xml_file = self.fetch_from_s3(
+                self.s3, self.xml_bucket_name, self.xml_file_path
+            )
+        elif self.file_source == "local":
+            xml_file = self.fetch_local_xml(self.xml_file_path)
+
         processor = XMLToDataFrame(xml_file, "metrics")
         dataframes = processor.run()
-        
-        df = pd.DataFrame(dataframes['image_loader'])
-        self.view_setup_timepoint_array = df[['view_setup', 'timepoint']].to_numpy()
+
+        df = pd.DataFrame(dataframes["image_loader"])
+        self.view_setup_timepoint_array = df[["view_setup", "timepoint"]].to_numpy()
 
         return self.view_setup_timepoint_array
 
@@ -53,14 +57,14 @@ class MatchProcessor:
         try:
             root = zarr.group(store=store, overwrite=False)
             group = root[group_path]
-            correspondences = group['correspondences']
+            correspondences = group["correspondences"]
 
-            if 'data' not in correspondences:
+            if "data" not in correspondences:
                 print(f"No match data found for view {view_id}")
                 return np.array([], dtype=np.uint64), {}
 
             matches_array = correspondences["data"][:]
-            id_map = correspondences.attrs.get('idMap', {})
+            id_map = correspondences.attrs.get("idMap", {})
 
             print(f"Retrieved {len(matches_array)} matches for view {view_id}")
             self.total_matches += len(matches_array)
@@ -78,9 +82,9 @@ class MatchProcessor:
         try:
             root = zarr.group(store=self.store, overwrite=False)
             group = root[group_path]
-            ips = group['interestpoints']
+            ips = group["interestpoints"]
 
-            if 'loc' not in ips:
+            if "loc" not in ips:
                 print(f"No loc data found for view {view_id}")
                 return np.array([], dtype=np.uint64), {}
 
@@ -116,14 +120,15 @@ class MatchProcessor:
             ips = self.get_ips(view_id)
             self.match_ips_pairs(matches, ips, view_id, id_map)
         return matches, ips, view_id
-    
+
     def run(self, processor):
         # processor = MatchProcessor(base_path, xml_file)
         view_setup_timepoint_array = processor.load_dataframe("local")
         processor.collect_matches(processor.store, view_setup_timepoint_array)
         return self.result, self.total_matches
 
-# Example usage 
+
+# Example usage
 # This is a little bit goofy but wasn't sure if we are going to mirror IPD/Solve or Matching in how we setup/run files
 if __name__ == "__main__":
     base_path = "/Users/ai/Downloads/IP_TIFF_XML/interestpoints.n5"

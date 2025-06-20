@@ -1,6 +1,6 @@
 import unittest
 import numpy as np
-from Rhapso.Validation.matching_KDE import MatchingKDE
+from Rhapso.accuracy_metrics.matching_KDE import MatchingKDE
 
 
 class TestMatchingKDE(unittest.TestCase):
