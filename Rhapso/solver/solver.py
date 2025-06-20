@@ -1,6 +1,4 @@
-from Rhapso.Validation.alignment_displacement import DescriptiveStatsAlignment
 from Rhapso.data_prep.xml_to_dataframe import XMLToDataFrame
-from Rhapso.pipelines.utils import fetch_from_s3, fetch_local_xml
 from Rhapso.solver.global_optimization import GlobalOptimization
 from Rhapso.detection.view_transform_models import ViewTransformModels
 from Rhapso.solver.data_prep import DataPrep
@@ -36,6 +34,13 @@ class Solver:
         self.s3 = boto3.client('s3')
 
     def solve(self):
+        def fetch_from_s3(s3, bucket_name, input_file):
+            response = s3.get_object(Bucket=bucket_name, Key=input_file)
+            return response['Body'].read().decode('utf-8')
+
+        def fetch_local_xml(file_path):
+            with open(file_path, 'r', encoding='utf-8') as file:
+                return file.read()
 
         # Fetch xml data
         if self.file_source == 's3':
@@ -83,9 +88,6 @@ class Solver:
         print("Results have been saved")
 
         print("Solve is done")
-        # Run alignment descriptive metrics
-        align_stats = DescriptiveStatsAlignment(tiles)
-        align_stats.min_max_mean()
     
     def run(self):
         self.solve()

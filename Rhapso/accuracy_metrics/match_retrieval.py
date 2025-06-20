@@ -1,12 +1,13 @@
+import boto3
 import zarr
 import s3fs
 import numpy as np
 import pandas as pd
 from Rhapso.data_prep.xml_to_dataframe import XMLToDataFrame
-from Rhapso.pipelines.utils import fetch_from_s3, fetch_local_xml
+from Rhapso.pipelines.utils import fetch_local_xml
 
 class MatchProcessor:
-    def __init__(self, base_path, xml_file_path, file_source):
+    def __init__(self, base_path, xml_file_path, file_source, xml_bucket_name):
         self.base_path = base_path
         self.xml_file_path = xml_file_path
         self.file_source = file_source
@@ -15,6 +16,8 @@ class MatchProcessor:
         self.result = {}
         self.store = self.initialize_store()
         self.total_matches = 0
+        self.s3 = boto3.client('s3')
+        self.xml_bucket_name = xml_bucket_name
 
     def initialize_store(self):
         if self.base_path.startswith("s3://"):
@@ -23,10 +26,14 @@ class MatchProcessor:
         else:
             return zarr.N5Store(self.base_path)
 
+    def fetch_from_s3(self, s3, bucket_name, input_file):
+        response = s3.get_object(Bucket=bucket_name, Key=input_file)
+        return response["Body"].read().decode("utf-8")
+
     def load_dataframe(self, file_source):
         
         if self.file_source == 's3':
-            xml_file = fetch_from_s3(self.s3, self.xml_bucket_name, self.xml_file_path) 
+            xml_file = self.fetch_from_s3(self.s3, self.xml_bucket_name, self.xml_file_path) 
         elif self.file_source == 'local':
             xml_file = fetch_local_xml(self.xml_file_path)
 
@@ -121,6 +128,7 @@ class MatchProcessor:
 if __name__ == "__main__":
     base_path = "/Users/ai/Downloads/IP_TIFF_XML/interestpoints.n5"
     xml_file = "/Users/ai/Downloads/IP_TIFF_XML/dataset.xml~1"
+    xml_bucket_name = None
 
-    processor = MatchProcessor(base_path, xml_file, "local")
+    processor = MatchProcessor(base_path, xml_file, "local", xml_bucket_name)
     processor.run(processor)
