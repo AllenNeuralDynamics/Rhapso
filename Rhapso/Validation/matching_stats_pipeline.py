@@ -1,6 +1,4 @@
 import numpy as np
-
-from Rhapso.Validation import testkde
 from Rhapso.Validation.Match_retrieval import MatchProcessor
 from Rhapso.Validation.matching_KDE import MatchingKDE
 from Rhapso.Validation.matching_descriptors import DescriptiveStatsMatching
