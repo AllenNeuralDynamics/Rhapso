@@ -5,7 +5,6 @@ import numpy as np
 import pandas as pd
 from Rhapso.data_prep.xml_to_dataframe import XMLToDataFrame
 
-
 class MatchProcessor:
     def __init__(self, base_path, xml_file_path, file_source, xml_bucket_name):
         self.base_path = base_path
@@ -35,7 +34,6 @@ class MatchProcessor:
             return file.read()
 
     def load_dataframe(self, file_source):
-
         if self.file_source == "s3":
             xml_file = self.fetch_from_s3(
                 self.s3, self.xml_bucket_name, self.xml_file_path
@@ -130,6 +128,7 @@ class MatchProcessor:
 
 
 # Example usage
+# This is a little bit goofy but wasn't sure if we are going to mirror IPD/Solve or Matching in how we setup/run files
 if __name__ == "__main__":
     base_path = "/Users/ai/Downloads/IP_TIFF_XML/interestpoints.n5"
     xml_file = "/Users/ai/Downloads/IP_TIFF_XML/dataset.xml~1"
@@ -137,3 +136,4 @@ if __name__ == "__main__":
 
     processor = MatchProcessor(base_path, xml_file, "local", xml_bucket_name)
     processor.run(processor)
+

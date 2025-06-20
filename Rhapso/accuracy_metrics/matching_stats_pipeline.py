@@ -1,5 +1,7 @@
 import numpy as np
+
 from Rhapso.accuracy_metrics.match_retrieval import MatchProcessor
+from Rhapso.accuracy_metrics.matching_KDE import MatchingKDE
 from Rhapso.accuracy_metrics.matching_descriptors import DescriptiveStatsMatching
 from Rhapso.accuracy_metrics.matching_voxel_vis import VoxelVis
 from Rhapso.accuracy_metrics.matching_voxelization import Voxelizer
@@ -23,7 +25,9 @@ voxelization = Voxelizer(points, 10)
 
 voxel_info = voxelization.compute_statistics()
 
-# Example
-# Voxel_vis takes in matches and a view ID and outputs a visualization
 # voxel_vis = VoxelVis(('30', '0'), matches)
 # voxel_vis.run_voxel_vis()
+
+# bandwidth can be a float, if not inputted it defaults to Scott's value.
+kde = MatchingKDE(matches, "all", None, None, None, False)
+kde.get_data()

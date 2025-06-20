@@ -6,7 +6,7 @@ from scipy.stats import entropy, skew, kurtosis
 
 
 class Voxelizer:
-    def __init__(self, match_points, voxel_size=20):
+    def __init__(self, match_points, voxel_size):
         self.match_points = np.array(match_points)
         self.voxel_size = voxel_size
         self.voxel_grid = None
