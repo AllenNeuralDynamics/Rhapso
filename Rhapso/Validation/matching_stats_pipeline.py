@@ -1,12 +1,13 @@
 import numpy as np
-from Rhapso.Validation.KDE import MatchingKDE1
+
+from Rhapso.Validation import testkde
 from Rhapso.Validation.Match_retrieval import MatchProcessor
 from Rhapso.Validation.matching_KDE import MatchingKDE
 from Rhapso.Validation.matching_descriptors import DescriptiveStatsMatching
 from Rhapso.Validation.matching_voxel_vis import VoxelVis
 from Rhapso.Validation.matching_voxelization import Voxelizer
 
-file_source = 'local'
+file_source = "local"
 xml_file_path_output = "IP_TIFF_XML/dataset9.xml"
 xml_bucket_name = "rhapso-tif-sample"
 base_path = "/Users/ai/Downloads/IP_TIFF_XML/interestpoints.n5"
@@ -18,7 +19,7 @@ matches, total_matches = processor.run(processor)
 descriptive_stats = DescriptiveStatsMatching(matches, total_matches)
 
 descriptive_stats.get_matches()
-points =  descriptive_stats.results()
+points = descriptive_stats.results()
 
 voxelization = Voxelizer(points, 10)
 
@@ -28,11 +29,6 @@ voxel_info = voxelization.compute_statistics()
 # voxel_vis.run_voxel_vis()
 
 
-# bandwidth can be a float, "scott", or "Silverman", default is scott.
-kde = MatchingKDE(matches, "pair", None, None, None)
+# bandwidth can be a float, if not inputted it defaults to Scott's value.
+kde = MatchingKDE(matches, "all", None, None, None, False)
 kde.get_data()
-
-# KDE_1 = MatchingKDE1(matches ,None,  None)
-# KDE_1.get_data()
-
-
