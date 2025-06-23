@@ -66,7 +66,6 @@ import datetime
 import io
 from contextlib import redirect_stdout
 import boto3
-from Rhapso.pipelines.utils import fetch_local_xml
 
 class MatchingPipeline:
     def __init__(self, xml_content, interest_points_folder, logging=None, xml_file_path=None, n5_output_path=None):
@@ -355,8 +354,15 @@ def get_xml_content(xml_file):
         interest_points_folder = f"s3://{bucket_name}/{xml_dir}/interestpoints.n5"
     else:
         print(f"Detected local path: {xml_file}")
+
+        def fetch_local_xml(file_path):
+            with open(file_path, 'r', encoding='utf-8') as file:
+                return file.read()
+        
+
         xml_content = fetch_local_xml(xml_file)
         
+
         # Create local path for interest points folder
         xml_dir = os.path.dirname(xml_file)
         interest_points_folder = os.path.join(xml_dir, 'interestpoints.n5')
@@ -365,8 +371,8 @@ def get_xml_content(xml_file):
         
 def main():
     # local input / local output
-    xml_input_path = "/home/martin/Documents/Allen/Data/IP_TIFF_XML_2/dataset.xml"
-    n5_output_path = '/home/martin/Documents/Allen/Data/IP_TIFF_XML_2/new_n5output/'
+    xml_input_path = "/home/martin/Documents/allen/IP_TIFF_XML_2/dataset.xml"
+    n5_output_path = '/home/martin/Documents/allen/IP_TIFF_XML_2/n5out/'
     
     # s3 input / s3 output
     # xml_input_path = 's3://martin-test-bucket/output/dataset-detection.xml'
