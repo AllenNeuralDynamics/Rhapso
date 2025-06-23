@@ -213,6 +213,11 @@ class Matcher:
         if debug_count >= max_debug_prints and max_debug_prints > 0:
             print(f"... (showing first {max_debug_prints} ratio test results, continuing silently)")
         
+        # Lowe's ratio test summary line (with emoji)
+        ratio_test_failed = processed_descriptors - ratio_test_passed
+        percent_passed = (ratio_test_passed / processed_descriptors * 100) if processed_descriptors > 0 else 0.0
+        print(f"\n🟢 Lowe's ratio test results: {ratio_test_passed}/{processed_descriptors} passed ({percent_passed:.1f}%) {ratio_test_failed} failed")
+
         # Print comprehensive summary
         print(f"\n✅ _compute_matching() - Results:")
         print(f"  📊 Processed descriptors: {processed_descriptors}")

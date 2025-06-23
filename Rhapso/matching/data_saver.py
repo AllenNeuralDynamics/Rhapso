@@ -142,11 +142,11 @@ def save_correspondences(n5_output_path, reference_tp, reference_vs, ref_label, 
         # Print the summary
         print("\n📊 Save Summary:")
         print("---------------------------")
-        print(f"🔢 Total correspondences saved: {total_corrs}")
         print(f"📂 Saved to {len(matched_views)} view-specific directories in: {os.path.join(n5_output_path, 'interestpoints.n5')}")
         for line in summary_lines:
             print(line)
         print(f"📁 Reference view: correspondences: {total_corrs} correspondences")
+        print(f"🔢 Total correspondences saved: {total_corrs}")
         print("---------------------------")
 
     except Exception as e:

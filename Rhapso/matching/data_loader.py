@@ -140,17 +140,17 @@ class DataLoader:
                         # Convert 3x4 to 4x4
                         matrix = np.vstack([matrix, [0, 0, 0, 1]])
                         
-                print(f"  ✅ Successfully parsed to 4x4 matrix:")
-                for row_idx, row in enumerate(matrix):
-                    print(f"    Row {row_idx}: [{row[0]:f}, {row[1]:f}, {row[2]:f}, {row[3]:f}]")
+                # print(f"  ✅ Successfully parsed to 4x4 matrix:")
+                # for row_idx, row in enumerate(matrix):
+                #     print(f"    Row {row_idx}: [{row[0]:f}, {row[1]:f}, {row[2]:f}, {row[3]:f}]")
                 
                 # Compose with previous transforms (matrix multiplication)
                 final_matrix = final_matrix @ matrix
                 print(f"  🔗 Composed with previous transforms")
             
-            print(f"🎯 Final composed transformation matrix:")
-            for row_idx, row in enumerate(final_matrix):
-                print(f"  Row {row_idx}: [{row[0]:f}, {row[1]:f}, {row[2]:f}, {row[3]:f}]")
+            # print(f"🎯 Final composed transformation matrix:")
+            # for row_idx, row in enumerate(final_matrix):
+            #     print(f"  Row {row_idx}: [{row[0]:f}, {row[1]:f}, {row[2]:f}, {row[3]:f}]")
             
             return final_matrix
         except Exception as e:
