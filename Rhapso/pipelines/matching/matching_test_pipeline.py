@@ -1,11 +1,11 @@
 # -----------------------------------------------------------------------------
-# matching_test_pipeline.py – Matching pipeline test script
-#
-# Setup & run:
-#   1. python -m venv myNewEnv           # create a fresh Python virtual environment
-#   2. source myNewEnv/bin/activate      # activate the virtual environment
-#   3. pip install .[matching]           # install matching dependencies from setup.py
-#   4. python Rhapso/pipelines/matching/matching_test_pipeline.py  # execute the test pipeline
+# How to run this pipeline script:
+# 
+#   1. Create virtual env: `python -m venv myNewEnv`
+#   2. Activate env: `source myNewEnv/bin/activate`
+#   3. Install dependencies from repo root: `pip install .[matching]` and Rhapso `pip install -e .` 
+#   4. Change input vars xml_input_path and n5_output_path 
+#   5. Run script: `python Rhapso/pipelines/matching/matching_test_pipeline.py`
 # -----------------------------------------------------------------------------
 
 from Rhapso.matching.xml_parser import XMLParser
@@ -22,8 +22,8 @@ import boto3
 # Configuration
 
 # local input/output paths:
-xml_input_path = "/mnt/c/Users/marti/Documents/allen/allen_workspace_6.19.25/IP_TIFF_XML_2/dataset.xml"
-n5_output_path = '/mnt/c/Users/marti/Documents/allen/allen_workspace_6.19.25/IP_TIFF_XML_2/n5Output6.20'
+xml_input_path = "/home/martin/Documents/Allen/Data/IP_TIFF_XML_2/dataset.xml"
+n5_output_path = '/home/martin/Documents/Allen/Data/IP_TIFF_XML_2/n5Output6.20'
 
 # s3 input/output paths:
 # xml_input_path = 's3://martin-test-bucket/output/dataset-detection.xml'
@@ -58,18 +58,21 @@ def fetch_from_s3(s3, bucket_name, input_file):
     return response["Body"].read().decode("utf-8")
 
 def fetch_local_xml(file_path):
-    with open(file_path, "r", encoding="utf-8") as file:
-        return file.read()
+    try:
+        with open(file_path, "r", encoding="utf-8") as file:
+            return file.read()
+    except FileNotFoundError:
+        print(f"pipeline failed, could not find xml file located at '{file_path}'")
+        return None
+    except Exception as e:
+        print(f"pipeline failed, error while parsing xml file at '{file_path}': {e}")
+        return None
+
 
 def get_xml_content(xml_file):
     """
     Fetches XML content from either S3 or local filesystem based on path prefix.
-    
-    Args:
-        xml_file: Path to XML file (local path or s3:// URL)
-        
-    Returns:
-        Tuple containing (XML content as string, interest points folder path)
+    Returns (xml_content, interest_points_folder) or (None, None) if not found.
     """
     # Determine the directory and interest points folder based on path type
     if xml_file.startswith('s3://'):
@@ -92,7 +95,8 @@ def get_xml_content(xml_file):
     else:
         print(f"Detected local path: {xml_file}")
         xml_content = fetch_local_xml(xml_file)
-        
+        if xml_content is None:
+            return None, None
         # Create local path for interest points folder
         xml_dir = os.path.dirname(xml_file)
         interest_points_folder = os.path.join(xml_dir, 'interestpoints.n5')
@@ -203,6 +207,9 @@ def process_matching_task(pair, view_data, view_registrations, data_loader, matc
 
 # Get XML content and interest points folder location
 xml_content, interest_points_folder = get_xml_content(xml_input_path)
+if xml_content is None:
+    print("Aborting: XML file could not be loaded.")
+    sys.exit(1)
 print(f"Derived interest points input n5 folder location: {interest_points_folder}")
 
 # Initialize parser with XML content

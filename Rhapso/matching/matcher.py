@@ -560,24 +560,3 @@ class Matcher:
         
         # assemble final descriptor
         return np.array([dist_f, x2, y2, x3, y3, z3], dtype=np.float64)
-
-    def save_results_as_n5(self, n5_output_path, reference_tp, reference_vs, ref_label):
-        """
-        Save the matching results to N5 format.
-        
-        Args:
-            n5_output_path: Path to the output N5 file/directory
-            reference_tp: Reference timepoint
-            reference_vs: Reference view setup ID
-            ref_label: Reference label (e.g., "beads")
-        """
-        # Prepare matched_views list
-        matched_views = [(reference_tp, reference_vs, ref_label)]
-        for target_vs in self.matching_results.keys():
-            matched_views.append((reference_tp, target_vs, ref_label))
-        
-        # Save correspondences
-        save_correspondences(n5_output_path, reference_tp, reference_vs, ref_label, 
-                            self.matching_results, matched_views)
-        
-        print(f"Matching results saved to {n5_output_path}")
