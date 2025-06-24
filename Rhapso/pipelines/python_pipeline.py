@@ -1,9 +1,10 @@
+from Rhapso.accuracy_metrics.matching_stats_pipeline import MatchingStatsPipeline
 from Rhapso.detection.interest_point_detection import InterestPointDetection
 from Rhapso.pipelines.matching.matching_pipeline_classes import MatchingPipeline
 from Rhapso.solver.solver import Solver
 import yaml
 
-with open('Rhapso/pipelines/param_configs/tiff_local.yml', 'r') as file:
+with open("Rhapso/pipelines/param_configs/tiff_local.yml", "r") as file:
     config = yaml.safe_load(file)
 
 # INTEREST POINT DETECTION
@@ -28,27 +29,27 @@ interest_point_detection = InterestPointDetection(
 interest_point_detection.run()
 
 # INTEREST POINT MATCHING
-xml_input_file = config['xml_input_file']
-n5_base_path = config['n5_base_path']
-output_path = config['output_path']
+xml_input_file = config["xml_input_file"]
+n5_base_path = config["n5_base_path"]
+output_path = config["output_path"]
 MatchingPipeline(xml_input_file, n5_base_path, output_path)
 
 # SOLVER
 solver = Solver(
-    file_source=config['file_source_solver'],
-    xml_file_path_output=config['xml_file_path_output'],
-    xml_bucket_name=config['xml_bucket_name_solver'],
-    xml_file_path=config['xml_file_path_solver'],
-    data_prefix=config['data_prefix'],
-    fixed_views=config['fixed_views'],
-    model=config['model'],
-    alignment_option=config['alignment_option'],
-    relative_threshold=config['relative_threshold'],
-    absolute_threshold=config['absolute_threshold'],
-    min_matches=config['min_matches'],
-    damp=config['damp'],
-    max_iterations=config['max_iterations'],
-    max_allowed_error=config['max_allowed_error'],
-    max_plateauwidth=config['max_plateauwidth']
+    file_source=config["file_source_solver"],
+    xml_file_path_output=config["xml_file_path_output"],
+    xml_bucket_name=config["xml_bucket_name_solver"],
+    xml_file_path=config["xml_file_path_solver"],
+    data_prefix=config["data_prefix"],
+    fixed_views=config["fixed_views"],
+    model=config["model"],
+    alignment_option=config["alignment_option"],
+    relative_threshold=config["relative_threshold"],
+    absolute_threshold=config["absolute_threshold"],
+    min_matches=config["min_matches"],
+    damp=config["damp"],
+    max_iterations=config["max_iterations"],
+    max_allowed_error=config["max_allowed_error"],
+    max_plateauwidth=config["max_plateauwidth"],
 )
 solver.run()
