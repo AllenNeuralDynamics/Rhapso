@@ -37,14 +37,14 @@ logging_config = {
     # Show interest point transformation details
     'interest_point_transformation': False,  
 
-    # Show descriptor creation basis point details
-    'basis_points_details': False,      
-
     # Show more detailed descriptor creation basis point details
-    'detailed_descriptor_breakdown': False, 
+    'detailed_descriptor_breakdown': 10, 
 
     # Show Lowe's Ratio Test details
-    'ratio_test_output': False          
+    'lowes_ratio_test_output': 10,
+
+    # Show additional lowes ratio test details
+    'lowes_ratio_test_details': True,          
 }
 
 # Configure RANSAC parameters
@@ -270,8 +270,7 @@ for idx, pair in enumerate(setup['pairs'], 1):
         viewB_str = f"(tpId={tpB}, setupId={setupB})"
     else:
         viewB_str = str(viewB)
-    print(f"Processing pair {idx}/{total_pairs}: {viewA_str}, {viewB_str} with labels ({labelA}, {labelB})")
-
+    
     # Run the matching task for the current pair and get results
     task_result = process_matching_task(pair, view_ids_global, view_registrations, data_loader, matcher)
 

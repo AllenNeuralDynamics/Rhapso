@@ -36,7 +36,7 @@ class Matcher:
         # Set default logging configuration if none provided
         self.logging = {
             'detailed_descriptor_breakdown': True,
-            'ratio_test_output': True,
+            'lowes_ratio_test_output': True,
             'basis_point_details': 3,  # Number of basis points to show details for
         }
         
@@ -107,7 +107,7 @@ class Matcher:
         
         debug_count = 0
         # Use the logging configuration to determine how many ratio tests to print
-        max_debug_prints = self.logging.get('ratio_test_output', True)
+        max_debug_prints = self.logging.get('lowes_ratio_test_output', True)
         if max_debug_prints is True:
             max_debug_prints = float('inf')  # Print all
         elif max_debug_prints is False:
@@ -129,7 +129,6 @@ class Matcher:
         for desc_idx, desc_a in enumerate(descriptorsA):
             processed_descriptors += 1
             try:
-                # Verify descriptor dimensionality matches KDTree
                 query_point = desc_a['coordinates']
                 if len(query_point) != lookup_tree.data.shape[1]:
                     if debug_count < max_debug_prints:
@@ -137,8 +136,7 @@ class Matcher:
                         debug_count += 1
                     continue
                 
-                # Search for 2 nearest neighbors in descriptor space
-                k_neighbors = min(2, lookup_tree.data.shape[0])  # Handle case where tree has < 2 points
+                k_neighbors = min(2, lookup_tree.data.shape[0])
                 distances, indices = lookup_tree.query([query_point], k=k_neighbors)
                 
                 if len(distances[0]) < 2:
@@ -147,6 +145,7 @@ class Matcher:
                 best_distance = distances[0][0]
                 second_best_distance = distances[0][1]
                 best_match_idx = indices[0][0]
+                second_best_match_idx = indices[0][1]
                 
                 # Verify distances are non-negative (sanity check)
                 if best_distance < 0 or second_best_distance < 0:
@@ -155,46 +154,33 @@ class Matcher:
                         debug_count += 1
                     continue
                 
-                # Apply Lowe's ratio test to filter ambiguous matches
-                # EXACTLY matching BigStitcherSpark's implementation:
-                # best * ratioOfDistance <= secondBest
                 ratio_test_value = best_distance * ratio_of_distance
-                
-                # Print detailed debugging info for understanding the ratio test
+
+                # Print concise Lowe's ratio test output
                 if debug_count < max_debug_prints:
                     point_a_id = desc_a['point_index']
-                    point_b_id = descriptorsB[best_match_idx]['point_index']
-                    
-                    if best_distance < difference_threshold and ratio_test_value <= second_best_distance:
-                        print(f"✅ ACCEPTED: PointA[{point_a_id}] ↔ PointB[{point_b_id}] | " +
-                              f"best={best_distance:.6f} < threshold={difference_threshold:.6f} && " +
-                              f"ratio_test={ratio_test_value:.6f} <= second_best={second_best_distance:.6f}")
-                        print(f"   📊 Detailed: best={best_distance:.6f}, secondBest={second_best_distance:.6f}, " +
-                              f"best/secondBest={best_distance/second_best_distance:.6f}, " +
-                              f"1/ratio={1.0/ratio_of_distance:.6f}")
-                        debug_count += 1
-                    elif best_distance >= difference_threshold:
-                        print(f"❌ REJECTED (distance threshold): PointA[{point_a_id}] ↔ PointB[{point_b_id}] | " +
-                              f"best={best_distance:.6f} >= threshold={difference_threshold:.6f}")
-                        debug_count += 1
-                    else:
-                        print(f"❌ REJECTED (ratio test): PointA[{point_a_id}] ↔ PointB[{point_b_id}] | " +
-                              f"ratio_test={ratio_test_value:.6f} > second_best={second_best_distance:.6f}")
-                        print(f"   📊 Detailed: best={best_distance:.6f}, secondBest={second_best_distance:.6f}, " +
-                              f"best/secondBest={best_distance/second_best_distance:.6f}, " +
-                              f"1/ratio={1.0/ratio_of_distance:.6f}")
-                        debug_count += 1
+                    point_b1_id = descriptorsB[best_match_idx]['point_index']
+                    point_b2_id = descriptorsB[second_best_match_idx]['point_index']
+                    passed = (best_distance < difference_threshold and ratio_test_value <= second_best_distance)
+                    status = "PASS ✅" if passed else "FAIL ❌"
+                    print(f"  [Lowe's Test #{debug_count+1}] descA id={point_a_id} | best={best_distance:.6f} (B1 id={point_b1_id}) | secondBest={second_best_distance:.6f} (B2 id={point_b2_id}) | {status}")
+                    # Additional details if enabled
+                    if self.logging.get('lowes_ratio_test_details', False):
+                        print(f"    • Condition 1: best < difference_threshold")
+                        print(f"      {best_distance:.6f} < {difference_threshold} = {'✅ TRUE' if best_distance < difference_threshold else '❌ FALSE'}")
+                        print(f"    • Condition 2: best * ratio_of_distance <= secondBest")
+                        print(f"      {best_distance:.6f} × {ratio_of_distance} <= {second_best_distance:.6f}")
+                        print(f"      {ratio_test_value:.6f} <= {second_best_distance:.6f} = {'✅ TRUE' if ratio_test_value <= second_best_distance else '❌ FALSE'}")
+                        ratio = best_distance / second_best_distance if second_best_distance > 0 else float('inf')
+                        print(f"    • Distance ratio: {ratio:.6f} (lower is better)")
+                        print(f"    • Final decision: {'PASS' if passed else 'FAIL'}")
+                    debug_count += 1
                 
-                # BigStitcherSpark implementation: best * ratioOfDistance <= secondBest
                 if best_distance < difference_threshold and ratio_test_value <= second_best_distance:
-                    # Accept the match
                     ratio_test_passed += 1
                     desc_b = descriptorsB[best_match_idx]
-                    
-                    # Create pair key for deduplication tracking
                     pair_key = (desc_a['point_index'], desc_b['point_index'])
                     unique_pairs.add(pair_key)
-                    
                     correspondence = {
                         'pointA_idx': desc_a['point_index'],
                         'pointB_idx': desc_b['point_index'],
@@ -213,7 +199,6 @@ class Matcher:
         if debug_count >= max_debug_prints and max_debug_prints > 0:
             print(f"... (showing first {max_debug_prints} ratio test results, continuing silently)")
         
-        # Lowe's ratio test summary line (with emoji)
         ratio_test_failed = processed_descriptors - ratio_test_passed
         percent_passed = (ratio_test_passed / processed_descriptors * 100) if processed_descriptors > 0 else 0.0
         print(f"\n🟢 Lowe's ratio test results: {ratio_test_passed}/{processed_descriptors} passed ({percent_passed:.1f}%) {ratio_test_failed} failed")
@@ -230,58 +215,65 @@ class Matcher:
 
     def _get_candidates(self, pointsA, pointsB, redundancy=4, difference_threshold=float('inf'), ratio_of_distance=3.0):
         """Find candidate matches using geometric hashing with local coordinate system descriptors.
-        This method performs Lowe's ratio test to filter ambiguous matches."""
+        This method performs Lowe's ratio test to filter ambiguous matches.
+        Structure now matches GeometricHasher.extractCorrespondenceCandidates."""
         print(f"🔍 Finding candidates between point sets of size {len(pointsA)} and {len(pointsB)}")
-        
+
         try:
-            # Create descriptors for both point sets
-            descriptorsA = self._create_descriptors(pointsA, redundancy, "A")
-            descriptorsB = self._create_descriptors(pointsB, redundancy, "B")
-            
-            print(f"📊 Created {len(descriptorsA)} descriptors for A, {len(descriptorsB)} descriptors for B")
-            
-            # Build KDTree lookup structure for descriptorsB
-            if len(descriptorsB) == 0:
+            # 1. Build KDTree for pointsA and pointsB (tree1, tree2)
+            pointsA_array = np.array(pointsA)
+            pointsB_array = np.array(pointsB)
+            if len(pointsA_array) == 0 or len(pointsB_array) == 0:
+                print("❌ One of the point sets is empty")
+                return []
+            tree1 = KDTree(pointsA_array)
+            tree2 = KDTree(pointsB_array)
+
+            # 2. Create descriptors1 and descriptors2 using tree1/tree2 and point lists
+            descriptors1 = self._create_descriptors(pointsA, redundancy, "A", kdtree=tree1)
+            descriptors2 = self._create_descriptors(pointsB, redundancy, "B", kdtree=tree2)
+            print(f"🔬 [GeometricHasher] Descriptors for A: {len(descriptors1)} | Descriptors for B: {len(descriptors2)}")
+
+            # 3. Build KDTree for descriptors2 (lookUpTree2)
+            if len(descriptors2) == 0:
                 print("❌ No descriptors created for point set B")
                 return []
-                
-            descriptor_coords_B = np.array([desc['coordinates'] for desc in descriptorsB])
-            
-            # Verify descriptor coordinates are valid
-            if descriptor_coords_B.size == 0:
+            descriptor_coords2 = np.array([desc['coordinates'] for desc in descriptors2])
+            if descriptor_coords2.size == 0:
                 print("❌ No valid descriptor coordinates for point set B")
                 return []
-            
-            if np.any(np.isnan(descriptor_coords_B)) or np.any(np.isinf(descriptor_coords_B)):
+            if np.any(np.isnan(descriptor_coords2)) or np.any(np.isinf(descriptor_coords2)):
                 print("⚠️ Warning: Found NaN or Inf values in descriptors, filtering...")
-                valid_mask = np.all(np.isfinite(descriptor_coords_B), axis=1)
-                descriptor_coords_B = descriptor_coords_B[valid_mask]
-                descriptorsB = [descriptorsB[i] for i in range(len(descriptorsB)) if valid_mask[i]]
-                print(f"📊 After filtering: {len(descriptorsB)} valid descriptors for B")
-            
-            if len(descriptorsB) == 0:
+                valid_mask = np.all(np.isfinite(descriptor_coords2), axis=1)
+                descriptor_coords2 = descriptor_coords2[valid_mask]
+                descriptors2 = [descriptors2[i] for i in range(len(descriptors2)) if valid_mask[i]]
+                print(f"📊 After filtering: {len(descriptors2)} valid descriptors for B")
+            if len(descriptors2) == 0:
                 print("❌ No valid descriptors remaining for point set B after filtering")
                 return []
-            
-            # Build KDTree - this uses sklearn's implementation which is functionally equivalent
-            # to ImgLib2's Eytzinger layout for our purposes
-            lookup_tree = KDTree(descriptor_coords_B, metric='euclidean')
-            print(f"🌳 Built KDTree with {lookup_tree.data.shape[0]} nodes, {lookup_tree.data.shape[1]} dimensions")
-            
-            # Find correspondences using KNN search and apply Lowe's ratio test
-            correspondences = self._compute_matching(descriptorsA, descriptorsB, lookup_tree, difference_threshold, ratio_of_distance)
-            
-            print(f"\n🎯 Found {len(correspondences)} correspondence candidates after Lowe's ratio test")
+            lookUpTree2 = KDTree(descriptor_coords2)
+
+            # 4. Prepare KNN searchers (debug and matching)
+            nnsearch = lookUpTree2
+
+            # 5. Store the candidates for corresponding beads
+            # (In Java, this is an ArrayList<PointMatchGeneric<I>>)
+            # Here, we use a list of dicts as before
+
+            # 6. Compute matching
+            correspondences = self._compute_matching(descriptors1, descriptors2, nnsearch, difference_threshold, ratio_of_distance)
+
             return correspondences
-            
+
         except Exception as e:
             print(f"❌ Error in _get_candidates: {e}")
             import traceback
             traceback.print_exc()
             sys.exit(1)
 
-    def _create_descriptors(self, points, redundancy=4, view_label=""):
-        """Create local coordinate system descriptors for each point"""
+    def _create_descriptors(self, points, redundancy=4, view_label="", kdtree=None):
+        """Create local coordinate system descriptors for each point.
+        If kdtree is provided, use it for neighbor search (to match Java logic)."""
         print(f"🛠️ Creating descriptors for View {view_label}...")
         descriptors = []
         points_array = np.array(points)
@@ -292,8 +284,9 @@ class Matcher:
             return descriptors
 
         try:
-            # Build KDTree for efficient neighbor search
-            kdtree = KDTree(points_array)
+            # Use provided KDTree or build a new one if not given
+            if kdtree is None:
+                kdtree = KDTree(points_array)
             
             # Constants matching Java implementation exactly
             num_neighbors_needed = 3  # We need exactly 3 neighbors for each descriptor
@@ -301,16 +294,14 @@ class Matcher:
             
             print(f"🔍 Creating descriptors with {redundancy} redundancy for {total_basis_points} basis points")
             
-            # Determine how many basis points to show details for - check both parameter names
-            basis_point_details = self.logging.get('basis_points_details', 
-                              self.logging.get('basis_point_details', 3))
-            
-            if basis_point_details is True:
-                basis_point_details = float('inf')  # Show all
-            elif basis_point_details is False:
-                basis_point_details = 0  # Show none
+            # Use only 'detailed_descriptor_breakdown' for controlling debug output
+            breakdown_limit = self.logging.get('detailed_descriptor_breakdown', 3)
+            if breakdown_limit is True:
+                breakdown_limit = float('inf')
+            elif breakdown_limit is False:
+                breakdown_limit = 0
             else:
-                basis_point_details = int(basis_point_details)  # Show specific number
+                breakdown_limit = int(breakdown_limit)
             
             for basis_point_index, point in enumerate(points_array):
                 try:
@@ -326,7 +317,7 @@ class Matcher:
                         continue  # Skip if not enough neighbors
                     
                     # Only print detailed information for the first N basis points (configurable)
-                    if basis_point_index < basis_point_details:
+                    if basis_point_index < breakdown_limit:
                         print(f"🎯 Basis Point {basis_point_index}: [{point[0]:.3f}, {point[1]:.3f}, {point[2]:.3f}]")
                         
                         # Show only the first 4 neighbors (matching Java output)
@@ -361,8 +352,7 @@ class Matcher:
                                 # Create 6D descriptor with explanations
                                 descriptor_6d = self._create_6d_descriptor(
                                     point, neighbor_points[0], neighbor_points[1], neighbor_points[2],
-                                    print_details=(basis_point_index < basis_point_details and 
-                                                  self.logging.get('detailed_descriptor_breakdown', True))
+                                    print_details=(basis_point_index < breakdown_limit)
                                 )
                                 
                                 descriptor_entry = {
@@ -373,7 +363,7 @@ class Matcher:
                                 }
                                 
                                 # Print detailed descriptor entry information
-                                if basis_point_index < basis_point_details:
+                                if basis_point_index < breakdown_limit:
                                     print(f"  📝 Adding descriptor to list with details:")
                                     print(f"    🔹 Basis point index: {descriptor_entry['point_index']}")
                                     print(f"    🔹 Base point coordinates: [{point[0]:.3f}, {point[1]:.3f}, {point[2]:.3f}]")
@@ -384,7 +374,7 @@ class Matcher:
                                 descriptors.append(descriptor_entry)
                                 
                                 # Print descriptor details for configured number of basis points
-                                if basis_point_index < basis_point_details:
+                                if basis_point_index < breakdown_limit:
                                     # Convert neighbor local indices to 1-indexed format (matching Java output)
                                     neighbor_display_ids = [idx + 1 for idx in neighbor_combo]
                                     print(f"  ✅ 6D descriptor [{neighbor_display_ids[0]},{neighbor_display_ids[1]},{neighbor_display_ids[2]}]: " +
@@ -392,12 +382,12 @@ class Matcher:
                                           f"{descriptor_6d[3]:.6f}, {descriptor_6d[4]:.6f}, {descriptor_6d[5]:.6f}]")
                             
                             except Exception as e:
-                                if basis_point_index < basis_point_details:
+                                if basis_point_index < breakdown_limit:
                                     print(f"  ❌ Failed to create descriptor: {e}")
                                 continue
                     
                 except Exception as e:
-                    if basis_point_index < basis_point_details:
+                    if basis_point_index < breakdown_limit:
                         print(f"❌ Error creating descriptors for point {basis_point_index}: {e}")
                     continue
                     
