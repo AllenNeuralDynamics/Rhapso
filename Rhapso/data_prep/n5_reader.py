@@ -12,34 +12,9 @@
 import zarr
 import s3fs
 import os
-
-# FOR DEV ONLY, these are helper functions for verifying N5 output
-
-def print_dataset_info(store_path, dataset_prefix, print_data=False, num_points=30):
-    if store_path.startswith("s3://"):
-        s3 = s3fs.S3FileSystem(anon=False) 
-        store = s3fs.S3Map(root=store_path, s3=s3)
-    else:
-        store = zarr.N5Store(store_path)
-        print(store_path)
-    
-    root = zarr.open(store, mode='r')
-    dataset = root[dataset_prefix]
-
-    print(f"Information for dataset at {store_path} in prefix {dataset_prefix}:")
-    print("Data Type:", dataset.dtype)
-    print("Shape:", dataset.shape)
-    print("Chunks:", dataset.chunks)
-    print("Compression:", dataset.compressor)
-    if dataset.attrs:
-        print("Attributes:")
-        for attr, value in dataset.attrs.items():
-            print(f"  {attr}: {value}")
-
-    # first_column = dataset[:]  
-    # ip_index = first_column[0]
-    # print(max(ip_index))
-    # print("hi")
+import numpy as np
+import matplotlib.pyplot as plt
+import json
 
 def list_files_under_prefix(node, path):
     try:
@@ -55,55 +30,6 @@ def list_files_under_prefix(node, path):
 
 # Amount of interest points in view 18,0 is 1061
 # Max value for view 18,0 in corr ip index is 1017
-
-def compare_n5_stores():
-    path0 = "/Users/seanfite/Desktop/Rhapso-Final-Output/"
-    path1 = "/Users/seanfite/Desktop/IP_TIFF_XML-Rhapso/interestpoints.n5/"
-    path2 = "/Users/seanfite/Desktop/AllenInstitute/Rhapso/Data/IP_TIFF_XML/output/interestpoints.n5/"
-    path3 = "s3://interest-point-detection/output/interestpoints.n5/"
-    path4 = "/Users/seanfite/Desktop/interestpoints-after-matching.n5/"
-    path5 = "/Users/seanfite/Desktop/interestpoints-after-solver.n5/"
-    prefix = "tpId_18_viewSetupId_0/beads/correspondences/data/"
-    # prefix = "tpId_18_viewSetupId_0/beads/interestpoints/loc/"
-
-    print("\n--- Comparing N5 Stores ---")
-    print("\nN5 Store:")
-    print_dataset_info(path1, prefix)
-
-    # print("\n--- Comparing N5 Stores ---")
-    # print("\nN5 Store:")
-    # print_dataset_info(path5, prefix)
-
-# compare_n5_stores()
-
-def open_n5_dataset(n5_path):
-    # Check if the direct path exists
-    attributes_path = os.path.join(n5_path, 'attributes.json')
-    print(f"\n🔍 Checking for attributes.json at: {attributes_path}")
-    
-    if not os.path.exists(attributes_path):
-        # Try the alternate path structure by removing 'interestpoints.n5' if it exists in the path
-        if 'interestpoints.n5' in n5_path:
-            alt_path = n5_path.replace('interestpoints.n5/', '')
-            alt_path = alt_path.replace('interestpoints.n5', '')
-            attributes_path = os.path.join(alt_path, 'attributes.json')
-            print(f"🔄 Path not found. Trying alternate path: {attributes_path}")
-        
-        # If path with 'tpId' doesn't use the base n5_folder_base structure, try the direct tpId path
-        if not os.path.exists(attributes_path) and '/tpId_' not in n5_path:
-            base_dir = os.path.dirname(n5_path)
-            for item in os.listdir(base_dir):
-                if item.startswith('tpId_'):
-                    view_id = item.split('_')[3]
-                    if f'viewSetupId_{view_id}' in n5_path:
-                        alt_path = os.path.join(base_dir, item, 'beads', 'interestpoints', 'loc')
-                        attributes_path = os.path.join(alt_path, 'attributes.json')
-                        print(f"🔄 Path not found. Trying tpId-based path: {attributes_path}")
-                        if os.path.exists(attributes_path):
-                            n5_path = alt_path
-                            break
-
-# open_n5_dataset('/Users/seanfite/Desktop/IP_TIFF_XML/interestpoints.n5/')
 
 def read_n5_data(n5_path):
     import zarr, s3fs, os
@@ -145,5 +71,126 @@ def read_n5_data(n5_path):
 
     root.visititems(visit_fn)
 
+# read_n5_data('/home/martin/Documents/Allen/Data/IP_TIFF_XML_2/interestpoints.n5')
 
-read_n5_data('/home/martin/Documents/Allen/Data/IP_TIFF_XML_2/interestpoints.n5')
+def read_big_stitcher_output_local(dataset_path):
+    attr_path = os.path.join(dataset_path, "attributes.json")
+    with open(attr_path) as f:
+        json.load(f)
+    store_root = os.path.dirname(dataset_path.rstrip("/"))
+    dataset_name = dataset_path.rstrip("/").split("/")[-1]
+    store = zarr.N5Store(store_root)
+
+    root = zarr.open(store, mode="r")
+    group = root[dataset_name]
+
+    intensities = root['intensities'][:]
+
+    # It's a Zarr array with shape (N, 3)
+    data = group[:]
+
+    # Print points sorted by index n
+    # sorted_data = data[data[:, 2].argsort()]
+    # for i, row in enumerate(data):
+    #     print(f"{i:3d}: {row}")
+
+    # General metrics
+    print("\n--- Detection Stats (Raw BigStitcher Output) ---")
+    print(f"Total Points: {len(data)}")
+    print(f"Intensity: min={intensities.min():.2f}, max={intensities.max():.2f}, mean={intensities.mean():.2f}, std={intensities.std():.2f}")
+    for dim, name in zip(range(3), ['X', 'Y', 'Z']):
+        values = data[:, dim]
+        print(f"{name} Range: {values.min():.2f} – {values.max():.2f} | Spread (std): {values.std():.2f}")
+    volume = np.ptp(data[:, 0]) * np.ptp(data[:, 1]) * np.ptp(data[:, 2])
+    density = len(data) / (volume / 1e9) if volume > 0 else 0
+    print(f"Estimated Density: {density:.2f} points per 1000³ volume")
+    print("--------------------------------------------------\n")
+
+    # --- 3D Plot ---
+    max_points = 10000000
+    sample = data if len(data) <= max_points else data[np.random.choice(len(data), max_points, replace=False)]
+
+    fig = plt.figure(figsize=(10, 8))
+    ax = fig.add_subplot(111, projection='3d')
+    ax.scatter(sample[:, 0], sample[:, 1], sample[:, 2], c='blue', alpha=0.5, s=1)
+    ax.set_xlabel('X')
+    ax.set_ylabel('Y')
+    ax.set_zlabel('Z')
+    ax.set_title(f"Interest Points in 3D (showing {len(sample)} points)")
+    plt.tight_layout()
+    plt.show()
+
+def read_rhapso_output(full_path):
+    if full_path.startswith("s3://"):
+        s3 = s3fs.S3FileSystem(anon=False)
+        store = s3fs.S3Map(root=full_path, s3=s3)
+        zarray = zarr.open_array(store, mode='r')
+        data = zarray[:]
+    
+    else:
+        full_path = full_path.rstrip("/")  # remove trailing slash if any
+        components = full_path.split("/")
+
+        # Find index of the N5 root (assumes .n5 marks the root)
+        try:
+            n5_index = next(i for i, c in enumerate(components) if c.endswith(".n5"))
+        except StopIteration:
+            raise ValueError("No .n5 directory found in path")
+
+        dataset_path = "/".join(components[:n5_index + 1])            # the store root
+        dataset_rel_path = "/".join(components[n5_index + 1:])        # relative dataset path
+
+        # Open N5 store and dataset
+        store = zarr.N5Store(dataset_path)
+        root = zarr.open(store, mode='r')
+
+        if dataset_rel_path not in root:
+            print(f"Skipping: {dataset_rel_path} (not found)")
+            return
+
+        zarray = root[dataset_rel_path]
+        data = zarray[:]
+
+    print("\n--- Detection Stats (Raw Rhapso Output) ---")
+    print(f"Total Points: {len(data)}")
+
+    for dim, name in zip(range(3), ['X', 'Y', 'Z']):
+        values = data[:, dim]
+        print(f"{name} Range: {values.min():.2f} – {values.max():.2f} | Spread (std): {values.std():.2f}")
+
+    volume = np.ptp(data[:, 0]) * np.ptp(data[:, 1]) * np.ptp(data[:, 2])
+    density = len(data) / (volume / 1e9) if volume > 0 else 0
+    print(f"Estimated Density: {density:.2f} points per 1000³ volume")
+    print("-----------------------")
+
+    # --- 3D Plot ---
+    max_points = 1000000000000
+    sample = data if len(data) <= max_points else data[np.random.choice(len(data), max_points, replace=False)]
+
+    fig = plt.figure(figsize=(10, 8))
+    ax = fig.add_subplot(111, projection='3d')
+    ax.scatter(sample[:, 0], sample[:, 1], sample[:, 2], c='blue', alpha=0.5, s=1)
+    ax.set_xlabel('X')
+    ax.set_ylabel('Y')
+    ax.set_zlabel('Z')
+    ax.set_title(f"Interest Points in 3D (showing {len(sample)} points)")
+    plt.tight_layout()
+    plt.show()
+
+# Rhapso Output 
+base_path = "s3://interest-point-detection/output/interestpoints.n5"
+# base_path = "/Users/seanfite/Desktop/IP_TIFF_XML/output/interestpoints.n5"
+for tp_id in [0]:
+    for setup_id in range(15):  
+        path = f"{base_path}/tpId_{tp_id}_viewSetupId_{setup_id}/beads/interestpoints/loc"
+        print(f"For view: {setup_id}")
+        read_rhapso_output(path)
+
+# Big Stitcher Output 
+# base_path = "/Users/seanfite/Desktop/BigStitcherOutput/interestpoints.n5"
+# # base_path = "/Users/seanfite/Desktop/IP_TIFF_XML/interestpoints.n5"
+# for tp_id in [0]:
+#     for setup_id in range(15):  
+#         path = f"{base_path}/tpId_{tp_id}_viewSetupId_{setup_id}/beads/interestpoints/loc"
+#         print(f"Reading: {path}")
+#         read_big_stitcher_output_local(path)
