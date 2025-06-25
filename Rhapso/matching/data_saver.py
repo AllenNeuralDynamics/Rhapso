@@ -109,7 +109,8 @@ def save_correspondences(n5_output_path, reference_tp, reference_vs, ref_label, 
         # Save correspondences for each view/label
         total_corrs = 0
         summary_lines = []
-        for view in matched_views:
+        num_views = len(matched_views)
+        for idx, view in enumerate(matched_views, 1):
             tp, vs, label = int(view[0]), int(view[1]), view[2]
             key = (tp, vs, label)
             corr_list = per_view_corrs.get(key, [])
@@ -128,7 +129,7 @@ def save_correspondences(n5_output_path, reference_tp, reference_vs, ref_label, 
             #     json.dump(corr_list, f)
 
             # Print summary for this view
-            summary_lines.append(f"  📁 tpId_{tp}_viewSetupId_{vs}/{label}/correspondences: {n_corr} correspondences")
+            summary_lines.append(f"  {idx}/{num_views} 📁 tpId_{tp}_viewSetupId_{vs}/{label}/correspondences: {n_corr} correspondences")
             if n_corr > 0:
                 summary_lines.append("    Breakdown:")
                 for other_key, idx_pairs in pair_breakdown[key].items():
@@ -142,11 +143,11 @@ def save_correspondences(n5_output_path, reference_tp, reference_vs, ref_label, 
         # Print the summary
         print("\n📊 Save Summary:")
         print("---------------------------")
-        print(f"🔢 Total correspondences saved: {total_corrs}")
         print(f"📂 Saved to {len(matched_views)} view-specific directories in: {os.path.join(n5_output_path, 'interestpoints.n5')}")
         for line in summary_lines:
             print(line)
         print(f"📁 Reference view: correspondences: {total_corrs} correspondences")
+        print(f"🔢 Total correspondences saved: {total_corrs}")
         print("---------------------------")
 
     except Exception as e:
