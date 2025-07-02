@@ -13,7 +13,7 @@ from dask import compute
 
 class InterestPointDetection:
     def __init__(self, strategy, dsxy, dsz, min_intensity, max_intensity, sigma, threshold, file_type, file_source,
-            xml_file_path, xml_bucket_name, image_file_path, image_bucket_name, output_file_path, output_bucket_name, metrics_output_path,
+            xml_file_path, xml_bucket_name, image_file_path, image_bucket_name, output_file_path, output_bucket_name,
             key):
         
         self.strategy = strategy
@@ -31,7 +31,6 @@ class InterestPointDetection:
         self.image_bucket_name = image_bucket_name
         self.output_file_path = output_file_path
         self.output_bucket_name = output_bucket_name
-        self.metrics_output_path = metrics_output_path
         self.key = key
 
     def detection(self):
