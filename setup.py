@@ -1,5 +1,19 @@
 from setuptools import setup, find_packages
 
+'''
+To install certain dependencies, use the following commands:
+
+- For matching-related libraries:
+  pip install .[matching]
+
+- For n5 reader libraries:
+  pip install .[n5_reader]
+
+- For detection-related libraries:
+  pip install .[detection]
+
+'''
+
 setup(
     name='Rhapso',
     version='0.1.8',
