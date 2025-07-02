@@ -70,15 +70,14 @@ class DescriptiveStatsMatching():
         return delta_x * delta_y * delta_z
 
     def results(self):
-        self.get_matches()
+
         bounding_box_minimum, bounding_box_maximum = self.get_bounding_box()
         sd_x, sd_y, sd_z = self.get_standard_deviation()
-
         print(f"""
         Number of matches: {self.total_match_length}
         Number of interest points contained in matches: {len(self.just_points)}
-        Average number of interest points per tile: {self.total_match_length/len(self.total_matches)}
-        "Actual interest points per tile": {self.matches_per_view},
+        Average number of matches per tile: {self.total_match_length/len(self.total_matches)}
+        Actual matches per tile: {self.matches_per_view},
         Bounding Box Min: {bounding_box_minimum}
         Bounding Box Max: {bounding_box_maximum}
         Std Dev (x, y, z): ({sd_x:.2f}, {sd_y:.2f}, {sd_z:.2f})
@@ -89,8 +88,9 @@ class DescriptiveStatsMatching():
         data_summary = {
             "Number of matches": self.total_match_length,
             "Number of interest points in matches": len(self.just_points),
-            "Average interest points per tile": self.total_match_length
+            "Average  matches per tile": self.total_match_length
             / len(self.total_matches),
+            "Actual matches points per tile": self.matches_per_view,
             "Bounding Box Min": bounding_box_minimum,
             "Bounding Box Max": bounding_box_maximum,
             "std_Dev_x": round(sd_x, 2),

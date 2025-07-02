@@ -17,7 +17,6 @@ class MatchProcessor:
         self.total_matches = 0
         self.s3 = boto3.client("s3")
         self.xml_bucket_name = xml_bucket_name
-        self.matches_per_view = {}
 
     def initialize_store(self):
         if self.base_path.startswith("s3://"):
@@ -125,7 +124,7 @@ class MatchProcessor:
         # processor = MatchProcessor(base_path, xml_file)
         view_setup_timepoint_array = processor.load_dataframe("local")
         processor.collect_matches(processor.store, view_setup_timepoint_array)
-        return self.result, self.total_matches, self.matches_per_view
+        return self.result, self.total_matches
 
 
 # Example usage

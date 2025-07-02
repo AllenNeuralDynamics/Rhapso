@@ -1,4 +1,5 @@
 import datetime
+from Rhapso.accuracy_metrics.save_metrics import JSONFileHandler
 from Rhapso.solver.align_tiles import AlignTiles
 import numpy as np
 
@@ -6,7 +7,7 @@ import numpy as np
 
 class GlobalOptimization:
     def __init__(self, tiles, pmc, fixed_views, data_prefix, alignment_option, relative_threshold,
-                absolute_threshold, min_matches, damp, max_iterations, max_allowed_error, max_plateauwidth, model):
+                absolute_threshold, min_matches, damp, max_iterations, max_allowed_error, max_plateauwidth, model, metrics_output_path):
         self.tiles = tiles
         self.fixed_views = fixed_views
         self.data_prefix = data_prefix
@@ -19,8 +20,11 @@ class GlobalOptimization:
         self.max_allowed_error = max_allowed_error
         self.max_plateauwidth = max_plateauwidth
         self.model = model
+        self.metrics_output_path = metrics_output_path
 
         self.align_tile = AlignTiles(pmc, tiles, fixed_views)
+
+        self.save_metrics = JSONFileHandler(self.metrics_output_path)
 
     def update_cost(self, view, tile):
         """
@@ -82,6 +86,15 @@ class GlobalOptimization:
         print( f"({datetime.datetime.now()}): Min Error: {min_error}px")
         print( f"({datetime.datetime.now()}): Max Error: {max_error}px")
         print( f"({datetime.datetime.now()}): Mean Error: {average_error}px")    
+
+        self.save_metrics.update(
+            "alignment errors",
+            {
+                "min_error": min_error,
+                "max_error": max_error,
+                "mean_error": average_error,
+            },
+        )
 
         return average_error, min_error, max_error
 

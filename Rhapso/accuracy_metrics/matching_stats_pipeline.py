@@ -12,7 +12,7 @@ xml_file_path_output = "IP_TIFF_XML/dataset.xml"
 xml_bucket_name = "rhapso-tif-sample"
 base_path = "/Users/ai/Downloads/IP_TIFF_XML/interestpoints.n5"
 xml_file = "/Users/ai/Downloads/IP_TIFF_XML/dataset.xml~1"
-output_path = "/Users/ai/Downloads/IP_TIFF_XML/metrics.json"
+metrics_output_path = "/Users/ai/Downloads/IP_TIFF_XML/metrics.json"
 args = {"voxel": True, "voxel_vis": False, "KDE": True}
 
 def MatchingStatsPipeline(args, xml_file, base_path, output_path):
@@ -23,16 +23,13 @@ def MatchingStatsPipeline(args, xml_file, base_path, output_path):
     pair = None
     plot = False
     processor = MatchProcessor(base_path, xml_file, file_source, xml_bucket_name)
-    matches, total_matches, matches_per_view = processor.run(processor)
+    matches, total_matches = processor.run(processor)
     descriptive_stats = DescriptiveStatsMatching(matches, total_matches)
     saveJSON = JSONFileHandler(output_path)
-
     points = descriptive_stats.get_matches()
 
     results = descriptive_stats.results()
     saveJSON.update("descriptive_stats", results)
-    saveJSON.update("Actual interest points per tile", matches_per_view)
-
     print("Descriptive Stats are done")
 
     if args["voxel"]:
@@ -55,5 +52,5 @@ def MatchingStatsPipeline(args, xml_file, base_path, output_path):
     
     print("All requested metrics are complete")
 
-MatchingStatsPipeline(args, xml_file, base_path, output_path)
+MatchingStatsPipeline(args, xml_file, base_path, metrics_output_path)
 

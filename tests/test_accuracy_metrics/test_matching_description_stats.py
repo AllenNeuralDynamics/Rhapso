@@ -1,10 +1,11 @@
 import unittest
 from unittest.mock import patch
 import numpy as np
-from Rhapso.Validation.matching_descriptors import DescriptiveStatsMatching
+from Rhapso.accuracy_metrics.matching_descriptors import DescriptiveStatsMatching
 
 class TestDescriptiveStatsMatching(unittest.TestCase):
     maxDiff = None
+
     def setUp(self):
         self.stats = DescriptiveStatsMatching({('30', '5'):[ {'p1': np.array([1288.26358115,  822.34935865,   59.33322283]), 'p2': np.array([1291.87676123,  612.10384713,   15.05991703])},
                                                              {'p1': np.array([676.14930295, 930.68295147,  85.59932219]), 'p2': np.array([680.98046159, 739.46465793,   4.11655491])}]}, 2)
@@ -42,19 +43,21 @@ class TestDescriptiveStatsMatching(unittest.TestCase):
         result = self.stats.bounding_box_volume()
         self.assertAlmostEqual(result, 15983488.69, places=2)
 
-    @patch("builtins.print")
-    def test_result(self, mock_print):
+    def test_result(self):
+
         result = self.stats.results()
-        expected_output =  """
-        Number of matches: 2
-        Number of interest points contained in matches: 8
-        Average number of interest points per tile: 2.0
-        Bounding Box Min: {'x': 676.14930295, 'y': 612.10384713, 'z': 4.11655491}
-        Bounding Box Max: {'x': 1291.87676123, 'y': 930.68295147, 'z': 85.59932219}
-        Std Dev (x, y, z): (326.87, 124.52, 35.29)
-        Average Std Dev: 162.23
-        Bounding Box Volume: 15983488.69
-        """
+        print(result)
+        expected_output = {'Number of matches': 2,
+                            'Number of interest points in matches': 4, 
+                            'Average  matches per tile': 2.0, 
+                            'Actual matches points per tile': {'30, 5': 2}, 
+                            'Bounding Box Min': {'x': 676.14930295, 'y': 612.10384713, 'z': 4.11655491}, 
+                            'Bounding Box Max': {'x': 1291.87676123, 'y': 930.68295147, 'z': 85.59932219},
+                            'std_Dev_x': 353.06, 
+                            'std_Dev_y': 134.5, 
+                            'Std_Dev_z': 38.12, ''
+                            'Average Std Dev': 175.23, 
+                            'Bounding Box Volume': 15983488.69}
 
         self.assertEqual(result, expected_output)
 
@@ -68,9 +71,10 @@ class TestDescriptiveStatsMatching(unittest.TestCase):
     def test_get_plane_coordinates_raises_error_on_invalid_point(self):
         matches_with_invalid_point = {("5", "30"): [{"p1":np.array([1,2]),"p2":np.array([1,2,4])}]}
         stats = DescriptiveStatsMatching(matches_with_invalid_point, 1)
+        stats.get_matches()
 
         with self.assertRaises(ValueError) as context:
-            stats.results()
+            stats.get_plane_coordinates()
         self.assertEqual(str(context.exception), "Coordinates missing, an error has occurred.")
 
 if __name__ == '__main__':
