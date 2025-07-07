@@ -1,47 +1,36 @@
 import xml.etree.ElementTree as ET
-import numpy as np
+import boto3
+import os
 
 class XMLParser:
-    def __init__(self, xml_file):
+    def __init__(self, xml_input_path):
         """Initialize XML parser with file path or XML content string"""
-        self.xml_file = xml_file
+        self.xml_input_path = xml_input_path
         self.data_global = None  # Will hold complete dataset info
 
-    def parse(self):
+    def parse(self, xml_content):
         """Parse XML file or string and create complete dataset object"""
         try:
             # Check if the input is a string containing XML content
-            if self.xml_file.strip().startswith('<?xml') or self.xml_file.strip().startswith('<'):
+            if xml_content.strip().startswith('<?xml') or self.xml_file.strip().startswith('<'):
                 # Parse XML from string content
-                root = ET.fromstring(self.xml_file)
+                root = ET.fromstring(xml_content)
             else:
                 # Parse XML from file path
-                tree = ET.parse(self.xml_file)
+                tree = ET.parse(xml_content)
                 root = tree.getroot()
             
             # Create comprehensive data_global structure
             self.data_global = {
                 'basePathURI': root.find(".//BasePath").text if root.find(".//BasePath") is not None else "",
-                'boundingBoxes': self._parse_bounding_boxes(root),
                 'viewRegistrations': self._parse_view_registrations(root),
                 'viewsInterestPoints': self._parse_view_paths(root),
-                'sequenceDescription': self._parse_sequence_description(root)
             }
             return self.data_global
             
         except Exception as e:
             print(f"❌ Error parsing XML content: {e}")
             raise
-
-    def _parse_sequence_description(self, root):
-        """Parse sequence metadata from XML root"""
-        # TODO: Implement parsing of sequence metadata
-        return {}
-
-    def _parse_bounding_boxes(self, root):
-        """Parse bounding box information from XML"""
-        # TODO: Implement bounding box parsing
-        return {}
 
     def _parse_view_registrations(self, root):
         """Parse ViewRegistration entries from XML"""
@@ -82,12 +71,14 @@ class XMLParser:
                         print(f"  ✅ Added transform: type='{transform_type}', name='{transform_name}'")
                     else:
                         print(f"  ⚠️ No affine data found for transform type='{transform_type}', name='{transform_name}'")
+                        pass
                 
                 if transforms:
                     view_registrations[view_id] = transforms
                     print(f"📝 Stored {len(transforms)} transforms for view {view_id}")
                 else:
                     print(f"⚠️ No valid transforms found for view {view_id}")
+                    pass
                     
             except Exception as e:
                 print(f"❌ Error parsing ViewRegistration: {e}")
@@ -132,67 +123,54 @@ class XMLParser:
             print(f"  ... and {len(view_paths) - 3} more views")
             
         return view_paths
-
-    def parse_timepoints(self):
-        """Extract timepoint information from XML"""
-        root = ET.parse(self.xml_file).getroot()
-        timepoints = set()
-        timepoints_list = root.find(".//Timepoints[@type='list']")
-        if timepoints_list:
-            for timepoint in timepoints_list.findall("Timepoint"):
-                timepoints.add(int(timepoint.find("id").text))
+    
+    def fetch_local_xml(self, file_path):
+        try:
+            with open(file_path, "r", encoding="utf-8") as file:
+                return file.read()
+        except FileNotFoundError:
+            print(f"pipeline failed, could not find xml file located at '{file_path}'")
+            return None
+        except Exception as e:
+            print(f"pipeline failed, error while parsing xml file at '{file_path}': {e}")
+            return None
+    
+    def get_xml_content(self):
+        """
+        Fetches XML content from either S3 or local filesystem based on path prefix.
+        Returns (xml_content, interest_points_folder) or (None, None) if not found.
+        """
+        # Determine the directory and interest points folder based on path type
+        if self.xml_input_path.startswith('s3://'):
+            # Parse S3 URL components
+            s3_path = self.xml_input_path[5:]  # Remove 's3://'
+            parts = s3_path.split('/', 1)
+            bucket_name = parts[0]
+            file_key = parts[1]
+            
+            print(f"Detected S3 path. Fetching from bucket: {bucket_name}, key: {file_key}")
+            
+            # Initialize S3 client and fetch content
+            s3_client = boto3.client('s3')
+            response = s3_client.get_object(Bucket=bucket_name, Key=file_key)
+            xml_content = response["Body"].read().decode("utf-8")
+            
+            # Create S3 path for interest points folder
+            xml_dir = os.path.dirname(file_key)
+            interest_points_folder = f"s3://{bucket_name}/{xml_dir}/interestpoints.n5"
         else:
-            timepoint_range = root.find(".//Timepoints[@type='range']")
-            if timepoint_range:
-                first = int(timepoint_range.find("first").text)
-                last = int(timepoint_range.find("last").text)
-                timepoints = set(range(first, last + 1))
-        return timepoints
-
-    def build_label_map(self):
-        """Build global label map for all views"""
-        root = ET.parse(self.xml_file).getroot()
-        label_map_global = {}
-        label_weights = {}
-        # TODO: Implement label mapping similar to BigStitcher
-        return label_map_global, label_weights
-
-    def setup_groups(self, view_registrations):
-        """Set up view groups for pairwise matching"""
-        # Get all views from viewsInterestPoints
-        views = list(self.data_global['viewsInterestPoints'].keys())
+            print(f"Detected local path: {self.xml_input_path}")
+            xml_content = self.fetch_local_xml(self.xml_input_path)
+            if xml_content is None:
+                return None, None
+            # Create local path for interest points folder
+            xml_dir = os.path.dirname(self.xml_input_path)
+            interest_points_folder = os.path.join(xml_dir, 'interestpoints.n5')
         
-        # Group views by timepoint
-        timepoint_groups = {}
-        for view in views:
-            timepoint, setup_id = view
-            if timepoint not in timepoint_groups:
-                timepoint_groups[timepoint] = []
-            timepoint_groups[timepoint].append(view)
+        return xml_content, interest_points_folder
+    
+    def run(self):
+        xml_content, interest_points_folder = self.get_xml_content()
+        data_global = self.parse(xml_content)
+        return data_global, interest_points_folder
 
-        # Create pairs within each timepoint
-        pairs = []
-        for timepoint, timepoint_views in timepoint_groups.items():
-            for i in range(len(timepoint_views)):
-                for j in range(i + 1, len(timepoint_views)):
-                    pairs.append((timepoint_views[i], timepoint_views[j]))
-
-        print(f"Created {len(pairs)} pairs for matching")
-        for pair in pairs[:5]:  # Print first 5 pairs as example
-            print(f"Pair: ViewId[{pair[0][0]},{pair[0][1]}] <=> ViewId[{pair[1][0]},{pair[1][1]}]")
-        if len(pairs) > 5:
-            print("... and more pairs")
-
-        return {
-            'groups': timepoint_groups,
-            'pairs': pairs,
-            'rangeComparator': None,
-            'subsets': None,
-            'views': views
-        }
-
-    def get_data_global(self):
-        """Get complete dataset information object"""
-        if self.data_global is None:
-            self.parse()
-        return self.data_global

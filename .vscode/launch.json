@@ -5,7 +5,7 @@
             "name": "Python: Module",
             "type": "debugpy",
             "request": "launch",
-            "module": "Rhapso.data_prep.n5_reader",
+            "module": "Rhapso.pipelines.matching_test_pipeline",
             "cwd": "${workspaceFolder}",
             "python": "${command:python.interpreterPath}",
             "args": [],
