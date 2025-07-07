@@ -1,11 +1,11 @@
 import numpy as np
-
 from Rhapso.accuracy_metrics.match_retrieval import MatchProcessor
 from Rhapso.accuracy_metrics.matching_KDE import MatchingKDE
 from Rhapso.accuracy_metrics.matching_descriptors import DescriptiveStatsMatching
 from Rhapso.accuracy_metrics.matching_voxel_vis import VoxelVis
 from Rhapso.accuracy_metrics.matching_voxelization import Voxelizer
 from Rhapso.accuracy_metrics.save_metrics import JSONFileHandler
+from Rhapso.accuracy_metrics.threshold import Threshold
 
 file_source = "local"
 xml_file_path_output = "IP_TIFF_XML/dataset.xml"
@@ -14,6 +14,17 @@ base_path = "/Users/ai/Downloads/IP_TIFF_XML/interestpoints.n5"
 xml_file = "/Users/ai/Downloads/IP_TIFF_XML/dataset.xml~1"
 metrics_output_path = "/Users/ai/Downloads/IP_TIFF_XML/metrics.json"
 args = {"voxel": True, "voxel_vis": False, "KDE": True}
+# Threshold values:
+min_alignment = None
+max_alignment = None
+minimum_points = None
+maximum_points = None
+minimum_total_matches = None
+maximum_total_matches=None
+max_kde = None
+min_kde = None
+max_cv = None 
+min_cv = None
 
 def MatchingStatsPipeline(args, xml_file, base_path, output_path):
     # KDE type is "all", "pair", or "tile" in order to define how large of data set to run.
@@ -51,6 +62,13 @@ def MatchingStatsPipeline(args, xml_file, base_path, output_path):
         print("KDE Computation Complete")
     
     print("All requested metrics are complete")
+
+    # Optional
+    threshold = Threshold(min_alignment, max_alignment, minimum_points, maximum_points,
+                 minimum_total_matches, maximum_total_matches, max_kde, min_kde,
+                 max_cv, min_cv, metrics_output_path)
+    threshold.get_metric_json()
+    threshold.run_threshold_checks()
 
 MatchingStatsPipeline(args, xml_file, base_path, metrics_output_path)
 

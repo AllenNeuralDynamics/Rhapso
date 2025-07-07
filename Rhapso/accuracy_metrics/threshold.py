@@ -31,6 +31,8 @@ class Threshold:
         value = self.data["alignment errors"]
         minimum = value["min_error"]
         maximum = value["max_error"]
+        if not value:
+            return
 
         if self.min_alignment is not None and minimum < self.min_alignment:
             print(f"Aborting: minimum alignment error value {minimum} is out of acceptable range.")
@@ -41,6 +43,9 @@ class Threshold:
 
     def check_points(self):
         value = self.data["total_ips"]
+
+        if not value:
+            return
         if self.minimum_points is not None and value < self.minimum_points:
             print(f"Aborting: total number of interest points value {value} is below the minimum threshold.")
             sys.exit(1)
@@ -77,3 +82,14 @@ class Threshold:
         if self.max_cv is not None and value > self.max_cv:
             print(f"Aborting: Coefficient of Variation value {value} is above the maximum threshold.")
             sys.exit(1)
+
+    def run_threshold_checks(self):
+        if self.data is None:
+            print("No data loaded. Exiting.")
+            return
+
+        self.check_alignment()
+        self.check_points()
+        self.check_matches()
+        self.check_kde()
+        self.check_cv()
