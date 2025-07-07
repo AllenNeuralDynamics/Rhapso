@@ -7,7 +7,6 @@ import numpy as np
 class ViewTransformModels:
     def __init__(self, df):
         self.view_registrations_df = df.get("view_registrations", pd.DataFrame())
-        
         self.calibration_matrices = {}
         self.rotation_matrices = {}
         self.concatenated_matrices = {}
@@ -26,17 +25,13 @@ class ViewTransformModels:
                 # create affine matrix
                 affine_values = np.fromstring(row["affine"], sep=",").astype(np.float64)
                 if len(affine_values) == 12:
-                    affine_values = np.append(
-                        affine_values, [0, 0, 0, 1]
-                    )  # append homogeneous coordinates
+                    affine_values = np.append(affine_values, [0, 0, 0, 1])  # append homogeneous coordinates
                 affine_matrix = affine_values.reshape(4, 4)
 
                 # append matrix by row name
                 view_id = f"timepoint: {row['timepoint']}, setup: {row['setup']}"
                 if "calibration" in row["name"].lower():
-                    self.calibration_matrices[view_id] = {
-                        "affine_matrix": affine_matrix
-                    }
+                    self.calibration_matrices[view_id] = {"affine_matrix": affine_matrix}
                 else:
                     self.rotation_matrices[view_id] = {"affine_matrix": affine_matrix}
 
@@ -62,18 +57,6 @@ class ViewTransformModels:
                     concatenated_matrix = np.dot(rotation_matrix, calibration_matrix)
                     self.concatenated_matrices[key] = concatenated_matrix
 
-    def print_matrices(self):
-        """
-        Debug function to print all concatenated affine matrices in a formatted string.
-        """
-        for key, matrix in self.concatenated_matrices.items():
-            affine_format = (
-                "3d-affine: ("
-                + ", ".join(f"{item:.6f}" for row in matrix for item in row)
-                + ")"
-            )
-            print(f"{key}: {affine_format}")
-
     def run(self):
         """
         Executes the entry point of the script.
@@ -81,3 +64,18 @@ class ViewTransformModels:
         self.create_transform_matrices()
         self.concatenate_matrices_by_view_id()
         return self.concatenated_matrices
+
+# DEBUG
+# ---------------
+
+# def print_matrices(self):
+#     """
+#     Debug function to print all concatenated affine matrices in a formatted string.
+#     """
+#     for key, matrix in self.concatenated_matrices.items():
+#         affine_format = (
+#             "3d-affine: ("
+#             + ", ".join(f"{item:.6f}" for row in matrix for item in row)
+#             + ")"
+#         )
+#         print(f"{key}: {affine_format}")

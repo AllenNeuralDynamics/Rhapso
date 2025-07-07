@@ -129,7 +129,6 @@ class MatchProcessor:
 
 
 # Example usage
-# This is a little bit goofy but wasn't sure if we are going to mirror IPD/Solve or Matching in how we setup/run files
 if __name__ == "__main__":
     base_path = "/Users/ai/Downloads/IP_TIFF_XML/interestpoints.n5"
     xml_file = "/Users/ai/Downloads/IP_TIFF_XML/dataset.xml~1"
