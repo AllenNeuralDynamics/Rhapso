@@ -4,11 +4,14 @@
 
 strategy: 'python'
 dsxy: 4
-dsz: 3
+dsz: 4
 min_intensity: 0
 max_intensity: 255
 sigma: 1.8
-threshold: 0.008
+threshold: 0.001
+offset: 0
+combine_distance: .5
+mem_per_worker_bytes: 0
 file_type: 'tiff'
 file_source_detection: 'local'
 xml_file_path_detection: '/home/martin/Documents/allen/clean-bss-mvr/IP_TIFF_XML_2/dataset.xml'
@@ -17,7 +20,7 @@ output_file_path: '/home/martin/Documents/allen/clean-bss-mvr/IP_TIFF_XML_2/outp
 xml_bucket_name_detection: None
 image_bucket_name: None
 output_bucket_name: None
-key: 'detection'
+run_type: dask
 
 # INTEREST POINT MATCHING
 # -----------------------------------

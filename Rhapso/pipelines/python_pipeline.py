@@ -15,6 +15,9 @@ interest_point_detection = InterestPointDetection(
     max_intensity=config['max_intensity'],
     sigma=config['sigma'],
     threshold=config['threshold'],
+    offset=config['offset'],
+    combine_distance=config['combine_distance'],
+    mem_per_worker_bytes=config['mem_per_worker_bytes'], 
     file_type=config['file_type'],
     file_source=config['file_source_detection'],
     xml_file_path=config['xml_file_path_detection'],
@@ -23,7 +26,7 @@ interest_point_detection = InterestPointDetection(
     image_bucket_name=config['image_bucket_name'],
     output_file_path=config['output_file_path'],
     output_bucket_name=config['output_bucket_name'],
-    key = ['key']
+    run_type=config['run_type']
 )
 interest_point_detection.run()
 
@@ -48,22 +51,22 @@ interest_point_matching = InterestPointMatching(
 )
 interest_point_matching.run()
 
-# SOLVER
-solver = Solver(
-    file_source=config['file_source_solver'],
-    xml_file_path_output=config['xml_file_path_output'],
-    xml_bucket_name=config['xml_bucket_name_solver'],
-    xml_file_path=config['xml_file_path_solver'],
-    data_prefix=config['data_prefix'],
-    fixed_views=config['fixed_views'],
-    model=config['model'],
-    alignment_option=config['alignment_option'],
-    relative_threshold=config['relative_threshold'],
-    absolute_threshold=config['absolute_threshold'],
-    min_matches=config['min_matches'],
-    damp=config['damp'],
-    max_iterations=config['max_iterations'],
-    max_allowed_error=config['max_allowed_error'],
-    max_plateauwidth=config['max_plateauwidth']
-)
-solver.run()
+# # SOLVER
+# solver = Solver(
+#     file_source=config['file_source_solver'],
+#     xml_file_path_output=config['xml_file_path_output'],
+#     xml_bucket_name=config['xml_bucket_name_solver'],
+#     xml_file_path=config['xml_file_path_solver'],
+#     data_prefix=config['data_prefix'],
+#     fixed_views=config['fixed_views'],
+#     model=config['model'],
+#     alignment_option=config['alignment_option'],
+#     relative_threshold=config['relative_threshold'],
+#     absolute_threshold=config['absolute_threshold'],
+#     min_matches=config['min_matches'],
+#     damp=config['damp'],
+#     max_iterations=config['max_iterations'],
+#     max_allowed_error=config['max_allowed_error'],
+#     max_plateauwidth=config['max_plateauwidth']
+# )
+# solver.run()

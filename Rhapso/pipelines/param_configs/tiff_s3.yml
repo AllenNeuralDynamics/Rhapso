@@ -18,7 +18,10 @@ image_file_path: 's3://rhapso-tif-sample/IP_TIFF_XML/'
 image_bucket_name: "rhapso-tif-sample"
 output_file_path: "output"
 output_bucket_name: 'interest-point-detection'
-key: 'detection'
+offset: 0
+combine_distance: .5
+mem_per_worker_bytes: 0
+run_type: dask
 
 # INTEREST POINT MATCHING
 # -----------------------------------
