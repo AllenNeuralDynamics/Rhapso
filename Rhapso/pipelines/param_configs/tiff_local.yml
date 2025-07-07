@@ -14,9 +14,9 @@ combine_distance: .5
 mem_per_worker_bytes: 0
 file_type: 'tiff'
 file_source_detection: 'local'
-xml_file_path_detection: '/Users/seanfite/Desktop/IP_TIFF_XML/dataset.xml'
-image_file_path:  '/Users/seanfite/Desktop/IP_TIFF_XML/'
-output_file_path: '/Users/seanfite/Desktop/IP_TIFF_XML/output'
+xml_file_path_detection: '/home/martin/Documents/allen/clean-bss-mvr/IP_TIFF_XML_2/dataset.xml'
+image_file_path:  '/home/martin/Documents/allen/clean-bss-mvr/IP_TIFF_XML_2/'
+output_file_path: '/home/martin/Documents/allen/clean-bss-mvr/IP_TIFF_XML_2/output'
 xml_bucket_name_detection: None
 image_bucket_name: None
 output_bucket_name: None
@@ -25,9 +25,22 @@ run_type: dask
 # INTEREST POINT MATCHING
 # -----------------------------------
 
-xml_input_file: '/Users/seanfite/Desktop/IP_TIFF_XML/output/dataset-detection.xml'
-n5_base_path: '/Users/seanfite/Desktop/IP_TIFF_XML/output/interestpoints.n5'
-output_path: '/Users/seanfite/Desktop/IP_TIFF_XML/output/interestpoints.n5'
+xml_file_path_matching: '/home/martin/Documents/allen/clean-bss-mvr/IP_TIFF_XML_2/dataset.xml'
+n5_matching_output_path: '/home/martin/Documents/allen/clean-bss-mvr/IP_TIFF_XML_2/output/interestpoints.n5'
+label: 'beads'
+transformation_model: 'AFFINE'
+regularization_model: 'RIGID'
+lambda_val: 0.1
+views_to_match: 'OVERLAPPING_ONLY'
+clear_correspondences: true
+matching_method: 'FAST_ROTATION'
+significance: 3.0
+redundancy: 1
+neighboring_points: 3
+ransac_iterations: 200
+ransac_minimum_inlier_ratio: 0.1
+ransac_minimum_inlier_factor: 3.0
+ransac_threshold: 5.0
 
 # SOLVER
 # -----------------------------------
@@ -44,6 +57,6 @@ max_allowed_error: 5.0
 max_plateauwidth: 200
 file_source_solver: 'local'
 xml_bucket_name_solver: None
-xml_file_path_solver: '/Users/seanfite/Desktop/IP_TIFF_XML/output/dataset-detection.xml'
-data_prefix: '/Users/seanfite/Desktop/IP_TIFF_XML/output/interestpoints.n5'
-xml_file_path_output: '/Users/seanfite/Desktop/IP_TIFF_XML/output/dataset-solve.xml'
+xml_file_path_solver: '/home/martin/Documents/allen/clean-bss-mvr/IP_TIFF_XML_2/output/dataset-detection.xml'
+data_prefix: '/home/martin/Documents/allen/clean-bss-mvr/IP_TIFF_XML_2/output/interestpoints.n5'
+xml_file_path_output: '/home/martin/Documents/allen/clean-bss-mvr/IP_TIFF_XML_2/output/dataset-solve.xml'

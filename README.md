@@ -15,38 +15,43 @@
 <!-- UPDATE THIS WHEN OPEN SOURCED -->
   [Allen Institute Internal Coms](https://teams.microsoft.com/l/channel/19%3AIv_3CdryfboX3E0g1BbzCi3Y8KRgNCdAv3idJ9epV-k1%40thread.tacv2/Project%20Rhapso-Shared?groupId=87b91b48-bb2a-4a00-bc59-5245043a0708&tenantId=32669cd6-737f-4b39-8bdd-d6951120d3fc&ngc=true&allowXTenantAccess=true)
 
+<br>
+
 ## Table of Contents
 - [Summary](#summary)
+- [Getting Started](#getting-started)
+- [Usage](#usage)
 - [Build Package](#build-package)
   - [Using the Built `.whl` File](#using-the-built-whl-file)
-- [Usage](#usage)
 - [Componenents Walkthrough](#components-walkthrough)
-- [Command Line Usage](#command-line-usage)
-- [Setup Instructions](#setup-instructions)
-- [Run Tests](#run-tests)
-- [Environments](#environments)
-- [Use Cases](#use-cases)
 - [FAQ](#frequently-asked-questions)
 
 ---
 
+<br>
+
 ## Summary
 Built from decoupled components, Rhapso separates data loading and execution logic from its core functionality, making it flexible and easy to adapt across environments and formats.
 
-To run Rhapso, users can either provide a data loader and a pipeline script that orchestrates the processing steps or use one of ours. We include example loaders and pipeline scripts to support both large-scale runs on AWS Glue (Spark ETL) and smaller-scale testing on local or conventional machines. Input formats like OME-TIFF and Zarr are supported out of the box.
+Out of the box, Rhapso can process upwards of 10 petabytes of large scale microscopy data by integrating with Ray to distribute the heavy lifting. Rhapso can also process smaller datasets on a single node using Dask or with no enhancements at all. 
+
+If you have a use case not covered in the current set of data loaders, please refer to our [Wiki Page](https://github.com/AllenNeuralDynamics/Rhapso/wiki#example-pipelines) page for how to adapt current Rhapso configurations to your needs.
 
 Rhapso is developed in collaboration with the Allen Institute for Neural Dynamics (AIND), initially supporting AIND’s ExaSPIM pipeline and eventually broadly benefiting microscopy research.
 
+<br>
+
 ### Environments
-This package is designed to target three main environments:
-- Local
-- Cloud
-- SLURM
+This package is designed to be environment agnostic, but we have configured a few data loaders to run in these environments:
+- Local (Dask, Ray)
+- Cloud (AWS, Ray)
 > [!TIP]
 > Detailed instructions on how to run a sample end-to-end pipeline for each environment can be found on the [Wiki Page](https://github.com/AllenNeuralDynamics/Rhapso/wiki#example-pipelines).
 Sample pipeline instructions are provided for pre-made templates, but if you want to create your own template, you can do so based on the sample files available inside the `Rhapso/pipelines` folder.
 
 ---
+
+<br>
 
 ## Getting Started
 
@@ -66,6 +71,8 @@ pip install -r requirements.txt
 
 ---
 
+<br>
+
 ## Usage
 
 ### Python Pipeline Guide: Rhapso/pipelines/python_pipeline.py
@@ -84,50 +91,61 @@ This pipeline provides a local execution environment for Rhapso, utilizing its c
 -	Optimization: For detailed guidance on setting up optimization parameters, check out [Run Parameter Configurations](#run-parameter-configurations).
 
 ### Running the Job
-1. Follow [Setup Instructions](#setup-instructions).
+1. Follow [Getting Started](#getting-started).
 2. Navigate your terminal to the root folder of Rhapso. In your terminal, run: python Rhapso/pipelines/python_pipeline.py.
 
 ### Monitoring
 Follow the steps in the pipeline script to understand the sequence and integration of Rhapso components. Each step is an opportunity to tweak and learn about the system’s flexibility in real-time applications.
-<br>
-
-### Spark ETL Pipeline Guide: Rhapso/pipelines/spark_etl_pipeline.py
-
-### Overview
-This pipeline enables the execution of Rhapso on production data using AWS Glue's Spark ETL capabilities, which is ideal for processing large-scale datasets, specifically when dealing with OME image data in terabytes or larger.
-
-### Prerequisites
-1.	AWS Account: Ensure you have an active AWS account. Sign up or log in here.
-2.	Navigate to AWS Glue: Access AWS Glue from your AWS Management Console. Find it under "Services" or use the search bar.
-
-### Setup
-1.	Access ETL Jobs:
--	In AWS Glue, select "ETL Jobs" from the left sidebar.
--	Click on "Add Job" to start a new ETL job setup.
-2.	Configure the Job:
--	Choose "Spark" as the ETL engine and select "Start Fresh" in the script editor.
--	In the script editor, paste the contents of Rhapso/pipelines/spark_etl_pipeline.py.
-3.	Import Rhapso Library:
--	Navigate to "Job Details", then scroll to "Advanced Properties".
--	Under "Job Parameters", add --additional-python-modules as the key.
--	For the value, input the full S3 path to the .whl file containing the Rhapso project.
--	To create .whl file, navigate to [Build Package](#build-package)
-
-### Running the Job
-1.	Adjust Job Settings for Your Data:
--	Review guidelines on dataset sizes and optimal worker types [Run Parameter Configurations](#run-parameter-configurations) to ensure the Glue engine is configured correctly for your data.
-2.	Save and Run:
--	Save your configurations and initiate the job by clicking "Run".
--	Monitor the job's progress in the "Runs" tab.
-
-### Monitoring
-Watch the execution in real-time and make any necessary adjustments based on the job performance and outputs.
 
 ---
 
-## Build Package Instructions
+<br>
 
-### Build and Use the `.whl` File
+### Ray Pipeline Guide: Rhapso/pipelines/detection/ray_pipeline.py
+
+### Overview
+This pipeline enables the execution of Rhapso on production data using Ray's distribted capabilities, which is ideal for processing large-scale datasets.
+
+### Setup
+1.	AWS Account: Ensure you have an active AWS account. Sign up or log in here.
+2.	Create a PEM auth file and save locally
+3.	Update ray_config.py file to point to your PEM path
+     ```
+     ssh_private_key:
+     ```
+4.	Navigate to project root and create .whl file (instructions at bottom of ray_config.py)
+     ```
+     python setup.py bdist_wheel 
+     ```
+5.	Save .whl file to desired location in S3
+6.	Point to the .whl file in setup commands in ray_config.py
+     ```
+     - aws s3 cp s3://rhapso-whl-v2/Rhapso-0.1.0-py3-none-any.whl /tmp/Rhapso-0.1.0-py3-none-any.whl 
+     ```
+7.	Navigate to the root folder of ray_config.py
+8.	Run ray up ray_cluster.yml --no-config-cache
+    ```
+    ray up ray_cluster.yml --no-config-cache
+    ```
+
+### Access Ray Dashboard
+1.	Find public IP of head node.
+2.	Replace the ip address and PEM file location to ssh into head node
+     ```
+    ssh -i /Users/seanfite/Desktop/AllenInstitute/Rhapso/Auth/AWS/EC2-SSH-Key/rhapso-ssh.pem -L 8265:localhost:8265 ubuntu@34.219.189.35
+    ```
+4.	Go to dashboard
+     ```
+    http://localhost:8265
+    ```
+
+---
+
+<br>
+
+## Build Package
+
+### Using the Built `.whl` File
 
 1. **Build the `.whl` File in the root of this repo:**
   ```sh
@@ -154,6 +172,8 @@ Watch the execution in real-time and make any necessary adjustments based on the
   ```
 
 ---
+
+<br>
 
 ## Components Walkthrough
 
@@ -182,5 +202,7 @@ To Do
 For more information about fusion, check out the [detailed walkthrough on our wiki](https://github.com/AllenNeuralDynamics/Rhapso/wiki/4.-Fusion).
 
 ---
+
+<br>
 
 ## Frequently Asked Questions
