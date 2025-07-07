@@ -13,7 +13,7 @@ class OverlapDetection:
         self.image_loader_df = dataframes["image_loader"]
         self.dsxy, self.dsz = dsxy, dsz
         self.prefix = prefix
-        self.file_type = file_type
+        self.file_type = file_type  
         self.to_process = {}
         self.image_shape_cache = {}
 
@@ -29,7 +29,6 @@ class OverlapDetection:
             return self.image_shape_cache[file_path]
 
         if self.file_type == "zarr":
-            print(file_path)
             s3 = s3fs.S3FileSystem(anon=False)
             store = s3fs.S3Map(root=file_path, s3=s3)
             zarr_array = zarr.open(store, mode="r")
@@ -192,38 +191,28 @@ class OverlapDetection:
 
             # get inverted matrice of downsampling
             if self.file_type == "zarr":
-                dim_base = self.load_image_metadata(
-                    self.prefix + row_i["file_path"] + f"/{0}"
-                )
+                dim_base = self.load_image_metadata(self.prefix + row_i["file_path"] + f"/{0}")
             elif self.file_type == "tiff":
                 dim_base = self.load_image_metadata(self.prefix + row_i["file_path"])
 
-            downsampled_dim_base, mipmap_of_downsample = self.open_and_downsample(
-                dim_base
-            )
+            downsampled_dim_base, mipmap_of_downsample = self.open_and_downsample(dim_base)
             t1 = self.get_inverse_mipmap_transform(mipmap_of_downsample)
 
             # compare with all view_ids
             for j, row_j in self.image_loader_df.iterrows():
-                if i == j:
-                    continue
+                if i == j: continue
 
-                view_id_other = (
-                    f"timepoint: {row_j['timepoint']}, setup: {row_j['view_setup']}"
-                )
+                view_id_other = (f"timepoint: {row_j['timepoint']}, setup: {row_j['view_setup']}")
 
                 if self.file_type == "zarr":
-                    dim_other = self.load_image_metadata(
-                        self.prefix + row_j["file_path"] + f"/{0}"
-                    )
+                    dim_other = self.load_image_metadata(self.prefix + row_j["file_path"] + f"/{0}")
                 elif self.file_type == "tiff":
-                    dim_other = self.load_image_metadata(
-                        self.prefix + row_j["file_path"]
-                    )
+                    dim_other = self.load_image_metadata(self.prefix + row_j["file_path"])
 
                 # get transforms matrix from both view_ids and downsampling matrices
                 if view_id not in self.transform_models:
                     raise ValueError("This key does not exist in transform_models.")
+                
                 matrix = self.transform_models.get(view_id)
                 matrix_other = self.transform_models.get(view_id_other)
                 inverse_matrix = self.get_inverse_mipmap_transform(matrix)
@@ -233,24 +222,13 @@ class OverlapDetection:
                 intervals = self.estimate_bounds(t1, dim_base)
                 intervals_other = self.estimate_bounds(t2, dim_other)
 
-                bounding_boxes = tuple(
-                    map(lambda x: np.round(x).astype(int), intervals)
-                )
-                bounding_boxes_other = tuple(
-                    map(lambda x: np.round(x).astype(int), intervals_other)
-                )
+                bounding_boxes = tuple(map(lambda x: np.round(x).astype(int), intervals))
+                bounding_boxes_other = tuple(map(lambda x: np.round(x).astype(int), intervals_other))
 
                 # find upper and lower bounds of intersection
-                if np.all(
-                    (bounding_boxes[1] >= bounding_boxes_other[0])
-                    & (bounding_boxes_other[1] >= bounding_boxes[0])
-                ):
-                    intersected_boxes = self.calculate_intersection(
-                        bounding_boxes, bounding_boxes_other
-                    )
-                    intersect = self.calculate_intersection(
-                        downsampled_dim_base, intersected_boxes
-                    )
+                if np.all((bounding_boxes[1] >= bounding_boxes_other[0]) & (bounding_boxes_other[1] >= bounding_boxes[0])):
+                    intersected_boxes = self.calculate_intersection(bounding_boxes, bounding_boxes_other)
+                    intersect = self.calculate_intersection(downsampled_dim_base, intersected_boxes)
                     intersect_dict = {
                         "lower_bound": intersect[0],
                         "upper_bound": intersect[1],

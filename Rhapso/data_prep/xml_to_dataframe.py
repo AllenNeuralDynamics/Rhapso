@@ -5,9 +5,8 @@ import xml.etree.ElementTree as ET
 # it into several Dataframes
 
 class XMLToDataFrame:
-    def __init__(self, xml_file, key):
+    def __init__(self, xml_file):
         self.xml_content = xml_file
-        self.key = key
 
     def parse_image_loader_zarr(self, root):
         """
@@ -146,9 +145,9 @@ class XMLToDataFrame:
         """
         view_interest_points_data = []
 
-        if self.key == "detection":
-            if len(root.findall(".//ViewInterestPointsFile")) != 0:
-                raise Exception("There should be no interest points in this file yet.")
+        # if self.key == "detection":
+        #     if len(root.findall(".//ViewInterestPointsFile")) != 0:
+        #         raise Exception("There should be no interest points in this file yet.")
 
         for vip in root.findall(".//ViewInterestPointsFile"):
             timepoint = vip.get("timepoint")
