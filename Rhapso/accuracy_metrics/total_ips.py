@@ -8,6 +8,7 @@ import zarr
 from Rhapso.accuracy_metrics.save_metrics import JSONFileHandler
 from Rhapso.data_prep.xml_to_dataframe import XMLToDataFrame
 
+
 class DetectionOutput:
     def __init__(self, base_path, xml_file_path, output_path):
         self.base_path = base_path
@@ -29,7 +30,7 @@ class DetectionOutput:
 
     def load_dataframe(self):
         xml_file = self.fetch_local_xml(self.xml_file_path)
-        processor = XMLToDataFrame(xml_file, "metrics")
+        processor = XMLToDataFrame(xml_file)
         dataframes = processor.run()
         df = pd.DataFrame(dataframes["image_loader"])
         return df[["view_setup", "timepoint"]].to_numpy()
@@ -38,20 +39,22 @@ class DetectionOutput:
         if full_path.startswith("s3://"):
             s3 = s3fs.S3FileSystem(anon=False)
             store = s3fs.S3Map(root=full_path, s3=s3)
-            zarray = zarr.open_array(store, mode='r')
+            zarray = zarr.open_array(store, mode="r")
             data = zarray[:]
         else:
             full_path = full_path.rstrip("/")
             components = full_path.split("/")
             try:
-                n5_index = next(i for i, c in enumerate(components) if c.endswith(".n5"))
+                n5_index = next(
+                    i for i, c in enumerate(components) if c.endswith(".n5")
+                )
             except StopIteration:
                 raise ValueError("No .n5 directory found in path")
 
-            dataset_path = "/".join(components[:n5_index + 1])
-            dataset_rel_path = "/".join(components[n5_index + 1:])
+            dataset_path = "/".join(components[: n5_index + 1])
+            dataset_rel_path = "/".join(components[n5_index + 1 :])
             store = zarr.N5Store(dataset_path)
-            root = zarr.open(store, mode='r')
+            root = zarr.open(store, mode="r")
 
             if dataset_rel_path not in root:
                 print(f"Skipping: {dataset_rel_path} (not found)")
@@ -62,21 +65,19 @@ class DetectionOutput:
 
         self.count_ips += len(data)
 
-    def run_analysis(self):
+    def run(self):
         for view_id in self.view_setup_timepoint_array:
             view = view_id.tolist()
             path = f"{self.base_path}/tpId_{view[1]}_viewSetupId_{view[0]}/beads/interestpoints/loc"
             self.read_detection_output(path)
 
         saveJSON = JSONFileHandler(self.output_path)
-        saveJSON.update("total_ips", self.count_ips)
+        saveJSON.update("Total IPS", self.count_ips)
+
 
 analyzer = DetectionOutput(
     base_path="/Users/ai/Downloads/IP_TIFF_XML/interestpoints.n5",
     xml_file_path="/Users/ai/Downloads/IP_TIFF_XML/dataset.xml",
-    output_path = "/Users/ai/Downloads/IP_TIFF_XML/metrics.json"
+    output_path="/Users/ai/Downloads/IP_TIFF_XML/metrics.json",
 )
-analyzer.run_analysis()
-
-
-
+analyzer.run()

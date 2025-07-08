@@ -1,12 +1,10 @@
 import numpy as np
 from sklearn.neighbors import KernelDensity
-
 import matplotlib.pyplot as plt
 from mpl_toolkits.mplot3d import Axes3D
 import numpy as np
 from sklearn.neighbors import KernelDensity
 import matplotlib.pyplot as plt
-
 from sklearn.preprocessing import StandardScaler
 
 
@@ -65,17 +63,17 @@ class MatchingKDE:
 
         # Print summary statistics
         summary_stats = {
-            "min": np.min(density),
-            "max": np.max(density),
-            "mean": np.mean(density),
-            "median": np.median(density),
+            "minimum KDE": np.min(density),
+            "maximum KDE": np.max(density),
+            "mean KDE": np.mean(density),
+            "median KDE": np.median(density),
             "std": np.std(density),
         }
         print(
-            f""""min": {np.min(density)}
-            "max": {np.max(density)}
-            "mean": {np.mean(density)}
-            "median":{ np.median(density)}
+            f""""minimum KDE": {np.min(density)}
+            "maximum KDE": {np.max(density)}
+            "mean KDE": {np.mean(density)}
+            "median KDE":{ np.median(density)}
             "std": {np.std(density)}"""
         )
         if self.plot:
