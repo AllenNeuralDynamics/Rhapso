@@ -2,6 +2,7 @@ import numpy as np
 
 from Rhapso.accuracy_metrics.match_retrieval import MatchProcessor
 from Rhapso.accuracy_metrics.matching_KDE import MatchingKDE
+from Rhapso.accuracy_metrics.matching_KDE import MatchingKDE
 from Rhapso.accuracy_metrics.matching_descriptors import DescriptiveStatsMatching
 from Rhapso.accuracy_metrics.matching_voxel_vis import VoxelVis
 from Rhapso.accuracy_metrics.matching_voxelization import Voxelizer

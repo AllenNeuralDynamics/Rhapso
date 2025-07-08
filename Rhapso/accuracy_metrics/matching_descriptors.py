@@ -1,7 +1,7 @@
 import statistics
 import numpy as np
 
-'''
+"""
 Number of matches 
     -Number of all matches, average number of matches/tile.  
 
@@ -12,10 +12,10 @@ Standard Deviation
 	-How dispersed the match points are along each axis. 
 
 Volume Covered (ΔX × ΔY × ΔZ) 
-    - Volume of the bounding box that encloses all match points. '''
+    - Volume of the bounding box that encloses all match points. """
 
 
-class DescriptiveStatsMatching():
+class DescriptiveStatsMatching:
     def __init__(self, total_matches, total_match_length):
         self.total_matches = total_matches
         self.total_match_length = total_match_length
@@ -25,7 +25,7 @@ class DescriptiveStatsMatching():
     def get_matches(self):
         if len(self.total_matches) == 0:
             raise ValueError("There are no matches to be evaluated")
-        
+
         for view, matches in self.total_matches.items():
             self.matches_per_view[f"{view[0]}, {view[1]}"] = len(matches)
             for match in matches:
@@ -33,14 +33,14 @@ class DescriptiveStatsMatching():
                 self.just_points.append(match["p2"].tolist())
 
         return self.just_points
-    
+
     def get_plane_coordinates(self):
         points_x = []
         points_y = []
         points_z = []
 
         for match in self.just_points:
-            if len(match) != 3: 
+            if len(match) != 3:
                 raise ValueError("Coordinates missing, an error has occurred.")
             points_x.append(match[0])
             points_y.append(match[1])
@@ -51,16 +51,24 @@ class DescriptiveStatsMatching():
     def get_bounding_box(self):
         points_x, points_y, points_z = self.get_plane_coordinates()
 
-        return {"x": min(points_x), "y": min(points_y), "z": min(points_z)}, {"x":max(points_x), "y": max(points_y), "z": max(points_z)}
+        return {"x": min(points_x), "y": min(points_y), "z": min(points_z)}, {
+            "x": max(points_x),
+            "y": max(points_y),
+            "z": max(points_z),
+        }
 
     def get_standard_deviation(self):
         points_x, points_y, points_z = self.get_plane_coordinates()
-        return [statistics.stdev(points_x),statistics.stdev(points_y),statistics.stdev(points_z)]
-    
-    def average_standard_deviation(self):
-        return sum(self.get_standard_deviation())/3
+        return [
+            statistics.stdev(points_x),
+            statistics.stdev(points_y),
+            statistics.stdev(points_z),
+        ]
 
-    def bounding_box_volume(self): 
+    def average_standard_deviation(self):
+        return sum(self.get_standard_deviation()) / 3
+
+    def bounding_box_volume(self):
         min_coordinates, max_coordinates = self.get_bounding_box()
 
         delta_x = max_coordinates["x"] - min_coordinates["x"]
@@ -83,7 +91,8 @@ class DescriptiveStatsMatching():
         Std Dev (x, y, z): ({sd_x:.2f}, {sd_y:.2f}, {sd_z:.2f})
         Average Std Dev: {self.average_standard_deviation():.2f}
         Bounding Box Volume: {self.bounding_box_volume():.2f}
-        """)
+        """
+        )
 
         data_summary = {
             "Number of matches": self.total_match_length,
