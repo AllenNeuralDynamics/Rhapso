@@ -6,7 +6,7 @@ from scipy.stats import entropy, skew, kurtosis
 
 
 class Voxelizer:
-    def __init__(self, match_points, voxel_size=20):
+    def __init__(self, match_points, voxel_size):
         self.match_points = np.array(match_points)
         self.voxel_size = voxel_size
         self.voxel_grid = None
@@ -15,7 +15,6 @@ class Voxelizer:
 
     def validate_input(self):
         points = np.array(self.match_points)
-        print(self.match_points)
         if points.ndim != 2 or points.shape[1] != 3:
             raise ValueError("match_points must be a 2D array with shape (n_points, 3)")
         if len(points) <= 1:

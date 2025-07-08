@@ -35,7 +35,6 @@ class MatchProcessor:
             return file.read()
 
     def load_dataframe(self, file_source):
-
         if self.file_source == "s3":
             xml_file = self.fetch_from_s3(
                 self.s3, self.xml_bucket_name, self.xml_file_path
