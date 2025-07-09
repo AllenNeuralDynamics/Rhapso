@@ -15,6 +15,7 @@ class Voxelizer:
 
     def validate_input(self):
         points = np.array(self.match_points)
+        
         if points.ndim != 2 or points.shape[1] != 3:
             raise ValueError("match_points must be a 2D array with shape (n_points, 3)")
         if len(points) <= 1:
@@ -67,8 +68,8 @@ class Voxelizer:
             "Total voxels in grid": int(total_voxels),
             "Non-empty voxels": (len(counts)),
             "Average points per non-empty voxel": round(average_points_per_voxel, 2),
-            "bounding_box minimum": self.min_coords,
-            "bounding_box maximum": self.max_coords,
+            "bounding_box minimum": self.min_coords.tolist(),
+            "bounding_box maximum": self.max_coords.tolist(),
             "Standard deviation of voxel counts": round(std_dev, 2),
             "Coefficient of Variation (CV)": round(cv, 2),
             "Occupancy ratio": round(occupancy_ratio, 4),

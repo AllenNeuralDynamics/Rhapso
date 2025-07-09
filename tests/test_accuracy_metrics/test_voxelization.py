@@ -1,6 +1,6 @@
 import unittest
 import numpy as np
-from Rhapso.Validation.matching_voxelization import Voxelizer
+from Rhapso.accuracy_metrics.matching_voxelization import Voxelizer
 from unittest.mock import patch
 import io
 

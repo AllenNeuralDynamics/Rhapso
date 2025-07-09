@@ -1,9 +1,10 @@
+from Rhapso.accuracy_metrics.matching_stats_pipeline import MatchingStatsPipeline
 from Rhapso.detection.interest_point_detection import InterestPointDetection
 from Rhapso.matching.interest_point_matching import InterestPointMatching
 from Rhapso.solver.solver import Solver
 import yaml
 
-with open('Rhapso/pipelines/param_configs/tiff_local.yml', 'r') as file:
+with open("Rhapso/pipelines/param_configs/tiff_local.yml", "r") as file:
     config = yaml.safe_load(file)
 
 # INTEREST POINT DETECTION

@@ -51,7 +51,7 @@ class InterestPointDetection:
         dataframes = processor.run()
         print("XML loaded")
 
-        # Create view transform matrices 
+        # Create view transform matrices
         create_models = ViewTransformModels(dataframes)
         view_transform_matrices = create_models.run()
         print("Transforms models have been created")
@@ -82,16 +82,18 @@ class InterestPointDetection:
             lb = interval_key[0]
             dog_result = delayed(difference_of_gaussian.run)(image_chunk, self.dsxy, self.dsz, self.offset, lb)
             delayed_results.append(dog_result)
-            delayed_keys[dog_result] = (view_id, interval_key)  
-        computed_results = compute(*delayed_results) 
+            delayed_keys[dog_result] = (view_id, interval_key)
+        computed_results = compute(*delayed_results)
         for result, task in zip(computed_results, delayed_results):
             view_id, interval_key = delayed_keys[task]
-            final_peaks.append({
-                'view_id': view_id,
-                'interval_key': interval_key,
-                'interest_points': result['interest_points'],
-                'intensities': result['intensities']
-            })
+            final_peaks.append(
+                {
+                    "view_id": view_id,
+                    "interval_key": interval_key,
+                    "interest_points": result["interest_points"],
+                    "intensities": result["intensities"],
+                }
+            )
         print("Difference of gaussian is done")
 
         # Integrate final peaks into kd tree for refinement

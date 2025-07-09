@@ -1,6 +1,6 @@
 import unittest
 import numpy as np
-from Rhapso.Validation.matching_voxel_vis import VoxelVis
+from Rhapso.accuracy_metrics.matching_voxel_vis import VoxelVis
 
 class TestVoxelVis(unittest.TestCase):
 
@@ -19,6 +19,7 @@ class TestVoxelVis(unittest.TestCase):
             np.array([0, 0, 0]), np.array([10, 10, 10]),
             np.array([20, 20, 20]), np.array([30, 30, 30])
         ]
+        
         for i, point in enumerate(expected_points):
             np.testing.assert_array_equal(self.voxel_vis.just_points[i], point)
 

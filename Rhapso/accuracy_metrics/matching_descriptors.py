@@ -20,12 +20,14 @@ class DescriptiveStatsMatching:
         self.total_matches = total_matches
         self.total_match_length = total_match_length
         self.just_points = []
+        self.matches_per_view = {}
 
     def get_matches(self):
         if len(self.total_matches) == 0:
             raise ValueError("There are no matches to be evaluated")
 
         for view, matches in self.total_matches.items():
+            self.matches_per_view[f"{view[0]}, {view[1]}"] = len(matches)
             for match in matches:
                 self.just_points.append(match["p1"].tolist())
                 self.just_points.append(match["p2"].tolist())
@@ -76,15 +78,14 @@ class DescriptiveStatsMatching:
         return delta_x * delta_y * delta_z
 
     def results(self):
-        self.get_matches()
+
         bounding_box_minimum, bounding_box_maximum = self.get_bounding_box()
         sd_x, sd_y, sd_z = self.get_standard_deviation()
-
-        print(
-            f"""
+        print(f"""
         Number of matches: {self.total_match_length}
         Number of interest points contained in matches: {len(self.just_points)}
-        Average number of interest points per tile: {self.total_match_length/len(self.total_matches)}
+        Average number of matches per tile: {self.total_match_length/len(self.total_matches)}
+        Actual matches per tile: {self.matches_per_view},
         Bounding Box Min: {bounding_box_minimum}
         Bounding Box Max: {bounding_box_maximum}
         Std Dev (x, y, z): ({sd_x:.2f}, {sd_y:.2f}, {sd_z:.2f})
@@ -93,13 +94,19 @@ class DescriptiveStatsMatching:
         """
         )
 
-        return f"""
-        Number of matches: {self.total_match_length}
-        Number of interest points contained in matches: {len(self.just_points)}
-        Average number of interest points per tile: {self.total_match_length/len(self.total_matches)}
-        Bounding Box Min: {bounding_box_minimum}
-        Bounding Box Max: {bounding_box_maximum}
-        Std Dev (x, y, z): ({sd_x:.2f}, {sd_y:.2f}, {sd_z:.2f})
-        Average Std Dev: {self.average_standard_deviation():.2f}
-        Bounding Box Volume: {self.bounding_box_volume():.2f}
-        """
+        data_summary = {
+            "Number of matches": self.total_match_length,
+            "Number of interest points in matches": len(self.just_points),
+            "Average  matches per tile": self.total_match_length
+            / len(self.total_matches),
+            "Actual matches points per tile": self.matches_per_view,
+            "Bounding Box Min": bounding_box_minimum,
+            "Bounding Box Max": bounding_box_maximum,
+            "std_Dev_x": round(sd_x, 2),
+            "std_Dev_y": round(sd_y, 2),
+            "Std_Dev_z": round(sd_z, 2),
+            "Average Std Dev": round(self.average_standard_deviation(), 2),
+            "Bounding Box Volume": round(self.bounding_box_volume(), 2),
+        }
+
+        return data_summary
