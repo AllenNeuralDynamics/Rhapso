@@ -5,6 +5,7 @@ import numpy as np
 import pandas as pd
 from Rhapso.data_prep.xml_to_dataframe import XMLToDataFrame
 
+
 class MatchProcessor:
     def __init__(self, base_path, xml_file_path, file_source, xml_bucket_name):
         self.base_path = base_path
@@ -41,7 +42,7 @@ class MatchProcessor:
         elif self.file_source == "local":
             xml_file = self.fetch_local_xml(self.xml_file_path)
 
-        processor = XMLToDataFrame(xml_file, "metrics")
+        processor = XMLToDataFrame(xml_file)
         dataframes = processor.run()
 
         df = pd.DataFrame(dataframes["image_loader"])
@@ -136,4 +137,3 @@ if __name__ == "__main__":
 
     processor = MatchProcessor(base_path, xml_file, "local", xml_bucket_name)
     processor.run(processor)
-

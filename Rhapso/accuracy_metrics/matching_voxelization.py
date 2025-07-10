@@ -15,7 +15,7 @@ class Voxelizer:
 
     def validate_input(self):
         points = np.array(self.match_points)
-        
+
         if points.ndim != 2 or points.shape[1] != 3:
             raise ValueError("match_points must be a 2D array with shape (n_points, 3)")
         if len(points) <= 1:

@@ -1,4 +1,3 @@
-from Rhapso.accuracy_metrics.matching_stats_pipeline import MatchingStatsPipeline
 from Rhapso.detection.interest_point_detection import InterestPointDetection
 from Rhapso.matching.interest_point_matching import InterestPointMatching
 from Rhapso.solver.solver import Solver

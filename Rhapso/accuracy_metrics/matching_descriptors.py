@@ -81,7 +81,8 @@ class DescriptiveStatsMatching:
 
         bounding_box_minimum, bounding_box_maximum = self.get_bounding_box()
         sd_x, sd_y, sd_z = self.get_standard_deviation()
-        print(f"""
+        print(
+            f"""
         Number of matches: {self.total_match_length}
         Number of interest points contained in matches: {len(self.just_points)}
         Average number of matches per tile: {self.total_match_length/len(self.total_matches)}

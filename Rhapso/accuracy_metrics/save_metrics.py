@@ -1,5 +1,6 @@
 import json
 
+
 class JSONFileHandler:
     def __init__(
         self,
