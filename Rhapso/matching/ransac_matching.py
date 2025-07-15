@@ -293,18 +293,18 @@ class RansacMatching:
 
         return correspondence_candidates
     
-    def run(self):
-        all_results = []
-        for pointsA, pointsB, viewA_str, viewB_str in self.process_pairs:
-            candidates = self.get_candidates(pointsA, pointsB, viewA_str, viewB_str)
-            inliers = self.compute_ransac(candidates)
+    # def run(self):
+    #     all_results = []
+    #     for pointsA, pointsB, viewA_str, viewB_str in self.process_pairs:
+    #         candidates = self.get_candidates(pointsA, pointsB, viewA_str, viewB_str)
+    #         inliers = self.compute_ransac(candidates)
             
-            percent = 100.0 * len(inliers) / len(candidates)
-            print(f"✅ RANSAC inlier percentage: {percent:.1f}% ({len(inliers)} of {len(candidates)})")
+    #         percent = 100.0 * len(inliers) / len(candidates)
+    #         print(f"✅ RANSAC inlier percentage: {percent:.1f}% ({len(inliers)} of {len(candidates)})")
 
-            all_results.extend(inliers if inliers else [])
+    #         all_results.extend(inliers if inliers else [])
         
-        return all_results
+    #     return all_results
 
     # --- DEBUG --- This function was replaced below
 
