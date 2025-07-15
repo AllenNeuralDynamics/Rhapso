@@ -63,10 +63,16 @@ futures = [
 results = ray.get(futures)
 all_results = [inlier for sublist in results for inlier in sublist]
 
+# Ensure all Ray tasks have finished before printing the total
+import sys; sys.stdout.flush()
+import time; time.sleep(0.1)  # Give a moment for all Ray logs to flush
+
 print(f"Total matches found: {len(all_results)}")
 
 # --- Save ---
+print("Creating save matches instance...")
 saver = SaveMatches(all_results, n5_output_path, data_global)
+print("Running save matches...")
 saver.run()
 print("Matches Saved as N5")
 print("Interest point matching is done")
