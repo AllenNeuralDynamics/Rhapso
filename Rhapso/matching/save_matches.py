@@ -46,61 +46,65 @@ class SaveMatches:
             pair_breakdown[keyA][keyB].append((idxA, idxB))
             pair_breakdown[keyB][keyA].append((idxB, idxA))
 
-            for idx, view in enumerate(matched_views, 1):
-                tp, vs, label = int(view[0]), int(view[1]), view[2]
-                key = (tp, vs, label)
-                corr_list = per_view_corrs.get(key, [])
+        for idx, view in enumerate(matched_views, 1):
+            tp, vs, label = int(view[0]), int(view[1]), view[2]
+            key = (tp, vs, label)
+            corr_list = per_view_corrs.get(key, [])
 
-                if not corr_list:
+            if not corr_list:
+                continue
+
+            # Build idMap from (tp, vs, label) -> id
+            unique_keys = {
+                f"{tp_b},{vs_b},{label_b}" for tp_b, vs_b, label_b, _, _ in corr_list
+                if (tp_b, vs_b, label_b) != key
+            }
+            idMap = {k: i for i, k in enumerate(sorted(unique_keys))}
+
+            # Convert to compact format: [idx_self, idx_other, idMap[other_view]]
+            compact_matches = []
+            for tp_b, vs_b, label_b, idx_self, idx_other in corr_list:
+                view_str = f"{tp_b},{vs_b},{label_b}"
+                if view_str not in idMap:
                     continue
+                compact_matches.append([idx_self, idx_other, idMap[view_str]])
 
-                # Build idMap from (tp, vs, label) -> id
-                unique_keys = {
-                    f"{tp_b},{vs_b},{label_b}" for tp_b, vs_b, label_b, _, _ in corr_list
-                    if (tp_b, vs_b, label_b) != key
-                }
-                idMap = {k: i for i, k in enumerate(sorted(unique_keys))}
+            compact_array = np.array(compact_matches, dtype=np.uint64)
 
-                # Convert to compact format: [idx_self, idx_other, idMap[other_view]]
-                compact_matches = []
-                for tp_b, vs_b, label_b, idx_self, idx_other in corr_list:
-                    view_str = f"{tp_b},{vs_b},{label_b}"
-                    if view_str not in idMap:
-                        continue
-                    compact_matches.append([idx_self, idx_other, idMap[view_str]])
+            print(f"Saving {len(compact_array)} matches for view tpId={tp}, setupId={vs}, label={label}")
 
-                compact_array = np.array(compact_matches, dtype=np.uint64)
+            full_path = self.n5_output_path + f"/interestpoints.n5/tpId_{tp}_viewSetupId_{vs}/{label}/correspondences"
 
-                full_path = self.n5_output_path + f"/interestpoints.n5/tpId_{tp}_viewSetupId_{vs}/{label}/correspondences"
+            # Open Zarr N5 store
+            store = zarr.N5Store(full_path)
+            root = zarr.group(store=store)
 
-                # Open Zarr N5 store
-                store = zarr.N5Store(full_path)
-                root = zarr.group(store=store)
+            # Add attributes to correspondences/
+            root.attrs.update({
+                "correspondences": "1.0.0",
+                "idMap": idMap
+            })
 
-                # Add attributes to correspondences/
-                root.attrs.update({
-                    "correspondences": "1.0.0",
-                    "idMap": idMap
-                })
+            if "data" in root:
+                del root["data"]  
 
-                if "data" in root:
-                    del root["data"]  
-
-                root.create_dataset(
-                    "data",
-                    data=compact_array,
-                    dtype='u8',
-                    chunks=(min(300000, len(compact_array)), 3),
-                    compressor=zarr.GZip()
-                )
+            root.create_dataset(
+                "data",
+                data=compact_array,
+                dtype='u8',
+                chunks=(min(300000, len(compact_array)), 3),
+                compressor=zarr.GZip()
+            )
 
     def run(self):
-        # Gather all unique (timepoint, setup, label) from the dataset
+        print("Gathering all unique (timepoint, setup, label) from the dataset...")
         views_interest_points = self.data_global['viewsInterestPoints']
         matched_views = []
         for (tp, setup), view_info in views_interest_points.items():
             label = view_info.get('label', 'beads')
             matched_views.append((int(tp), int(setup), label))
+        print(f"Found {len(matched_views)} unique views with interest points.")
 
-        # Save correspondences
+        print("Saving correspondences for each view...")
         self.save_correspondences(matched_views)
+        print("Correspondences saved successfully.")

@@ -1,7 +1,11 @@
+import ray
 from Rhapso.matching.xml_parser import XMLParser
 from Rhapso.matching.load_and_transform_points import LoadAndTransformPoints
 from Rhapso.matching.ransac_matching import RansacMatching
 from Rhapso.matching.save_matches import SaveMatches
+
+# Initialize Ray
+ray.init()
 
 # Tiff run time - 90 minutes
 
@@ -12,37 +16,65 @@ from Rhapso.matching.save_matches import SaveMatches
 # xml_input_path = '/home/martin/Documents/allen/clean-bss-mvr/IP_TIFF_XML_2/dataset.xml'
 # n5__output_path = '/home/martin/Documents/allen/clean-bss-mvr/IP_TIFF_XML_2/output/interestpoints.n5'
 
-xml_input_path = "/Users/seanfite/Desktop/IP_TIFF_XML-Rhapso/dataset.xml"
-n5_output_path = '/Users/seanfite/Desktop/IP_TIFF_XML-Rhapso'
+xml_input_path = "/mnt/c/Users/marti/Documents/allen/data/IP_TIFF_XML/dataset.xml"
+n5_output_path = '/mnt/c/Users/marti/Documents/allen/data/IP_TIFF_XML'
 
+# Params
 num_neighbors = 3
 redundancy = 1
 significance = 3
 num_required_neighbors = 4
 
-# INTEREST POINT MATCHING
-# --------------------------
-
-# Initialize parser with XML content
+# Load XML
 parser = XMLParser(xml_input_path)
 data_global, interest_points_folder = parser.run()
 print("XML loaded and parsed")
 
-# Load interest points and transform them into global space
+# Load and transform points
 data_loader = LoadAndTransformPoints(data_global, xml_input_path)
 process_pairs = data_loader.run()
 print("Points loaded and transformed into global space")
 
-# Geometric Descriptor-Based Alignment with RANSAC
-matcher = RansacMatching(process_pairs, num_neighbors, redundancy, significance, num_required_neighbors)
-all_results = matcher.run()
+# --- Ray Remote Task ---
+@ray.remote(memory=4 * 1024 * 1024 * 1024)  # 4GB
+def match_pair(pointsA, pointsB, viewA_str, viewB_str, num_neighbors, redundancy, significance, num_required_neighbors):
+    matcher = RansacMatching(
+        [(pointsA, pointsB, viewA_str, viewB_str)],
+        num_neighbors,
+        redundancy,
+        significance,
+        num_required_neighbors
+    )
+    candidates = matcher.get_candidates(pointsA, pointsB, viewA_str, viewB_str)
+    inliers = matcher.compute_ransac(candidates)
+
+    percent = 100.0 * len(inliers) / len(candidates) if candidates else 0
+    print(f"✅ RANSAC inlier percentage: {percent:.1f}% ({len(inliers)} of {len(candidates)})")
+
+    return inliers if inliers else []
+
+# --- Distribute ---
+futures = [
+    match_pair.remote(pointsA, pointsB, viewA_str, viewB_str, num_neighbors, redundancy, significance, num_required_neighbors)
+    for pointsA, pointsB, viewA_str, viewB_str in process_pairs
+]
+
+# --- Collect ---
+results = ray.get(futures)
+all_results = [inlier for sublist in results for inlier in sublist]
+
+# Ensure all Ray tasks have finished before printing the total
+import sys; sys.stdout.flush()
+import time; time.sleep(0.1)  # Give a moment for all Ray logs to flush
+
 print(f"Total matches found: {len(all_results)}")
 
-# Save matches as N5
+# --- Save ---
+print("Creating save matches instance...")
 saver = SaveMatches(all_results, n5_output_path, data_global)
+print("Running save matches...")
 saver.run()
 print("Matches Saved as N5")
-
 print("Interest point matching is done")
 
 # -----------------------------------------------------------------------------
