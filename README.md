@@ -11,6 +11,8 @@
 <!-- ## Example Usage Media Content Coming Soon....
 -- -->
 
+<br>
+
 ## Connect With Us
 <!-- UPDATE THIS WHEN OPEN SOURCED -->
   [Allen Institute Internal Coms](https://teams.microsoft.com/l/channel/19%3AIv_3CdryfboX3E0g1BbzCi3Y8KRgNCdAv3idJ9epV-k1%40thread.tacv2/Project%20Rhapso-Shared?groupId=87b91b48-bb2a-4a00-bc59-5245043a0708&tenantId=32669cd6-737f-4b39-8bdd-d6951120d3fc&ngc=true&allowXTenantAccess=true)
@@ -37,9 +39,9 @@ Rhapso is a tool that aligns and stitches tiled microscopy images into a single 
 - **Solver** – Calculate transformations that align matched points, producing matrices that describe how each tile should be adjusted.
 - **Fusion** – Use the computed alignment matrices to place and stitch all tiles into a coherent image.
 
-Rhapso natively supports OME-TIFF and Zarr formats, support for other tile-based formats can be added with a custom data loader. As well as petabyte-scale input data through custom pipelines designed for distributed processing with Ray. 
+Rhapso natively supports OME-TIFF and Zarr formats, and additional tile-based formats can be integrated by implementing a custom data loader. It also supports petabyte-scale datasets for distributed processing with Ray. 
 
-To customize Rhapso (run environment, data loading method, really anything) create a custom pipeline script and plug in your custom components. Refer to our  [Wiki Page](https://github.com/AllenNeuralDynamics/Rhapso/wiki#example-pipelines) Page for guidance on adapting Rhapso configurations to your needs.
+To customize Rhapso (run environment, data loading method, really anything) create a custom pipeline script and plug in your custom components. Refer to our  [Wiki Page](https://github.com/AllenNeuralDynamics/Rhapso/wiki#example-pipelines) for guidance on adapting Rhapso configurations to your needs.
 
 Rhapso is developed in collaboration with the Allen Institute for Neural Dynamics (AIND), initially supporting AIND’s ExaSPIM pipeline and eventually broadly benefiting microscopy research.
 
