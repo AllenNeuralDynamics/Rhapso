@@ -31,11 +31,15 @@
 <br>
 
 ## Summary
-Built from decoupled components, Rhapso separates data loading and execution logic from its core functionality, making it flexible and easy to adapt across environments and formats.
+Rhapso is a tool that aligns and stitches tiled microscopy images into a single cohesive volume in four steps:
+- **Interest Point Detection** – Identify distinctive features in each tile and record their coordinates.
+- **Interest Point Matching** – Compare these features across tiles to find matching points (first rigid, then affine).
+- **Solver** – Calculate transformations that align matched points, producing matrices that describe how each tile should be adjusted.
+- **Fusion** – Use the computed alignment matrices to place and stitch all tiles into a coherent image.
 
-Out of the box, Rhapso can process upwards of 10 petabytes of large scale microscopy data by integrating with Ray to distribute the heavy lifting. Rhapso can also process smaller datasets on a single node using Dask or with no enhancements at all. 
+Rhapso natively supports OME-TIFF and Zarr formats, support for other tile-based formats can be added with a custom data loader. As well as petabyte-scale input data through custom pipelines designed for distributed processing with Ray. 
 
-If you have a use case not covered in the current set of data loaders, please refer to our [Wiki Page](https://github.com/AllenNeuralDynamics/Rhapso/wiki#example-pipelines) page for how to adapt current Rhapso configurations to your needs.
+To customize Rhapso (run environment, data loading method, really anything) create a custom pipeline script and plug in your custom components. Refer to our  [Wiki Page](https://github.com/AllenNeuralDynamics/Rhapso/wiki#example-pipelines) Page for guidance on adapting Rhapso configurations to your needs.
 
 Rhapso is developed in collaboration with the Allen Institute for Neural Dynamics (AIND), initially supporting AIND’s ExaSPIM pipeline and eventually broadly benefiting microscopy research.
 
