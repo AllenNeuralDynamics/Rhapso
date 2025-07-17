@@ -33,11 +33,7 @@
 <br>
 
 ## Summary
-Rhapso is a tool that aligns and stitches tiled microscopy images into a single cohesive volume in four steps:
-- **Interest Point Detection** – Identify distinctive features in each tile and record their coordinates.
-- **Interest Point Matching** – Compare these features across tiles to find matching points (first rigid, then affine).
-- **Solver** – Calculate transformations that align matched points, producing matrices that describe how each tile should be adjusted.
-- **Fusion** – Use the computed alignment matrices to place and stitch all tiles into a coherent image.
+Rhapso is a tool that aligns and stitches tiled microscopy images into a single cohesive volume.
 
 Rhapso natively supports OME-TIFF and Zarr formats, and additional tile-based formats can be integrated by implementing a custom data loader. It also supports petabyte-scale datasets for distributed processing with Ray. 
 
