@@ -10,11 +10,11 @@ from Rhapso.accuracy_metrics.threshold import Threshold
 from Rhapso.accuracy_metrics.total_ips import DetectionOutput
 
 file_source = "local"
-xml_file_path_output = "IP_TIFF_XML/dataset.xml"
+xml_file_path_output = "IP_TIFF_XML-Rhapso-Affine/dataset.xml"
 xml_bucket_name = "rhapso-tif-sample"
-base_path = "/Users/ai/Downloads/IP_TIFF_XML/interestpoints.n5"
-xml_file = "/Users/ai/Downloads/IP_TIFF_XML/dataset.xml~1"
-metrics_output_path = "/Users/ai/Downloads/IP_TIFF_XML/metrics2test.json"
+base_path = "/Users/seanfite/Desktop//IP_TIFF_XML-Rhapso-Affine/interestpoints.n5"
+xml_file = "IP_TIFF_XML-Rhapso-Affine/dataset.xml"
+metrics_output_path = "/Users/seanfite/Desktop//IP_TIFF_XML-Rhapso-Affine/metrics2test.json"
 args = {"voxel": True, "voxel_vis": False, "KDE": True}
 # Threshold values:
 min_alignment = None

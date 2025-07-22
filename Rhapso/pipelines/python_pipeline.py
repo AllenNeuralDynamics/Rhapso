@@ -1,9 +1,9 @@
 from Rhapso.detection.interest_point_detection import InterestPointDetection
-# from Rhapso.matching.interest_point_matching import InterestPointMatching
+from Rhapso.matching.interest_point_matching import InterestPointMatching
 from Rhapso.solver.solver import Solver
 import yaml
 
-with open("Rhapso/pipelines/param_configs/tiff_local.yml", "r") as file:
+with open("Rhapso/pipelines/param_configs/tiff_s3.yml", "r") as file:
     config = yaml.safe_load(file)
 
 # INTEREST POINT DETECTION
@@ -31,25 +31,22 @@ interest_point_detection = InterestPointDetection(
 interest_point_detection.run()
 
 # INTEREST POINT MATCHING
-# interest_point_matching = InterestPointMatching(
-#     xml_input_path=config['xml_file_path_matching'],
-#     n5_output_path=config['n5_matching_output_path'],
-#     label=config['label'],
-#     transformation_model=config['transformation_model'],
-#     regularization_model=config['regularization_model'],
-#     lambda_val=config['lambda_val'],
-#     views_to_match=config['views_to_match'],
-#     clear_correspondences=config['clear_correspondences'],
-#     matching_method=config['matching_method'],
-#     significance=config['significance'],
-#     redundancy=config['redundancy'],
-#     neighboring_points=config['neighboring_points'],
-#     ransac_iterations=config['ransac_iterations'],
-#     ransac_minimum_inlier_ratio=config['ransac_minimum_inlier_ratio'],
-#     ransac_minimum_inlier_factor=config['ransac_minimum_inlier_factor'],
-#     ransac_threshold=config['ransac_threshold']
-# )
-# interest_point_matching.run()
+interest_point_matching = InterestPointMatching(
+    xml_input_path=config['xml_file_path_matching'],
+    n5_output_path=config['n5_matching_output_path'],
+    match_type=config['match_type'],
+    num_neighbors=config['num_neighbors'],
+    redundancy=config['redundancy'],
+    significance=config['significance'],
+    search_radius=config['search_radius'],
+    num_required_neighbors=config['num_required_neighbors'],
+    model_min_matches=config['model_min_matches'],
+    inlier_factor=config['inlier_factor'],
+    lambda_value=config['lambda_value'],
+    num_iterations=config['num_iterations'],
+    regularization_weight=config['regularization_weight']
+)
+interest_point_matching.run()
 
 # # SOLVER
 # solver = Solver(

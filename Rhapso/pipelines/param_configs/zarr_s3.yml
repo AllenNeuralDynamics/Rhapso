@@ -4,12 +4,12 @@
 
 # run params
 strategy: 'python'
-dsxy: 4
+dsxy: 2
 dsz: 2
 min_intensity: 0
 max_intensity: 255
-sigma: 1.8
-threshold: 0.008
+sigma: 4
+threshold: 0.001
 file_type: 'zarr'
 file_source_detection: 's3'
 xml_file_path_detection: "dataset.xml"
@@ -17,18 +17,45 @@ xml_bucket_name_detection: "rhapso-zar-sample"
 image_file_path: 's3://aind-open-data/exaSPIM_708365_2024-04-29_12-46-15/SPIM.ome.zarr/'
 image_bucket_name: "aind-open-data"
 output_file_path: "output"
-output_bucket_name: 'rhapso-zarr-glue'
+output_bucket_name: 'rhapso-matching-test'
 offset: 0
 combine_distance: .5
-mem_per_worker_bytes: 6 * 1024 * 1024 * 1024
+mem_per_worker_bytes: 0
 run_type: dask
 
 # INTEREST POINT MATCHING
 # -----------------------------------
 
-xml_input_file: 'output/dataset-detection.xml'
-n5_base_path: 'output/interestpoints.n5'
-output_path: 'output/interestpoints.n5'
+xml_file_path_matching: 's3://rhapso-matching-test/output/dataset-detection.xml'
+n5_matching_output_path: 's3://rhapso-matching-test/output'
+
+# match_type: "rigid"               
+# # -- Candidates --
+# num_neighbors: 3
+# redundancy: 0
+# significance: 3                    # ratio of distance
+# search_radius: 300
+# num_required_neighbors: 3
+# # -- Ransac --
+# model_min_matches: 18              # min number inlier factor = 6
+# inlier_factor: 5.0                 # max epsilon
+# lambda_value: 0.1                  # min inlier ratio
+# num_iterations: 10000
+# regularization_weight: 1.0
+
+match_type: "affine"                   
+# -- Candidates --
+num_neighbors: 3
+redundancy: 0
+significance: 3                  # ratio of distance
+search_radius: 100
+num_required_neighbors: 3
+# -- Ransac --
+model_min_matches: 28            # min number inlier factor = 5
+inlier_factor: 5.0               # max epsilon
+lambda_value: 0.05               # min inlier ratio
+num_iterations: 10000
+regularization_weight: 1.0
 
 # SOLVER
 # -----------------------------------

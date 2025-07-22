@@ -7,12 +7,19 @@ from scipy.linalg import eigh
 """Handles all matching operations including model creation and geometric matching"""
 
 class RansacMatching:
-    def __init__(self, process_pairs, num_neighbors, redundancy, significance, num_required_neighbors):
-        self.process_pairs = process_pairs
+    def __init__(self, num_neighbors, redundancy, significance, num_required_neighbors, match_type, 
+                 max_epsilon, min_inlier_ratio, num_iterations, model_min_matches, regularization_weight, search_radius):
         self.num_neighbors = num_neighbors
         self.redundancy = redundancy
         self.significance = significance
         self.num_required_neighbors = num_required_neighbors
+        self.match_type = match_type
+        self.max_epsilon = max_epsilon
+        self.min_inlier_ratio = min_inlier_ratio
+        self.num_iterations = num_iterations
+        self.model_min_matches = model_min_matches
+        self.regularization_weight = regularization_weight
+        self.search_radius = search_radius
     
     def fit_rigid_model(self, matches):
         matches = np.array(matches)    # shape (N, 2, 3)
@@ -117,43 +124,48 @@ class RansacMatching:
                 inliers.append((idxA, pointA, view_a, idxB, pointB, view_b))
         
         ir = len(inliers) / len(candidates)
-        # cost = max(0.0, min(1.0, 1.0 - ir))
         is_good = len(inliers) >= min_num_inliers and ir > min_inlier_ratio
         
         return is_good, inliers
     
+    def model_regularization(self, point_pairs):
+        if self.match_type == "rigid":
+            regularized_model = self.fit_rigid_model(point_pairs)
+        elif self.match_type == "affine":
+            rigid_model = self.fit_rigid_model(point_pairs)
+            affine_model = self.fit_affine_model(point_pairs)
+            regularized_model = (1 - self.regularization_weight) * affine_model + self.regularization_weight * rigid_model
+        else:
+            raise ValueError(f"Unsupported match type: {self.match_type}")
+        
+        return regularized_model
+    
     def compute_ransac(self, candidates):
-        max_epsilon = 5.0
-        min_inlier_ratio = 0.1
-        num_iterations = 1000
-        model_min_matches = 4
-        regularization_weight = 1.0
-
         best_inliers = []
         max_inliers = 0
 
-        for _ in range(num_iterations):
-            indices = random.sample(range(len(candidates)), model_min_matches)
+        if len(candidates) < self.model_min_matches:
+            print(f"[Warning] Not enough candidates: have {len(candidates)}, need {self.model_min_matches}")
+            return []
+        
+        for _ in range(self.num_iterations):
+            indices = random.sample(range(len(candidates)), self.model_min_matches)
             min_matches = [candidates[i] for i in indices]
 
             try:
                 point_pairs = [(m[1], m[4]) for m in min_matches]
-                affine_model = self.fit_affine_model(point_pairs)
-                rigid_model = self.fit_rigid_model(point_pairs)
-                regularized_model = (1 - regularization_weight) * affine_model + regularization_weight * rigid_model
+                regularized_model = self.model_regularization(point_pairs)
             except Exception:
                 continue  # skip degenerate samples
 
             num_inliers = 0
-            is_good, tmp_inliers = self.test(candidates, regularized_model, max_epsilon, min_inlier_ratio, model_min_matches)
+            is_good, tmp_inliers = self.test(candidates, regularized_model, self.max_epsilon, self.min_inlier_ratio, self.model_min_matches)
 
             while is_good and num_inliers < len(tmp_inliers):
                 num_inliers = len(tmp_inliers)
                 point_pairs = [(i[1], i[4]) for i in tmp_inliers]
-                affine_model = self.fit_affine_model([(i[0], i[1]) for i in point_pairs])
-                rigid_model = self.fit_rigid_model([(i[0], i[1]) for i in point_pairs])
-                regularized_model = (1 - regularization_weight) * affine_model + regularization_weight * rigid_model
-                is_good, tmp_inliers = self.test(candidates, regularized_model, max_epsilon, min_inlier_ratio, model_min_matches)
+                regularized_model = self.model_regularization(point_pairs)
+                is_good, tmp_inliers = self.test(candidates, regularized_model, self.max_epsilon, self.min_inlier_ratio, self.model_min_matches)
 
             if len(tmp_inliers) > max_inliers:
                 best_inliers = tmp_inliers
@@ -161,21 +173,9 @@ class RansacMatching:
 
         return best_inliers
 
-    # This function defaults to 1 given current params but likely not if we apply a transformation from below
-    # The function below is input to this function
-    def normalization_factor(self, matches):
-        return 1
-    
-    # This seems to be the place where we apply the type of transformation (rigid, affine)
-    def fit_matches(self):
-        pass
-
     def descriptor_distance(self, desc_a, desc_b):
         subsets_a = desc_a["subsets"]  # (20, 3, D)
         subsets_b = desc_b["subsets"]  # (20, 3, D)
-
-        # TODO - fit_matches would go here to transform points for rigid, affine
-        # subsets_a, subsets_b = self.fit_matches(subsets_a, subsets_b)
 
         # Broadcast all pairwise subset differences
         diffs = subsets_a[:, None, :, :] - subsets_b[None, :, :, :]  # (20, 20, 3, D)
@@ -186,28 +186,13 @@ class RansacMatching:
     
     def create_simple_point_descriptors(self, tree, points_array, num_required_neighbors, matcher):
         k = num_required_neighbors + 1  # +1 to skip self
-        distances, indices = tree.query(points_array, k=k)
+        _, indices = tree.query(points_array, k=k)
 
         descriptors = []
         for i, basis_point in enumerate(points_array):
             try:
                 neighbor_idxs = indices[i][1:]
                 neighbors = points_array[neighbor_idxs]
-
-                # Validate dimensionality
-                # num_dimensions = basis_point.shape[0]
-                # for n in neighbors:
-                #     if n.shape[0] != num_dimensions:
-                #         raise ValueError("Neighbor has different dimensionality than basis point.")
-
-                # # Compute relative coordinates
-                # descriptor_points = []
-                # for neighbor in neighbors:
-                #     relative = neighbor - basis_point  # relative local coordinates
-                #     descriptor_points.append({
-                #         "relative": relative,
-                #         "absolute": neighbor
-                #     })
 
                 relative_vectors = neighbors - basis_point     
 
@@ -266,6 +251,10 @@ class RansacMatching:
             second_best_match = None
 
             for desc_b in descriptors_b:
+
+                if np.linalg.norm(desc_a['point'] - desc_b['point']) > self.search_radius:
+                    continue
+                
                 difference = self.descriptor_distance(desc_a, desc_b)
 
                 if difference < second_best_difference:
@@ -292,76 +281,3 @@ class RansacMatching:
                 ))
 
         return correspondence_candidates
-    
-    # def run(self):
-    #     all_results = []
-    #     for pointsA, pointsB, viewA_str, viewB_str in self.process_pairs:
-    #         candidates = self.get_candidates(pointsA, pointsB, viewA_str, viewB_str)
-    #         inliers = self.compute_ransac(candidates)
-            
-    #         percent = 100.0 * len(inliers) / len(candidates)
-    #         print(f"✅ RANSAC inlier percentage: {percent:.1f}% ({len(inliers)} of {len(candidates)})")
-
-    #         all_results.extend(inliers if inliers else [])
-        
-    #     return all_results
-
-    # --- DEBUG --- This function was replaced below
-
-    # def create_candidates(self, desc_a, desc_b, neighbors):
-    #     match_list = []
-
-    #     for a in range(4):
-    #         for b in range(4):
-    #             matches = []
-    #             subset_size = 3
-
-    #             for i in range(subset_size):
-    #                 index_a = neighbors[a][i]
-    #                 index_b = neighbors[b][i]
-
-    #                 point_match = (desc_a['relative_descriptors'][index_a]['relative'], desc_b['relative_descriptors'][index_b]['relative'])
-    #                 matches.append(point_match)
-
-    #             match_list.append(matches)
-        
-    #     return match_list
-
-
-    # --- DEBUG --- These three functions were consolidated into one above
-
-    # def similarity_measure(self, matches):
-    #     num_dims = 3
-    #     diff = 0
-
-    #     for p1, p2 in matches:
-    #         diff += np.sum((p1 - p2) ** 2)
-
-    #     return diff / num_dims
-    
-    # def create_candidates(self, desc_a, desc_b):
-    #     match_list = []
-
-    #     for subset_a in desc_a["subsets"]:
-    #         for subset_b in desc_b["subsets"]:
-    #             match = list(zip(subset_a, subset_b))  # Each is a (vec_a, vec_b) pair
-    #             match_list.append(match)
-
-    #     return match_list
-    
-    # def descriptor_distance(self, desc_a, desc_b):
-    #     match_list = self.create_candidates(desc_a, desc_b)
-    #     best_similarity = float("inf")
-    #     # best_point_match_set = None
-
-    #     for matches in match_list:
-    #         # TODO - Add fit matches here for transformations (rigid, affine) and pass it into normalization factor
-    #         similarity_measure = self.similarity_measure(matches)
-    #         normalization_factor = self.normalization_factor(matches) 
-    #         similarity = similarity_measure * normalization_factor
-
-    #         if similarity < best_similarity:
-    #             best_similarity = similarity
-    #             # best_point_match_set = matches
-        
-    #     return best_similarity
