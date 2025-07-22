@@ -1,4 +1,4 @@
-cluster_name: rhapso-cluster-detection-009fjd
+cluster_name: ray-data_loader-cluster-0010101
 max_workers: 40
 min_workers: 40
 
@@ -55,7 +55,7 @@ setup_commands:
 head_start_ray_commands:
   - ray stop
   - ray start --head --port=6379 --dashboard-host=0.0.0.0 --autoscaling-config=~/ray_bootstrap_config.yaml 
-  - python3 -m Rhapso.pipelines.detection.ray_pipeline
+  - python3 -m Rhapso.pipelines.detection.ray_detection_pipeline
 
 worker_start_ray_commands:
   - ray stop
@@ -72,7 +72,7 @@ worker_start_ray_commands:
 # rm -rf ~/.cache/ray
 
 # ACCESS RAY DASHBOARD
-# ssh -i /Users/seanfite/Desktop/AllenInstitute/Rhapso/Auth/AWS/EC2-SSH-Key/rhapso-ssh.pem -L 8265:localhost:8265 ubuntu@54.203.12.142
+# ssh -i /Users/seanfite/Desktop/AllenInstitute/Rhapso/Auth/AWS/EC2-SSH-Key/rhapso-ssh.pem -L 8265:localhost:8265 ubuntu@34.220.136.27
 # http://localhost:8265
 
 # TO FIX

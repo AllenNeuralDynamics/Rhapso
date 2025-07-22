@@ -1,6 +1,7 @@
 import zarr
 import numpy as np
 import os
+import s3fs
 
 class LoadAndTransformPoints:
     def __init__(self, data_global, xml_input_path):
@@ -88,7 +89,16 @@ class LoadAndTransformPoints:
     def load_interest_points_from_path(self, base_path, loc_path):
         """Load data from any N5 dataset path"""
         try:
-            store = zarr.N5Store(base_path)
+            if self.xml_input_path.startswith("s3://"):
+                s3 = s3fs.S3FileSystem(anon=False)
+                xml_stripped = self.xml_input_path.replace("s3://", "")
+                parts = xml_stripped.split("/", 1)
+                bucket_prefix = parts[1].rsplit("/", 1)[0]  # e.g., 'output'
+                base_path = f"{parts[0]}/{bucket_prefix}/interestpoints.n5"
+                store = s3fs.S3Map(root=base_path, s3=s3, check=False)
+            else:
+                store = zarr.N5Store(base_path)
+            
             root = zarr.open(store, mode="r")
             group = root[loc_path]
             data = group[:]

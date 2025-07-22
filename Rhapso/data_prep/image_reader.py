@@ -3,7 +3,6 @@ import numpy as np
 from bioio import BioImage
 import bioio_tifffile
 import dask.array as da
-import zarr
 import s3fs
 
 # This class loads image data using predefined metadata of pathways

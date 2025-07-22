@@ -3,8 +3,8 @@
 # -----------------------------------
 
 strategy: 'python'
-dsxy: 4
-dsz: 4
+dsxy: 2
+dsz: 2
 min_intensity: 0
 max_intensity: 255
 sigma: 1.8
@@ -14,33 +14,51 @@ combine_distance: .5
 mem_per_worker_bytes: 0
 file_type: 'tiff'
 file_source_detection: 'local'
-xml_file_path_detection: '/home/martin/Documents/allen/clean-bss-mvr/IP_TIFF_XML_2/dataset.xml'
-image_file_path:  '/home/martin/Documents/allen/clean-bss-mvr/IP_TIFF_XML_2/'
-output_file_path: '/home/martin/Documents/allen/clean-bss-mvr/IP_TIFF_XML_2/output'
 xml_bucket_name_detection: None
 image_bucket_name: None
 output_bucket_name: None
 run_type: dask
+# xml_file_path_detection: '/home/martin/Documents/allen/clean-bss-mvr/IP_TIFF_XML_2/dataset.xml'
+# image_file_path:  '/home/martin/Documents/allen/clean-bss-mvr/IP_TIFF_XML_2/'
+# output_file_path: '/home/martin/Documents/allen/clean-bss-mvr/IP_TIFF_XML_2/output'
+xml_file_path_detection: '/Users/seanfite/Desktop/IP_TIFF_XML/dataset.xml'
+image_file_path:  '/Users/seanfite/Desktop/IP_TIFF_XML/' 
+output_file_path: '/Users/seanfite/Desktop/IP_TIFF_XML/interestpoints.n5/'
+
 
 # INTEREST POINT MATCHING
 # -----------------------------------
 
-xml_file_path_matching: '/home/martin/Documents/allen/clean-bss-mvr/IP_TIFF_XML_2/dataset.xml'
-n5_matching_output_path: '/home/martin/Documents/allen/clean-bss-mvr/IP_TIFF_XML_2/output/interestpoints.n5'
-label: 'beads'
-transformation_model: 'AFFINE'
-regularization_model: 'RIGID'
-lambda_val: 0.1
-views_to_match: 'OVERLAPPING_ONLY'
-clear_correspondences: true
-matching_method: 'FAST_ROTATION'
-significance: 3.0
-redundancy: 1
-neighboring_points: 3
-ransac_iterations: 200
-ransac_minimum_inlier_ratio: 0.1
-ransac_minimum_inlier_factor: 3.0
-ransac_threshold: 5.0
+xml_file_path_matching: "/Users/seanfite/Desktop/IP_TIFF_XML/dataset-detection.xml"
+n5_matching_output_path: '/Users/seanfite/Desktop/IP_TIFF_XML'
+
+# match_type: "rigid"               
+# # -- Candidates --
+# num_neighbors: 3
+# redundancy: 0
+# significance: 3                    # ratio of distance
+# search_radius: 300
+# num_required_neighbors: 3
+# # -- Ransac --
+# model_min_matches: 18              # min number inlier factor = 6
+# inlier_factor: 5.0                 # max epsilon
+# lambda_value: 0.1                  # min inlier ratio
+# num_iterations: 10000
+# regularization_weight: 1.0
+
+match_type: "affine"                   
+# -- Candidates --
+num_neighbors: 3
+redundancy: 0
+significance: 3                  # ratio of distance
+search_radius: 100
+num_required_neighbors: 3
+# -- Ransac --
+model_min_matches: 28            # min number inlier factor = 5
+inlier_factor: 5.0               # max epsilon
+lambda_value: 0.05               # min inlier ratio
+num_iterations: 10000
+regularization_weight: 1.0
 
 # SOLVER
 # -----------------------------------
