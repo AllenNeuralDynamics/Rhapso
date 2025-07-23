@@ -5,7 +5,7 @@
             "name": "Python: Module",
             "type": "debugpy",
             "request": "launch",
-            "module": "Rhapso.pipelines.matching.ray_matching_pipeline",
+            "module": "Rhapso.pipelines.matching.matching_pipeline",
             "cwd": "${workspaceFolder}",
             "python": "${command:python.interpreterPath}",
             "args": [],

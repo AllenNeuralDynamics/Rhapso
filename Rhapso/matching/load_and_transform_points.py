@@ -2,12 +2,16 @@ import zarr
 import numpy as np
 import os
 import s3fs
+from tqdm import tqdm
+import tempfile
+from urllib.parse import urlparse
 
 class LoadAndTransformPoints:
-    def __init__(self, data_global, xml_input_path):
+    def __init__(self, data_global, xml_input_path, big_stitcher_input):
         """Initialize data loader with base path"""
         self.data_global = data_global
         self.xml_input_path = xml_input_path
+        self.big_stitcher_input = big_stitcher_input
     
     def transform_interest_points(self, points, transformation_matrix):
         """Transform interest points using the given transformation matrix"""
@@ -86,23 +90,61 @@ class LoadAndTransformPoints:
             print(f"Error type: {type(e).__name__}")
             raise
     
+    def download_n5_from_s3_to_local(self, s3_uri, local_dir):
+        """
+        Recursively download an N5 dataset from S3 to a local directory.
+        """
+        s3 = s3fs.S3FileSystem(anon=False)
+        s3_path = s3_uri.replace("s3://", "")
+        all_keys = s3.find(s3_path, detail=True)
+
+        for key, obj in tqdm(all_keys.items(), desc="Downloading N5 files from S3"):
+            if obj["type"] == "file":
+                rel_path = key.replace(s3_path + "/", "")
+                local_file_path = os.path.join(local_dir, rel_path)
+                os.makedirs(os.path.dirname(local_file_path), exist_ok=True)
+                s3.get(key, local_file_path)
+    
     def load_interest_points_from_path(self, base_path, loc_path):
         """Load data from any N5 dataset path"""
         try:
-            if self.xml_input_path.startswith("s3://"):
+            if self.xml_input_path.startswith("s3://") and self.big_stitcher_input == True:
+                xml_stripped = self.xml_input_path.replace("s3://", "")
+                parts = xml_stripped.split("/", 1)
+                bucket_prefix = parts[1].rsplit("/", 1)[0]  
+                s3_n5_uri = f"s3://{parts[0]}/{bucket_prefix}/"
+
+                parsed = urlparse(self.xml_input_path)
+                bucket_and_key = parsed.netloc + parsed.path
+                parent_prefix = os.path.dirname(bucket_and_key)
+
+                with tempfile.TemporaryDirectory() as tmpdir:
+                    self.download_n5_from_s3_to_local(s3_n5_uri, tmpdir)          
+                    new_path = tmpdir + "/" + parent_prefix + base_path
+                    store = zarr.N5Store(new_path)
+                    root = zarr.open(store, mode="r")
+                    group = root[loc_path]
+                    data = group[:]
+                    return data.astype(np.float64)
+                
+            elif self.xml_input_path.startswith("s3://"):
                 s3 = s3fs.S3FileSystem(anon=False)
                 xml_stripped = self.xml_input_path.replace("s3://", "")
                 parts = xml_stripped.split("/", 1)
-                bucket_prefix = parts[1].rsplit("/", 1)[0]  # e.g., 'output'
+                bucket_prefix = parts[1].rsplit("/", 1)[0]  
                 base_path = f"{parts[0]}/{bucket_prefix}/interestpoints.n5"
                 store = s3fs.S3Map(root=base_path, s3=s3, check=False)
+                root = zarr.open(store, mode="r")
+                group = root[loc_path]
+                data = group[:]
+                return data.astype(np.float64)
+            
             else:
                 store = zarr.N5Store(base_path)
-            
-            root = zarr.open(store, mode="r")
-            group = root[loc_path]
-            data = group[:]
-            return data.astype(np.float64)
+                root = zarr.open(store, mode="r")
+                group = root[loc_path]
+                data = group[:]
+                return data.astype(np.float64)
             
         except Exception as e:
             print(f"ERROR: Failed to load data from {loc_path}")

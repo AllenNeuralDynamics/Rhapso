@@ -1,4 +1,3 @@
-# from Rhapso.solver.input_validation import InputValidation
 from Rhapso.data_prep.xml_to_dataframe import XMLToDataFrame
 from Rhapso.solver.global_optimization import GlobalOptimization
 from Rhapso.detection.view_transform_models import ViewTransformModels
@@ -11,9 +10,9 @@ import boto3
 file_source = 'local'
 xml_file_path_output = "IP_TIFF_XML/dataset.xml"
 xml_bucket_name = "rhapso-tif-sample"
-xml_file_path = "/Users/seanfite/Desktop/IP_TIFF_XML-rhapso/output/dataset-detection.xml"
-data_prefix = "/Users/seanfite/Desktop/IP_TIFF_XML/output/interestpoints.n5/" 
-metrics_output_path = "/Users/ai/Downloads/IP_TIFF_XML/metrics.json"
+xml_file_path = "/Users/seanfite/Desktop/IP_TIFF_XML/dataset.xml"
+data_prefix = "/Users/seanfite/Desktop/IP_TIFF_XML/interestpoints.n5/" 
+metrics_output_path = "/Users/seanfite/Desktop/IP_TIFF_XML/metrics/metrics.json"
 fixed_views = [ 'timepoint: 18, setup: 0', 'timepoint: 30, setup: 0']
 model = "affine"
 alignment_option = 1
@@ -41,7 +40,7 @@ elif file_source == 'local':
     xml_file = fetch_local_xml(xml_file_path)
 
 # Load XML data into dataframes         
-processor = XMLToDataFrame(xml_file, file_source)
+processor = XMLToDataFrame(xml_file)
 dataframes = processor.run()
 print("XML loaded")
 
@@ -74,8 +73,8 @@ tiles = global_optimization.run()
 print("Global optimization complete")
 
 # Save results to xml - one new affine matrix per view registration
-save_results = SaveResults(tiles, xml_file, xml_bucket_name, xml_file_path_output, fixed_views, file_source)
-save_results.run()
+# save_results = SaveResults(tiles, xml_file, xml_bucket_name, xml_file_path_output, fixed_views, file_source)
+# save_results.run()
 print("Results have been saved")
 
 print("Solve is done")

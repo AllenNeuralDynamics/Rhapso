@@ -119,6 +119,10 @@ class ModelAndTileSetup():
                 # Get transform matrices for view_id A and B
                 key_i = f"timepoint: {view_id_list[i][0]}, setup: {view_id_list[i][1]}"
                 key_j = f"timepoint: {view_id_list[j][0]}, setup: {view_id_list[j][1]}"
+
+                if key_i == 'timepoint: 18, setup: 1' and key_j == 'timepoint: 18, setup: 0':
+                    print("start")
+
                 mA = self.view_transform_matrices.get(key_i, None)
                 mB = self.view_transform_matrices.get(key_j, None)   
                 if mA is None or mB is None: continue

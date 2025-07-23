@@ -6,14 +6,22 @@ from Rhapso.matching.save_matches import SaveMatches
 # s3 input/output paths:
 # xml_input_path = 's3://martin-test-bucket/output/dataset-detection.xml'            
 # n5_output_path = 's3://martin-test-bucket/matching_output/'
+# big_stitcher_file_source = False
 
 # Local
-# xml_input_path = "/Users/seanfite/Desktop/IP_TIFF_XML-2/dataset.xml"
+# xml_input_path = "/Users/seanfite/Desktop/IP_TIFF_XML/dataset.xml"
 # n5_output_path = '/Users/seanfite/Desktop/IP_TIFF_XML'
+# big_stitcher_file_source = False
 
-# S3
-xml_input_path = "s3://rhapso-matching-test/output/dataset-detection.xml"
+# S3 - Big Stitcher Output
+xml_input_path = "s3://aind-open-data/exaSPIM_686951_2025-02-25_09-45-02_alignment_2025-06-12_19-58-52/interest_point_detection/bigstitcher_ip.xml"
 n5_output_path = 's3://rhapso-matching-test/output'
+big_stitcher_file_source = True
+
+# S3 - Rhapso Output
+# xml_input_path = "s3://rhapso-matching-test/output/dataset-detection.xml"
+# n5_output_path = 's3://rhapso-matching-test/output'
+# big_stitcher_file_source = False
 
 # match_type = "rigid"               
 # # -- Finding Candidates --
@@ -52,7 +60,7 @@ data_global, interest_points_folder = parser.run()
 print("XML loaded and parsed")
 
 # Load interest points and transform them into global space
-data_loader = LoadAndTransformPoints(data_global, xml_input_path)
+data_loader = LoadAndTransformPoints(data_global, xml_input_path, big_stitcher_file_source)
 process_pairs = data_loader.run()
 print("Points loaded and transformed into global space")
 
