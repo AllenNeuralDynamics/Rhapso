@@ -74,8 +74,25 @@ if __name__ == "__main__":
     all_results = []
     for pointsA, pointsB, viewA_str, viewB_str in process_pairs:   
         print(f"Number of pointsA: {len(pointsA)}, Number of pointsB: {len(pointsB)}")
+        if len(pointsA) == 0 or len(pointsB) == 0:
+            print(f"[Warning] One of the point sets is empty for {viewA_str}, {viewB_str}")
+            continue
+
+        print(f"First 3 pointsA: {pointsA[:3]}")
+        print(f"First 3 pointsB: {pointsB[:3]}")
+        print(f"Candidate search parameters: num_neighbors={num_neighbors}, redundancy={redundancy}, significance={significance}, search_radius={search_radius}, num_required_neighbors={num_required_neighbors}, match_type={match_type}")
+
         candidates = matcher.get_candidates(pointsA, pointsB, viewA_str, viewB_str)
         print(f"Number of candidates: {len(candidates)}")
+        if len(candidates) == 0:
+            print(f"[Warning] No candidates found for {viewA_str}, {viewB_str}")
+            # Optionally, log more about why (if possible)
+            # For example, check if all points are filtered out due to search_radius or significance
+            # If matcher exposes internal filtering reasons, log them here
+
+        if len(candidates) < model_min_matches:
+            print(f"[Warning] Not enough candidates: have {len(candidates)}, need {model_min_matches}")
+
         inliers = matcher.compute_ransac(candidates)
         print(f"Number of inliers: {len(inliers)}")
 
