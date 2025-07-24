@@ -24,7 +24,7 @@ class GlobalOptimization:
 
         self.align_tile = AlignTiles(pmc, tiles, fixed_views)
 
-        self.save_metrics = JSONFileHandler(self.metrics_output_path)
+        # self.save_metrics = JSONFileHandler(self.metrics_output_path)
 
     def update_cost(self, view, tile):
         """
@@ -87,14 +87,14 @@ class GlobalOptimization:
         print( f"({datetime.datetime.now()}): Max Error: {max_error}px")
         print( f"({datetime.datetime.now()}): Mean Error: {average_error}px")    
 
-        self.save_metrics.update(
-            "alignment errors",
-            {
-                "min_error": min_error,
-                "max_error": max_error,
-                "mean_error": average_error,
-            },
-        )
+        # self.save_metrics.update(
+        #     "alignment errors",
+        #     {
+        #         "min_error": min_error,
+        #         "max_error": max_error,
+        #         "mean_error": average_error,
+        #     },
+        # )
 
         return average_error, min_error, max_error
 

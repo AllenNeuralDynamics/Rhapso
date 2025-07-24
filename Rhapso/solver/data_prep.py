@@ -112,7 +112,10 @@ class DataPrep():
                 timepoint, setup, label = parts[0], parts[1], parts[2]
                 corresponding_view_id = f"timepoint: {timepoint}, setup: {setup}"
 
-                ip, corr_ip = self.transform_points(view_id, corresponding_view_id, self.interest_points[view_id][int(ip_index)], self.interest_points[corresponding_view_id][int(corr_index)])
+                # ip, corr_ip = self.transform_points(view_id, corresponding_view_id, self.interest_points[view_id][int(ip_index)], self.interest_points[corresponding_view_id][int(corr_index)])
+
+                ip = self.interest_points[view_id][int(ip_index)]
+                corr_ip = self.interest_points[corresponding_view_id][int(corr_index)]
 
                 if view_id not in self.corresponding_interest_points:
                     self.corresponding_interest_points[view_id] = [] 
