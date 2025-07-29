@@ -7,13 +7,13 @@ from Rhapso.solver.align_tiles import AlignTiles
 from Rhapso.solver.save_results import SaveResults
 import boto3
 
-file_source = 'local'
-xml_file_path_output = "IP_TIFF_XML/dataset.xml"
-xml_bucket_name = "rhapso-tif-sample"
-xml_file_path = "/Users/seanfite/Desktop/IP_TIFF_XML/dataset.xml"
-data_prefix = "/Users/seanfite/Desktop/IP_TIFF_XML/interestpoints.n5/" 
-metrics_output_path = "/Users/seanfite/Desktop/IP_TIFF_XML/metrics/metrics.json"
-fixed_views = [ 'timepoint: 18, setup: 0', 'timepoint: 30, setup: 0']
+file_source = 's3'
+xml_file_path_output = "output/dataset-solve.xml"
+xml_bucket_name = "rhapso-matching-test"
+xml_file_path = "output/dataset-detection.xml"
+data_prefix = "output/interestpoints.n5" 
+metrics_output_path = "output/metrics/metrics.json"
+fixed_views = [ 'timepoint: 0, setup: 0', 'timepoint: 30, setup: 0']
 model = "affine"
 alignment_option = 1
 relative_threshold = 3.5

@@ -6,12 +6,24 @@ import matplotlib.pyplot as plt
 import json
 
 def read_big_stitcher_output(dataset_path):
-    attr_path = os.path.join(dataset_path, "attributes.json")
-    with open(attr_path) as f:
-        json.load(f)
-    store_root = os.path.dirname(dataset_path.rstrip("/"))
-    dataset_name = dataset_path.rstrip("/").split("/")[-1]
-    store = zarr.N5Store(store_root)
+
+    if dataset_path.startswith("s3://"):
+        s3 = s3fs.S3FileSystem(anon=False)
+        attr_path = os.path.join(dataset_path, "attributes.json")
+        with s3.open(attr_path, 'r') as f:
+            json.load(f)
+
+        store_root = os.path.dirname(dataset_path.rstrip("/"))
+        dataset_name = dataset_path.rstrip("/").split("/")[-1]
+        store = zarr.N5Store(s3fs.S3Map(root=store_root, s3=s3))
+    
+    else:
+        attr_path = os.path.join(dataset_path, "attributes.json")
+        with open(attr_path) as f:
+            json.load(f)
+        store_root = os.path.dirname(dataset_path.rstrip("/"))
+        dataset_name = dataset_path.rstrip("/").split("/")[-1]
+        store = zarr.N5Store(store_root)
 
     root = zarr.open(store, mode="r")
     group = root[dataset_name]
@@ -110,9 +122,11 @@ def read_rhapso_output(full_path):
     plt.show()
 
 # base_path = "/Users/seanfite/Desktop/IP_TIFF_XML-BigStitcher-Affine/interestpoints.n5"
-base_path = "/Users/seanfite/Desktop/IP_TIFF_XML-Rhapso-Affine/interestpoints.n5"
-for tp_id in [18, 30]:
-    for setup_id in range(5):  
+# base_path = "s3://rhapso-matching-test/output/interestpoints.n5"
+base_path = "/Users/seanfite/Desktop/BigStitcherIP/interestpoints.n5"
+
+for tp_id in [0]:
+    for setup_id in range(20):  
         path = f"{base_path}/tpId_{tp_id}_viewSetupId_{setup_id}/beads/interestpoints/loc"
         print(f"Reading: {path}")
         # read_big_stitcher_output(path)

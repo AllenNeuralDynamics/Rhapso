@@ -75,22 +75,36 @@ def read_n5_data(n5_path):
 # # read_n5_data('/home/martin/Documents/Allen/Data/IP_TIFF_XML_2/interestpoints.n5')
 
 def read_correspondences(dataset_path):
-    store = zarr.N5Store(dataset_path)
-    root = zarr.open(store, mode="r")
+    if dataset_path.startswith("s3://"):
+        store = zarr.storage.FSStore(dataset_path, mode="r")
+        root = zarr.open(store, mode="r")
+    else:
+        store = zarr.N5Store(dataset_path)
+        root = zarr.open(store, mode="r")
+    
+    if "data" not in root:
+        print("Key 'data' not found in root.")
+        return
+    
     group = root["data"]
     data = group[:]
-    count = len(data)
-    print(count)
-    print("")
-    return count
+    print(f"Loaded {len(data)} entries.")
+
+    # for i, entry in enumerate(data):
+    #     print(f"{i}: {entry}")
+    
+    # print("hi")
 
 # Big Stitcher Output
-# base_path = "/Users/seanfite/Desktop/IP_TIFF_XML/interestpoints.n5"
-# for tp_id in [18, 30]:
-#     for setup_id in range(5):  
-#         path = f"{base_path}/tpId_{tp_id}_viewSetupId_{setup_id}/beads/correspondences"
-#         print(f"Reading: {path}")
-#         readr_correspondences(path)
+# base_path = "/Users/seanfite/Desktop/interest_point_detection/interestpoints.n5"
+base_path = "/Users/seanfite/Desktop/ip_rigid_alignment/interestpoints.n5"
+# base_path = "/Users/seanfite/Desktop/ip_affine_alignment/interestpoints.n5"
+# base_path = "s3://rhapso-matching-test/output/interestpoints.n5"
+for tp_id in [0]:
+    for setup_id in range(20):  
+        path = f"{base_path}/tpId_{tp_id}_viewSetupId_{setup_id}/beads/correspondences"
+        print(f"Reading: {path}")
+        read_correspondences(path)
 
 def read_interest_points(full_path):
     if full_path.startswith("s3://"):
@@ -134,7 +148,7 @@ def read_interest_points(full_path):
         if dataset_rel_path not in root:
             print(f"Skipping: {dataset_rel_path} (not found)")
             return
-
+        
         zarray = root[dataset_rel_path]
         data = zarray[:]
 
@@ -164,10 +178,17 @@ def read_interest_points(full_path):
     plt.tight_layout()
     plt.show()
 
-base_path = "s3://rhapso-matching-test/output/interestpoints.n5"
+# base_path = "s3://rhapso-matching-test/output/interestpoints.n5"
 # base_path = "/Users/seanfite/Desktop/IP_TIFF_XML/interestpoints.n5"
-for tp_id in [18,30]:
-    for setup_id in range(5):  
-        path = f"{base_path}/tpId_{tp_id}_viewSetupId_{setup_id}/beads/correspondences"
-        print(f"For view: {setup_id}")
-        read_interest_points(path)
+# base_path = "/Users/seanfite/Desktop/ip_rigid_alignment/interestpoints.n5"
+# for tp_id in [0]:
+#     counter = 0
+#     for setup_id in range(10): 
+        
+#         counter += 1
+#         if counter == 1:
+#             continue
+    
+#         path = f"{base_path}/tpId_{tp_id}_viewSetupId_{setup_id}/beads/correspondences"
+#         print(f"For view: {setup_id}")
+#         read_interest_points(path)

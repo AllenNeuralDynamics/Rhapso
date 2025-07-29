@@ -2,16 +2,12 @@ import zarr
 import numpy as np
 import os
 import s3fs
-from tqdm import tqdm
-import tempfile
-from urllib.parse import urlparse
 
 class LoadAndTransformPoints:
-    def __init__(self, data_global, xml_input_path, big_stitcher_input):
+    def __init__(self, data_global, xml_input_path):
         """Initialize data loader with base path"""
         self.data_global = data_global
         self.xml_input_path = xml_input_path
-        self.big_stitcher_input = big_stitcher_input
     
     def transform_interest_points(self, points, transformation_matrix):
         """Transform interest points using the given transformation matrix"""
@@ -50,84 +46,46 @@ class LoadAndTransformPoints:
             print(f"❌ Error parsing affine matrix from '{affine_text}': {e}")
             # Return identity matrix as fallback
             return np.eye(4)
-
+        
     def get_transformation_matrix(self, view_id, view_registrations):
-        """Get the complete transformation matrix for a view by composing all ViewTransforms"""
-        try:       
-            # Get all transforms for this view
+        """
+        Compose all affine ViewTransforms for a given view (timepoint, setup).
+        Returns a 4x4 numpy matrix.
+        """
+        try:
             transforms = view_registrations.get(view_id, [])
             if not transforms:
                 print(f"⚠️ No transforms found for view {view_id}, using identity matrix")
                 return np.eye(4)
-            
-            # Start with identity matrix
+
             final_matrix = np.eye(4)
-            
-            # Compose all transforms in order
+
             for i, transform in enumerate(transforms):
-                # Get the matrix data - could be stored as 'matrix' or 'affine'
-                matrix_data = transform.get('matrix') or transform.get('affine')
-                if matrix_data is None:
-                    print(f"  ⚠️ No matrix data found in transform {i+1}, skipping")
+                affine_str = transform.get("affine")
+                if not affine_str:
+                    print(f"⚠️ No affine string in transform {i+1} for view {view_id}")
                     continue
-                
-                # Parse the affine transform
-                if isinstance(matrix_data, str):
-                    matrix = self._parse_affine_matrix(matrix_data)
-                else:
-                    # Assume it's already a matrix
-                    matrix = np.array(matrix_data)
-                    if matrix.shape == (3, 4):
-                        # Convert 3x4 to 4x4
-                        matrix = np.vstack([matrix, [0, 0, 0, 1]])
-                
-                # Compose with previous transforms (matrix multiplication)
-                final_matrix = final_matrix @ matrix
-            
+
+                values = [float(x) for x in affine_str.strip().split()]
+                if len(values) != 12:
+                    raise ValueError(f"Transform {i+1} in view {view_id} has {len(values)} values, expected 12.")
+
+                matrix3x4 = np.array(values).reshape(3, 4)
+                matrix4x4 = np.eye(4)
+                matrix4x4[:3, :4] = matrix3x4
+
+                final_matrix = final_matrix @ matrix4x4
+
             return final_matrix
+
         except Exception as e:
             print(f"❌ Error in get_transformation_matrix for view {view_id}: {e}")
-            print(f"Error type: {type(e).__name__}")
             raise
-    
-    def download_n5_from_s3_to_local(self, s3_uri, local_dir):
-        """
-        Recursively download an N5 dataset from S3 to a local directory.
-        """
-        s3 = s3fs.S3FileSystem(anon=False)
-        s3_path = s3_uri.replace("s3://", "")
-        all_keys = s3.find(s3_path, detail=True)
-
-        for key, obj in tqdm(all_keys.items(), desc="Downloading N5 files from S3"):
-            if obj["type"] == "file":
-                rel_path = key.replace(s3_path + "/", "")
-                local_file_path = os.path.join(local_dir, rel_path)
-                os.makedirs(os.path.dirname(local_file_path), exist_ok=True)
-                s3.get(key, local_file_path)
     
     def load_interest_points_from_path(self, base_path, loc_path):
         """Load data from any N5 dataset path"""
-        try:
-            if self.xml_input_path.startswith("s3://") and self.big_stitcher_input == True:
-                xml_stripped = self.xml_input_path.replace("s3://", "")
-                parts = xml_stripped.split("/", 1)
-                bucket_prefix = parts[1].rsplit("/", 1)[0]  
-                s3_n5_uri = f"s3://{parts[0]}/{bucket_prefix}/"
-
-                parsed = urlparse(self.xml_input_path)
-                bucket_and_key = parsed.netloc + parsed.path
-                parent_prefix = os.path.dirname(bucket_and_key)
-
-                with tempfile.TemporaryDirectory() as tmpdir:
-                    self.download_n5_from_s3_to_local(s3_n5_uri, tmpdir)          
-                    new_path = tmpdir + "/" + parent_prefix + base_path
-                    store = zarr.N5Store(new_path)
-                    root = zarr.open(store, mode="r")
-                    group = root[loc_path]
-                    data = group[:]
-                    return data.astype(np.float64)
-                
-            elif self.xml_input_path.startswith("s3://"):
+        try:      
+            if self.xml_input_path.startswith("s3://"):
                 s3 = s3fs.S3FileSystem(anon=False)
                 xml_stripped = self.xml_input_path.replace("s3://", "")
                 parts = xml_stripped.split("/", 1)
@@ -251,4 +209,4 @@ class LoadAndTransformPoints:
             pointsA, pointsB, viewA_str, viewB_str = self.load_and_transform_points(pair, view_ids_global, view_registrations, xml_dir)
             process_pairs.append((pointsA, pointsB, viewA_str, viewB_str))
 
-        return process_pairs
+        return process_pairs, view_registrations

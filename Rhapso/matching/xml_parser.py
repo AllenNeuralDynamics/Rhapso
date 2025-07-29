@@ -3,10 +3,97 @@ import boto3
 import os
 
 class XMLParser:
-    def __init__(self, xml_input_path):
+    def __init__(self, xml_input_path, input_type):
         """Initialize XML parser with file path or XML content string"""
         self.xml_input_path = xml_input_path
         self.data_global = None  # Will hold complete dataset info
+        self.input_type = input_type
+    
+    def check_labels(self, root):
+        """
+        Verifies the presence of required XML labels including bounding boxes, point spread functions, 
+        stitching results, and intensity adjustments.
+        """
+        labels = True
+        if root.find(".//BoundingBoxes") is None:
+            labels = False
+        if root.find(".//PointSpreadFunctions") is None:
+            labels = False
+        if root.find(".//StitchingResults") is None:
+            labels = False
+        if root.find(".//IntensityAdjustments") is None:
+            labels = False
+
+        return labels
+
+    def check_length(self, root):
+        """
+        Validates that the count of elements within the XML structure aligns with expected relationships
+        between file mappings, view setups, and view registrations.
+        """
+        length = True
+        if len(root.findall(".//ImageLoader/files/FileMapping")) != len(root.findall(".//ViewRegistration")) or \
+            len(root.findall(".//ViewSetup")) != len(root.findall(".//ViewRegistration")) * (1 / 2):
+            length = False  # Set to False if the relationships do not match expected counts
+        return length
+    
+    def parse_image_loader(self, root):
+        image_loader_data = []
+        
+        if self.input_type == "zarr":
+
+            s3bucket = root.findtext(".//s3bucket", default="").strip()
+            zarr_base = root.findtext(".//zarr", default="").strip()
+            
+            for il in root.findall(".//ImageLoader/zgroups/zgroup"):
+                view_setup = il.get("setup")
+                timepoint = il.get("timepoint")
+                file_path = il.find("path").text if il.find("path") is not None else None
+
+                full_path = f"s3://{s3bucket}{zarr_base}{file_path}"
+                image_loader_data.append(
+                    {
+                        "view_setup": view_setup,
+                        "timepoint": timepoint,
+                        "series": 1,
+                        "channel": 1,
+                        "file_path": full_path,
+                    }
+                )
+        elif self.input_type == "tiff":
+            # Ensure that file mappings are present in the XML
+            if not root.findall(".//ImageLoader/files/FileMapping"):
+                raise Exception("There are no files in this XML")
+            
+            # Check for required labels in the XML
+            if not self.check_labels(root):
+                raise Exception("Required labels do not exist")
+
+            # Validate that the lengths of view setups, registrations, and tiles match
+            if not self.check_length(root):
+                raise Exception(
+                    "The amount of view setups, view registrations, and tiles do not match"
+                )
+
+            # Iterate over each file mapping in the XML
+            for fm in root.findall(".//ImageLoader/files/FileMapping"):
+                view_setup = fm.get("view_setup")
+                timepoint = fm.get("timepoint")
+                series = fm.get("series")
+                channel = fm.get("channel")
+                file_path = fm.find("file").text if fm.find("file") is not None else None
+                full_path = self.xml_input_path.replace("dataset.xml", "") + file_path
+                image_loader_data.append(
+                    {
+                        "view_setup": view_setup,
+                        "timepoint": timepoint,
+                        "series": series,
+                        "channel": channel,
+                        "file_path": full_path,
+                    }
+                )
+
+        return image_loader_data
 
     def parse(self, xml_content):
         """Parse XML file or string and create complete dataset object"""
@@ -25,6 +112,7 @@ class XMLParser:
                 'basePathURI': root.find(".//BasePath").text if root.find(".//BasePath") is not None else "",
                 'viewRegistrations': self._parse_view_registrations(root),
                 'viewsInterestPoints': self._parse_view_paths(root),
+                'imageLoader': self.parse_image_loader(root)
             }
             return self.data_global
             
@@ -50,7 +138,7 @@ class XMLParser:
                 
                 # Parse all ViewTransform elements for this view
                 transforms = []
-                for transform_elem in view_reg.findall(".//ViewTransform"):
+                for transform_elem in view_reg.findall("ViewTransform"):
                     transform_type = transform_elem.get('type', 'unknown')
                     
                     # Extract the Name element

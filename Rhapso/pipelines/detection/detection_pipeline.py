@@ -108,28 +108,6 @@ metadata_loader = MetadataBuilder(
 image_chunk_metadata = metadata_loader.run()
 print("Metadata has loaded")
 
-# difference_of_gaussian = DifferenceOfGaussian(min_intensity, max_intensity, sigma, threshold)
-# final_peaks = []
-# for image_data in image_chunk_metadata:
-#     view_id = image_data['view_id']
-#     interval_key = image_data['interval_key']
-#     image_chunk = image_data['image_chunk']
-#     lower_bound = interval_key[0]
-    
-#     peaks = difference_of_gaussian.run(image_chunk, dsxy, dsz, offset, lower_bound)
-#     interest_points = peaks['interest_points']
-#     intensities = peaks['intensities']
-
-#     print(f"length of interest points: {len(interest_points)}")
-    
-#     final_peaks.append({
-#         'view_id': view_id,
-#         'interval_key': interval_key,
-#         'interest_points': interest_points,
-#         'intensities': intensities
-#     })
-# print("Difference of gaussian is done")
-
 # Detect interest points using DoG algorithm
 difference_of_gaussian = DifferenceOfGaussian(min_intensity, max_intensity, sigma, threshold)
 final_peaks, delayed_results, delayed_keys = [], [], {}
