@@ -113,8 +113,19 @@ class SaveInterestPoints:
         s3 = boto3.client('s3')
         s3.put_object(Bucket=self.output_bucket_name, Key=json_path, Body=json_bytes)
 
-    def save_intensities_to_n5(self, view_id, n5_path, root):
-        intensities_path = n5_path + '/interestpoints/intensities'
+    def save_intensities_to_n5(self, view_id, n5_path):
+
+        if self.file_source == 'local':
+            store = zarr.N5Store(self.output_file_path + "/" + n5_path + "/interestpoints")
+            root = zarr.group(store, overwrite=False)
+            root.attrs['n5'] =  '4.0.0'
+        
+        elif self.file_source == 's3':
+            output_path = self.output_bucket_name + "/" + self.output_file_path + "/" + n5_path + "/interestpoints"
+            store = s3fs.S3Map(root=output_path, s3=self.s3_filesystem, check=False)
+            root = zarr.group(store=store, overwrite=False)
+            root.attrs['n5'] = '4.0.0'
+        intensities_path = 'intensities'
 
         if intensities_path in root:
             try:
@@ -125,14 +136,15 @@ class SaveInterestPoints:
         try: 
             if view_id in self.consolidated_data:
                 intensities = [point[1] for point in self.consolidated_data[view_id]] 
-                root.create_dataset(
+                dataset = root.create_dataset(
                     intensities_path,
                     data=intensities,
                     dtype='f4',  
                     chunks=(self.default_block_size,),  
                     compressor=zarr.GZip()
                 )
-            
+                dataset.attrs["dimensions"] = [1, len(intensities)]
+                dataset.attrs["blockSize"] = [1, self.default_block_size]
             else: 
                 root.create_dataset(
                     intensities_path,
@@ -144,66 +156,54 @@ class SaveInterestPoints:
         except Exception as e:
             print(f"Error creating intensities dataset at {intensities_path}: {e}")
 
-    def save_interest_points_to_n5(self, view_id, n5_path, root): 
-        dataset_path = n5_path + '/interestpoints'    
+    def save_interest_points_to_n5(self, view_id, n5_path): 
 
-        if dataset_path in root:
-            try:
-                group = root[dataset_path]
-                for key in list(group.keys()):
-                    del group[key]
-                del root[dataset_path]
-            except Exception as e:
-                print(f"Warning: failed to delete existing group at {dataset_path}: {e}")
+        if self.file_source == 'local':
+            store = zarr.N5Store(self.output_file_path + "/" + n5_path + "/interestpoints")
+            root = zarr.group(store, overwrite=False)
+            root.attrs["pointcloud"] = "1.0.0"
+            root.attrs["type"] = "list"
+            root.attrs["list version"] = "1.0.0"
+        
+        elif self.file_source == 's3':
+            output_path = self.output_bucket_name + "/" + self.output_file_path + "/" + n5_path + "/interestpoints"
+            store = s3fs.S3Map(root=output_path, s3=self.s3_filesystem, check=False)
+            root = zarr.group(store=store, overwrite=False)
+            root.attrs["pointcloud"] = "1.0.0"
+            root.attrs["type"] = "list"
+            root.attrs["list version"] = "1.0.0"
 
-         # Create group
-        try:
-            dataset = root.create_group(dataset_path)
-        except zarr.errors.ContainsGroupError:
-            dataset = root[dataset_path]  # fallback 
+        id_dataset = "id"
+        loc_dataset = "loc"
 
-        # Set attributes
-        dataset.attrs["pointcloud"] = "1.0.0"
-        dataset.attrs["type"] = "list"
-        dataset.attrs["list version"] = "1.0.0"
-
-        # Create sub-datasets
-        id_dataset = f"{dataset_path}/id"
-        loc_dataset = f"{dataset_path}/loc"
-
-        # Create attributes.json files if saving to s3
         if self.file_source == 's3':
-            id_path = "output/" + id_dataset
-            loc_path = "output/" + loc_dataset
-            attrs_dict = dict(dataset.attrs)
+            id_path = f"output/{output_path}/id"
+            loc_path = f"output/{output_path}/loc"
+            attrs_dict = dict(root.attrs)
             self.write_json_to_s3(id_path, loc_path, attrs_dict)
 
-        # Prep interest points lists or create empty n5 directories if none
         if view_id in self.consolidated_data:
             interest_points = [point[0] for point in self.consolidated_data[view_id]]
             interest_point_ids = np.arange(len(interest_points), dtype=np.uint64).reshape(-1, 1)
-
             n = 3
-            
-            # Save the IDs (1 x N array)
+
             if id_dataset in root:
                 del root[id_dataset]
             root.create_dataset(
                 id_dataset,
                 data=interest_point_ids,
                 dtype='u8',
-                chunks=(self.default_block_size,),  
+                chunks=(self.default_block_size,),
                 compressor=zarr.GZip()
             )
 
-            # Save the locations (DIM x N array)
             if loc_dataset in root:
                 del root[loc_dataset]
             root.create_dataset(
                 loc_dataset,
-                data=interest_points, 
+                data=interest_points,
                 dtype='f8',
-                chunks=(self.default_block_size, n),  
+                chunks=(self.default_block_size, n),
                 compressor=zarr.GZip()
             )
         
@@ -213,39 +213,33 @@ class SaveInterestPoints:
                 del root[id_dataset]
             root.create_dataset(
                 id_dataset,
-                shape=(0,), 
-                dtype='u8',  
-                chunks=(1,),  
-                compressor=zarr.GZip()  
+                shape=(0,),
+                dtype='u8',
+                chunks=(1,),
+                compressor=zarr.GZip()
             )
 
             if loc_dataset in root:
                 del root[loc_dataset]
             root.create_dataset(
                 loc_dataset,
-                shape=(0,),  
-                dtype='f8',  
-                chunks=(1,), 
-                compressor=zarr.GZip()  
+                shape=(0,),
+                dtype='f8',
+                chunks=(1,),
+                compressor=zarr.GZip()
             )
 
     def save_points(self):
-        if self.file_source == 'local':
-            store = zarr.N5Store(self.output_file_path)
-            root = zarr.group(store, overwrite=False)
-            root.attrs['n5'] =  '4.0.0'
-        
-        elif self.file_source == 's3':
-            output_path = self.output_bucket_name + "/" + self.output_file_path
-            store = s3fs.S3Map(root=output_path, s3=self.s3_filesystem, check=False)
-            root = zarr.group(store=store, overwrite=False)
-            root.attrs['n5'] = '4.0.0'
    
         for _, row in self.image_loader_df.iterrows():
             view_id = f"timepoint: {row['timepoint']}, setup: {row['view_setup']}"
             n5_path = f"interestpoints.n5/tpId_{row['timepoint']}_viewSetupId_{row['view_setup']}/beads"
-            self.save_interest_points_to_n5(view_id, n5_path, root)
-            self.save_intensities_to_n5(view_id, n5_path, root)
+            self.save_interest_points_to_n5(view_id, n5_path)
+            self.save_intensities_to_n5(view_id, n5_path)
+
+        store = zarr.N5Store(self.output_file_path + "/" + "interestpoints.n5")
+        root = zarr.group(store, overwrite=False)
+        root.attrs["n5"] = '4.0.0'
         self.save_to_xml()
 
     def run(self):
