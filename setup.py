@@ -16,7 +16,7 @@ To install certain dependencies, use the following commands:
 
 setup(
     name='Rhapso',
-    version='0.1.12',
+    version='0.1.8',
     author='Team OCTO',
     author_email='alleninstitute.org',
     description='A python package for stitching light sheet fluorescence microscopy images together',
