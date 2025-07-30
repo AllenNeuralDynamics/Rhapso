@@ -36,7 +36,8 @@ setup(
         'matplotlib==3.10.0',
         'memory-profiler==0.61.0',
         's3fs==2024.12.0',
-        'ray==2.47.1'
+        'ray==2.47.1',
+        'scikit-learn'
     ],
     python_requires='>=3.7', 
     classifiers=[

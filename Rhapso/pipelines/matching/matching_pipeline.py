@@ -1,114 +1,112 @@
-import argparse
 from Rhapso.matching.xml_parser import XMLParser
 from Rhapso.matching.load_and_transform_points import LoadAndTransformPoints
 from Rhapso.matching.ransac_matching import RansacMatching
 from Rhapso.matching.save_matches import SaveMatches
 
-if __name__ == "__main__":
-    parser = argparse.ArgumentParser(description="Run Rhapso matching pipeline")
-    parser.add_argument("--xml_input_path", type=str, required=True, help="Path to input XML file")
-    parser.add_argument("--n5_output_path", type=str, required=True, help="Path to output N5 directory")
-    parser.add_argument("--big_stitcher_file_source", action="store_true", help="Set if input is BigStitcher XML")
-    args = parser.parse_args()
+# s3 input/output paths:
+# xml_input_path = 's3://martin-test-bucket/output/dataset-detection.xml'            
+# n5_output_path = 's3://martin-test-bucket/matching_output/'
 
-    xml_input_path = args.xml_input_path
-    n5_output_path = args.n5_output_path
-    big_stitcher_file_source = args.big_stitcher_file_source
+# Local
+# xml_input_path = "/Users/seanfite/Desktop/IP_TIFF_XML/dataset.xml"
+xml_input_path = "/Users/seanfite/Desktop/ip_rigid_alignment/bigstitcher_rigid.xml"
+# xml_input_path = "/Users/seanfite/Desktop/interest_point_detection/bigstitcher_ip.xml"
+n5_output_path = '/Users/seanfite/Desktop/IP_TIFF_XML'
 
-    # match_type = "rigid"               
-    # # -- Finding Candidates --
-    # num_neighbors = 3
-    # redundancy = 0
-    # significance = 3                    # ratio of distance
-    # search_radius = 300
-    # num_required_neighbors = 3
-    # # -- Ransac --
-    # model_min_matches = 18              # min number inlier factor = 6
-    # inlier_factor = 5.0                 # max epsilon
-    # lambda_value = 0.1                  # min inlier ratio
-    # num_iterations = 10000
-    # regularization_weight = 1.0
+# S3 - Big Stitcher Output
+# xml_input_path = "s3://aind-open-data/exaSPIM_686951_2025-02-25_09-45-02_alignment_2025-06-12_19-58-52/interest_point_detection/bigstitcher_ip.xml"
+# n5_output_path = 's3://rhapso-matching-test/output'
 
-    match_type = "affine"                   
-    # -- Finding Candidates --
-    num_neighbors = 3
-    redundancy = 0
-    significance = 3                  # ratio of distance
-    search_radius = 100
-    num_required_neighbors = 3
-    # -- Ransac --
-    model_min_matches = 28            # min number inlier factor = 5
-    inlier_factor = 5.0               # max epsilon
-    lambda_value = 0.05               # min inlier ratio
-    num_iterations = 10000
-    regularization_weight = 1.0
+# S3 - Rhapso Output
+# xml_input_path = "s3://rhapso-matching-test/output/dataset-detection.xml"
+# n5_output_path = 's3://rhapso-matching-test/output'
 
-    # INTEREST POINT MATCHING
-    # --------------------------
+input_type = "zarr"
 
-    # Initialize parser with XML content
-    parser = XMLParser(xml_input_path)
-    data_global, interest_points_folder = parser.run()
-    print("XML loaded and parsed")
+match_type = "rigid"               
+# -- Finding Candidates --
+num_neighbors = 3
+redundancy = 0
+significance = 3                    # ratio of distance
+search_radius = 300
+num_required_neighbors = 3
+# -- Ransac --
+model_min_matches = 3               # min number matches
+inlier_factor = 100                 # max epsilon
+lambda_value = 0.1                  # min inlier ratio
+num_iterations = 10000
+regularization_weight = 1.0
 
-    # Load interest points and transform them into global space
-    data_loader = LoadAndTransformPoints(data_global, xml_input_path, big_stitcher_file_source)
-    process_pairs = data_loader.run()
-    print("Points loaded and transformed into global space")
+# match_type = "affine"                   
+# # -- Finding Candidates --
+# num_neighbors = 3
+# redundancy = 0
+# significance = 3                  # ratio of distance
+# search_radius = 100
+# num_required_neighbors = 3
+# # -- Ransac --
+# model_min_matches = 24            # min number inlier factor = 5
+# inlier_factor = 30                # max epsilon
+# lambda_value = 0.1                # min inlier ratio
+# num_iterations = 10000
+# regularization_weight = 1.0
 
-    # Geometric Descriptor-Based Interest Point Matching with RANSAC
-    matcher = RansacMatching(
-        num_neighbors, 
-        redundancy, 
-        significance, 
-        num_required_neighbors, 
-        match_type, 
-        inlier_factor, 
-        lambda_value, 
-        num_iterations, 
-        model_min_matches, 
-        regularization_weight,
-        search_radius
-    )
+# INTEREST POINT MATCHING
+# --------------------------
 
-    all_results = []
-    for pointsA, pointsB, viewA_str, viewB_str in process_pairs:   
-        print(f"Number of pointsA: {len(pointsA)}, Number of pointsB: {len(pointsB)}")
-        if len(pointsA) == 0 or len(pointsB) == 0:
-            print(f"[Warning] One of the point sets is empty for {viewA_str}, {viewB_str}")
-            continue
+# Initialize parser with XML content
+parser = XMLParser(xml_input_path, input_type)
+data_global, interest_points_folder = parser.run()
+print("XML loaded and parsed")
 
-        print(f"First 3 pointsA: {pointsA[:3]}")
-        print(f"First 3 pointsB: {pointsB[:3]}")
-        print(f"Candidate search parameters: num_neighbors={num_neighbors}, redundancy={redundancy}, significance={significance}, search_radius={search_radius}, num_required_neighbors={num_required_neighbors}, match_type={match_type}")
+# Load interest points and transform them into global space
+data_loader = LoadAndTransformPoints(data_global, xml_input_path)
+process_pairs, view_registrations = data_loader.run()
+print("Points loaded and transformed into global space")
 
-        candidates = matcher.get_candidates(pointsA, pointsB, viewA_str, viewB_str)
-        print(f"Number of candidates: {len(candidates)}")
-        if len(candidates) == 0:
-            print(f"[Warning] No candidates found for {viewA_str}, {viewB_str}")
-            # Optionally, log more about why (if possible)
-            # For example, check if all points are filtered out due to search_radius or significance
-            # If matcher exposes internal filtering reasons, log them here
+# Geometric Descriptor-Based Interest Point Matching with RANSAC
+matcher = RansacMatching(
+    data_global,
+    num_neighbors, 
+    redundancy, 
+    significance, 
+    num_required_neighbors, 
+    match_type, 
+    inlier_factor, 
+    lambda_value, 
+    num_iterations, 
+    model_min_matches, 
+    regularization_weight,
+    search_radius,
+    view_registrations,
+    input_type
+)
 
-        if len(candidates) < model_min_matches:
-            print(f"[Warning] Not enough candidates: have {len(candidates)}, need {model_min_matches}")
+all_results = []
+for pointsA, pointsB, viewA_str, viewB_str in process_pairs:  
 
-        inliers = matcher.compute_ransac(candidates)
-        print(f"Number of inliers: {len(inliers)}")
+    pointsA, pointsB = matcher.filter_for_overlapping_points(pointsA, pointsB, viewA_str, viewB_str)
+    
+    if len(pointsA) == 0 or len(pointsB) == 0: 
+        continue
 
-        percent = 100.0 * len(inliers) / len(candidates) if candidates else 0.0
-        print(f"✅ RANSAC inlier percentage: {percent:.1f}% ({len(inliers)} of {len(candidates)} for {viewA_str}), {viewB_str}")
+    candidates = matcher.get_candidates(pointsA, pointsB, viewA_str, viewB_str)
+    inliers, regularized_model = matcher.compute_ransac(candidates)
+    filtered_inliers = matcher.filter_inliers(inliers, regularized_model)
 
-        # if len(inliers) < 20:
-        #     continue
-
-        all_results.extend(inliers if inliers else []) 
+    percent = 100.0 * len(filtered_inliers) / len(candidates) if len(candidates) > 0 else 0.0
+    print(f"✅ RANSAC inlier percentagE: {percent:.1f}% ({len(filtered_inliers)} of {len(candidates)} for {viewA_str}), {viewB_str}")
+    
+    if len(filtered_inliers) < 20: 
+        continue
+    
+    all_results.extend(filtered_inliers if filtered_inliers else []) 
   
-    print("Matching is done")
+print("Matching is done")
 
-    # Save matches as N5
-    saver = SaveMatches(all_results, n5_output_path, data_global)
-    saver.run()
-    print("Matches Saved as N5")
+# Save matches as N5
+saver = SaveMatches(all_results, n5_output_path, data_global)
+saver.run()
+print("Matches Saved as N5")
 
-    print("Interest point matching is done")
+print("Interest point matching is done")

@@ -51,8 +51,9 @@ class SaveResults:
                     affine.text = '1.0 0.0 0.0 0.0 0.0 1.0 0.0 0.0 0.0 0.0 1.0 0.0'
                 else:   
                     affine.text = ' '.join(f"{model.get(f'm{i}{j}', 0.0):.4f}" for i in range(3) for j in range(4))
+                    print(affine.text)
 
-            view_registration.insert(0, new_view_transform)
+            # view_registration.insert(0, new_view_transform)
 
     def load_xml(self):
         """
@@ -67,4 +68,4 @@ class SaveResults:
         """
         self.load_xml()
         self.add_new_view_transform()
-        self.save_xml()
+        # self.save_xml()

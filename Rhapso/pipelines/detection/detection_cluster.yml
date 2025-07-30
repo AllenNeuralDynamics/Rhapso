@@ -1,4 +1,4 @@
-cluster_name: ray-data_loader-cluster-0010101
+cluster_name: ray-cluster-detection-sean-000001
 max_workers: 40
 min_workers: 40
 
@@ -67,12 +67,12 @@ worker_start_ray_commands:
 # python setup.py bdist_wheel 
 
 # RAY UP/DOWN COMMANDS
-# ray up ray_cluster.yml or ray up ray_cluster.yml --no-config-cache
-# ray down ray_cluster.yml
+# ray up detection_cluster.yml --no-config-cache
+# ray down detection_cluster.yml
 # rm -rf ~/.cache/ray
 
 # ACCESS RAY DASHBOARD
-# ssh -i /Users/seanfite/Desktop/AllenInstitute/Rhapso/Auth/AWS/EC2-SSH-Key/rhapso-ssh.pem -L 8265:localhost:8265 ubuntu@34.220.136.27
+# ssh -i /Users/seanfite/Desktop/AllenInstitute/Rhapso/Auth/AWS/EC2-SSH-Key/rhapso-ssh.pem -L 8265:localhost:8265 ubuntu@34.214.8.34
 # http://localhost:8265
 
 # TO FIX

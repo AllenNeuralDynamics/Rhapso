@@ -12,24 +12,24 @@ import ray
 
 strategy = 'python'
 run_type = 'ray'
-dsxy = 2
-dsz = 2
+dsxy = 4
+dsz = 4
 min_intensity = 0
 max_intensity = 255 
                                                            
 # Zarr - AWS s3
-# sigma = 4                                                    # tuning for find_peaks      
-# threshold = 0.01                                             # tuning for find_peaks
-# combine_distance = 0.5                                       # tuning for kd tree
-# mem_per_worker_bytes = 6 * 1024 * 1024 * 1024 
-# file_type = 'zarr'
-# file_source = 's3'
-# xml_file_path = "dataset.xml"
-# xml_bucket_name = "rhapso-zar-sample"
-# image_file_path = 's3://aind-open-data/exaSPIM_708365_2024-04-29_12-46-15/SPIM.ome.zarr/'
-# image_bucket_name = "aind-open-data"
-# output_file_path = "output"
-# output_bucket_name = 'interest-point-detection'
+sigma = 4                                                    # tuning for find_peaks      
+threshold = 0.01                                             # tuning for find_peaks
+combine_distance = 0.5                                       # tuning for kd tree
+mem_per_worker_bytes = 6 * 1024 * 1024 * 1024 
+file_type = 'zarr'
+file_source = 's3'
+xml_file_path = "dataset.xml"
+xml_bucket_name = "rhapso-zar-sample"
+image_file_path = 's3://aind-open-data/exaSPIM_686951_2025-02-25_09-45-02_flatfield-correction_2025-06-10_06-58-54/SPIM.ome.zarr/'
+image_bucket_name = "aind-open-data"
+output_file_path = "output"
+output_bucket_name = 'rhapso-matching-test'
 
 # Tiff - Local
 # sigma = 1.8                                                     # tuning for find_peaks
@@ -46,19 +46,19 @@ max_intensity = 255
 # output_bucket_name = None
 
 # Tiff - s3
-sigma = 1.8                                                     # tuning for find_peaks
-threshold = 0.001                                               # tuning for find_peaks
-combine_distance = 0.5                                          # tuning for kd tree
-mem_per_worker_bytes = 0
-offset = 0
-file_type = 'tiff'
-file_source = 's3'
-xml_file_path = 'IP_TIFF_XML/dataset.xml'
-image_file_path =  's3://rhapso-tif-sample/IP_TIFF_XML/' 
-output_file_path = 'output'
-xml_bucket_name = 'rhapso-tif-sample'
-image_bucket_name = 'rhapso-tif-sample'
-output_bucket_name = 'rhapso-matching-test'
+# sigma = 1.8                                                     # tuning for find_peaks
+# threshold = 0.001                                               # tuning for find_peaks
+# combine_distance = 0.5                                          # tuning for kd tree
+# mem_per_worker_bytes = 0
+# offset = 0
+# file_type = 'tiff'
+# file_source = 's3'
+# xml_file_path = 'IP_TIFF_XML/dataset.xml'
+# image_file_path =  's3://rhapso-tif-sample/IP_TIFF_XML/' 
+# output_file_path = 'output'
+# xml_bucket_name = 'rhapso-tif-sample'
+# image_bucket_name = 'rhapso-tif-sample'
+# output_bucket_name = 'rhapso-matching-test'
 
 # Initialize ray
 ray.init()
