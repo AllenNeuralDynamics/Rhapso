@@ -164,7 +164,7 @@ def main():
         print(f"Error: Failed to save output XML. {e}", file=sys.stderr)
         sys.exit(1)
 
-        print("Split-Images run finished")
+    print("Split-Images run finished")
 
 if __name__ == '__main__':
     main()
