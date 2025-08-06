@@ -135,6 +135,9 @@ def main():
             fip_exclusion_radius=fip_exclusion_radius
         )
         print("Splitting process finished.")
+        if new_data is None:
+            print("Error: split_images returned None. Aborting.", file=sys.stderr)
+            sys.exit(1)
     except KeyError as e:
         print(f"Error: XML structure missing expected elements for splitting. {e}", file=sys.stderr)
         sys.exit(1)
@@ -178,7 +181,7 @@ def main():
             encoding='utf-8', 
             xml_declaration=True, 
             method="xml", 
-            short_empty_elements=False
+            short_empty_elements=True
         )
         print("Done.")
     except PermissionError as e:
