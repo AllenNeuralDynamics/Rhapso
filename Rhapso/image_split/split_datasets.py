@@ -31,7 +31,7 @@ def main():
 
     # CLI user input values - these would be replaced with proper argument parsing
     xml_input = "/mnt/c/Users/marti/Documents/allen/data/exaSPIM_686951_2025-02-25_09-45-02_alignment_2025-06-12_19-58-52/interest_point_detection/original_bigstitcher_ip.xml"
-    xml_output = "/mnt/c/Users/marti/Documents/allen/data/exaSPIM_686951_2025-02-25_09-45-02_alignment_2025-06-12_19-58-52/interest_point_detection/original_bigstitcher_ip_RHAPSOOUT.xml"
+    xml_output = "/mnt/c/Users/marti/Documents/allen/data/exaSPIM_686951_2025-02-25_09-45-02_alignment_2025-06-12_19-58-52/interest_point_detection/RHAPSO_OUT.xml"
     target_image_size_string = "7000,7000,4000" 
     target_overlap_string = "128,128,128"
 
@@ -148,11 +148,38 @@ def main():
     # Step 8: Save the new data to XML output file
     try:
         new_tree = ET.ElementTree(new_data)
+        
+        # Improved XML formatting
+        def indent(elem, level=0):
+            i = "\n" + level*"  "
+            if len(elem):
+                if not elem.text or not elem.text.strip():
+                    elem.text = i + "  "
+                if not elem.tail or not elem.tail.strip():
+                    elem.tail = i
+                for elem in elem:
+                    indent(elem, level+1)
+                if not elem.tail or not elem.tail.strip():
+                    elem.tail = i
+            else:
+                if level and (not elem.tail or not elem.tail.strip()):
+                    elem.tail = i
+        
+        # Use built-in indent for Python 3.9+, otherwise use our custom function
         if sys.version_info.major == 3 and sys.version_info.minor >= 9:
             ET.indent(new_tree, space="  ", level=0)
+        else:
+            indent(new_data)
         
         print(f"Saving new XML to: {xml_output}")
-        new_tree.write(xml_output, encoding='utf-8', xml_declaration=True)
+        # Use encoding and method parameters to ensure consistent formatting
+        new_tree.write(
+            xml_output, 
+            encoding='utf-8', 
+            xml_declaration=True, 
+            method="xml", 
+            short_empty_elements=False
+        )
         print("Done.")
     except PermissionError as e:
         print(f"Error: Permission denied when saving output file. {e}", file=sys.stderr)

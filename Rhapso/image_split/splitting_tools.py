@@ -137,6 +137,17 @@ def split_images(
         seq_desc = xml_tree.find('SequenceDescription')
         img_loader = seq_desc.find('ImageLoader') if seq_desc is not None else None
         
+        if img_loader is not None:
+            # Clone the existing loader to become the inner duplicate
+            inner = copy.deepcopy(img_loader)
+            # Create a new outer wrapper with the same tag & format
+            outer = ET.Element(img_loader.tag, {'format': img_loader.get('format')})
+            outer.append(inner)
+            # Replace the original loader with our two-level one
+            idx = list(seq_desc).index(img_loader)
+            seq_desc.remove(img_loader)
+            seq_desc.insert(idx, outer)
+
         # Get timepoints from sequence description
         timepoints = seq_desc.find('Timepoints') if seq_desc is not None else None
         
