@@ -574,9 +574,63 @@ def split_images(
             if xml_tree.find(tag) is None:
                 ET.SubElement(xml_tree, tag)
 
+        # --- Ensure each ViewRegistration has exactly: Translation, actual split, identity split ---
+        view_regs = xml_tree.find('ViewRegistrations')
+        if view_regs is not None:
+            for vreg in view_regs.findall('ViewRegistration'):
+                transforms = vreg.findall('ViewTransform')
+                # check for nominal‐grid translation
+                has_nom = any(
+                    t.find('Name') is not None and t.find('Name').text == "Translation to Nominal Grid"
+                    for t in transforms
+                )
+                # detect existing splitting transforms
+                split_ts = [t for t in transforms
+                            if t.find('Name') is not None and t.find('Name').text == "Image Splitting"]
+                has_act = False
+                has_id  = False
+                for t in split_ts:
+                    aff = t.find('affine')
+                    if aff is None: continue
+                    vals = [float(x) for x in aff.text.strip().split()]
+                    # translation components at indices 3,7,11
+                    tx, ty, tz = vals[3], vals[7], vals[11]
+                    if tx == 0 and ty == 0 and tz == 0:
+                        has_id = True
+                    else:
+                        has_act = True
+                # get interval for actual translation
+                sid = vreg.get('setup')
+                interval = newSetupId2Interval.get(int(sid)) if sid and sid.isdigit() else None
+                # add missing transforms
+                if not has_nom:
+                    tn = ET.SubElement(vreg, 'ViewTransform', type="affine")
+                    ET.SubElement(tn, 'Name').text = "Translation to Nominal Grid"
+                    # Optionally build nominal transform dynamically here
+                    ET.SubElement(tn, 'affine').text = "1.0 0.0 0.0 0.0 0.0 1.0 0.0 0.0 0.0 0.0 1.0 0.0"
+                if not has_act and interval:
+                    ta = ET.SubElement(vreg, 'ViewTransform', type="affine")
+                    ET.SubElement(ta, 'Name').text = "Image Splitting"
+                    tx, ty, tz = interval['min']
+                    matrix = [
+                        1.0, 0.0, 0.0, tx,
+                        0.0, 1.0, 0.0, ty,
+                        0.0, 0.0, 1.0, tz
+                    ]
+                    ET.SubElement(ta, 'affine').text = " ".join(str(val) for val in matrix)
+                if not has_id:
+                    ti = ET.SubElement(vreg, 'ViewTransform', type="affine")
+                    ET.SubElement(ti, 'Name').text = "Image Splitting"
+                    identity = [
+                        1.0, 0.0, 0.0, 0.0,
+                        0.0, 1.0, 0.0, 0.0,
+                        0.0, 0.0, 1.0, 0.0
+                    ]
+                    ET.SubElement(ti, 'affine').text = " ".join(str(val) for val in identity)
+
         print(f"🔧 [split_images] Image splitting completed successfully.")
         return xml_tree
-        
+
     except Exception as e:
         print(f"❌ Error in split_images: {str(e)}")
         traceback.print_exc()
