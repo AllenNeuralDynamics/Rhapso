@@ -2,7 +2,9 @@ import xml.etree.ElementTree as ET
 import boto3
 import io
 
-# This class appends the transformation matrices to the existing XML file
+"""
+This class appends the final transformation matrices to exisiting XML file
+"""
 
 class SaveResults:
     def __init__(self, tiles, xml_file, xml_bucket_name, xml_file_path, fixed_views, file_source):
@@ -46,14 +48,14 @@ class SaveResults:
             if view in self.fixed_views:
                 affine.text = '1.0 0.0 0.0 0.0 0.0 1.0 0.0 0.0 0.0 0.0 1.0 0.0'
             else:
-                model = self.tiles.get(view, {}).get('model', {}).get('a', {})
+                tile = next((tile for tile in self.tiles if tile['view'] == view), None)
+                model = tile['model']['regularized']
+
                 if not model or all(float(val) == 0.0 for key, val in model.items()):
                     affine.text = '1.0 0.0 0.0 0.0 0.0 1.0 0.0 0.0 0.0 0.0 1.0 0.0'
                 else:   
                     affine.text = ' '.join(f"{model.get(f'm{i}{j}', 0.0):.4f}" for i in range(3) for j in range(4))
-                    print(affine.text)
-
-            # view_registration.insert(0, new_view_transform)
+                    print(f"tile: {view}, model: {affine.text}")
 
     def load_xml(self):
         """
@@ -68,4 +70,4 @@ class SaveResults:
         """
         self.load_xml()
         self.add_new_view_transform()
-        # self.save_xml()
+        self.save_xml()

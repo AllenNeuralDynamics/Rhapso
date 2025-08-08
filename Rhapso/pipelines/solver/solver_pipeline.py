@@ -1,27 +1,36 @@
 from Rhapso.data_prep.xml_to_dataframe import XMLToDataFrame
 from Rhapso.solver.global_optimization import GlobalOptimization
-from Rhapso.detection.view_transform_models import ViewTransformModels
+from Rhapso.solver.view_transforms import ViewTransformModels
 from Rhapso.solver.data_prep import DataPrep
 from Rhapso.solver.model_and_tile_setup import ModelAndTileSetup
-from Rhapso.solver.align_tiles import AlignTiles
+from Rhapso.solver.compute_tiles import ComputeTiles
+from Rhapso.solver.pre_align_tiles import PreAlignTiles
 from Rhapso.solver.save_results import SaveResults
 import boto3
 
-file_source = 's3'
-xml_file_path_output = "output/dataset-solve.xml"
-xml_bucket_name = "rhapso-matching-test"
-xml_file_path = "output/dataset-detection.xml"
-data_prefix = "output/interestpoints.n5" 
+# file_source = 's3'
+# xml_bucket_name = "rhapso-matching-test"
+# xml_file_path = "ip_rigid_alignment/rhapso_solver.xml"
+# data_prefix = "ip_rigid_alignment/interestpoints.n5" 
+# xml_file_path_output = "rhapso-solve.xml"
+# metrics_output_path = "output/metrics/metrics.json"
+
+file_source = 'local'
+xml_bucket_name = None
+xml_file_path = '/Users/seanfite/Desktop/ip_rigid_alignment/bigstitcher_rigid.xml'
+data_prefix = '/Users/seanfite/Desktop/ip_rigid_alignment/interestpoints.n5'
+xml_file_path_output = '/Users/seanfite/Desktop/ip_rigid_alignment/rhapso_solver.xml'
 metrics_output_path = "output/metrics/metrics.json"
-fixed_views = [ 'timepoint: 0, setup: 0', 'timepoint: 30, setup: 0']
-model = "affine"
-alignment_option = 1
+
+fixed_views = [ 'timepoint: 0, setup: 0' ]
+
+run_type = "affine"
 relative_threshold = 3.5
 absolute_threshold = 7.0
 min_matches = 3
-damp = .4
+damp = 1.0
 max_iterations= 100000
-max_allowed_error= 5.0
+max_allowed_error= float('inf')
 max_plateauwidth = 200
 s3 = boto3.client('s3')
 
@@ -57,24 +66,29 @@ print("Data prep is complete")
 # Create models, tiles, and point matches
 model_and_tile_setup = ModelAndTileSetup(connected_views, corresponding_interest_points, interest_points, 
                                          view_transform_matrices, view_id_set, label_map_global)
-tiles, model, pmc = model_and_tile_setup.run()
+model, pmc = model_and_tile_setup.run()
 print("Models and tiles created")
 
-# Use point matches to transform models
-align_tiles = AlignTiles(tiles, pmc, fixed_views)
-tiles = align_tiles.run()
-print("Tiles are aligned")
+# Find point matches and save to each tile
+compute_tiles = ComputeTiles(pmc, fixed_views, view_id_set)
+tiles = compute_tiles.run()
+print("Tiles are computed")
+
+# Use matches to update transformation matrices to represent rough alignment
+pre_align_tiles = PreAlignTiles()
+tc = pre_align_tiles.run(tiles)
+print("Tiles are pre-aligned")
 
 # Update all points with transform models and iterate through all tiles (views) and optimize alignment
-global_optimization = GlobalOptimization(tiles, pmc, fixed_views, data_prefix, alignment_option, relative_threshold,
+global_optimization = GlobalOptimization(tc, fixed_views, data_prefix, relative_threshold,
                                         absolute_threshold, min_matches, damp, max_iterations, max_allowed_error, 
-                                        max_plateauwidth, model, metrics_output_path)
+                                        max_plateauwidth, run_type, metrics_output_path)
 tiles = global_optimization.run()
 print("Global optimization complete")
 
 # Save results to xml - one new affine matrix per view registration
-# save_results = SaveResults(tiles, xml_file, xml_bucket_name, xml_file_path_output, fixed_views, file_source)
-# save_results.run()
+save_results = SaveResults(tiles, xml_file, xml_bucket_name, xml_file_path_output, fixed_views, file_source)
+save_results.run()
 print("Results have been saved")
 
 print("Solve is done")

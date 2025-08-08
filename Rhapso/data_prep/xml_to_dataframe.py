@@ -73,6 +73,9 @@ class XMLToDataFrame:
 
         # Convert the list to a DataFrame and return
         return pd.DataFrame(image_loader_data)
+    
+    def parse_image_loader_split_zarr(self):
+        pass
 
     def route_image_loader(self, root):
         """
@@ -81,12 +84,10 @@ class XMLToDataFrame:
         format_node = root.find(".//ImageLoader")
         format_type = format_node.get("format")
 
-        if "zarr" in format_type:
-            return self.parse_image_loader_zarr(root)
-        elif "filemap" in format_type:
+        if "filemap" in format_type:
             return self.parse_image_loader_tiff(root)
         else:
-            raise ValueError("Unsupported format type")
+            return self.parse_image_loader_zarr(root)
 
     def parse_view_setups(self, root):
         """
@@ -96,7 +97,8 @@ class XMLToDataFrame:
 
         for vs in root.findall(".//ViewSetup"):
             id_ = vs.find("id").text
-            name = vs.find("name").text
+            # name = vs.find("name").text
+            name = vs.findtext("name")
             size = vs.find("size").text
             voxel_unit = vs.find(".//voxelSize/unit").text
             voxel_size = " ".join(vs.find(".//voxelSize/size").text.split())

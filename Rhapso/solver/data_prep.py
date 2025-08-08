@@ -1,10 +1,11 @@
 import zarr
 import json
 import os
-import numpy as np
 import s3fs
 
-# This class fetches and preps data from n5
+"""
+This class fetches and preps n5 interest points data
+"""
 
 class DataPrep():
     def __init__(self, interest_points_df, view_transform_matrices, fixed_views, data_prefix, file_source):
@@ -57,26 +58,6 @@ class DataPrep():
                 data = json.load(file)
         
         return data
-    
-    def transform_points(self, view_id, corresponding_view_id, ip, corr_ip):
-        """
-        Transforms two points from local to world coordinates using their view transform matrices.
-        """
-        transform_matrix = self.view_transform_matrices[view_id]
-        corresponding_transform_matrix = self.view_transform_matrices[corresponding_view_id]
-
-        # Homogeneous coordinates
-        ip_hom = np.append(np.array(ip), 1)
-        corr_ip_hom = np.append(np.array(corr_ip), 1)
-
-        # Transform both points into world space
-        ip_world = transform_matrix @ ip_hom
-        corr_ip_world = corresponding_transform_matrix @ corr_ip_hom
-
-        ip_world = ip_world[:-1] 
-        corr_ip_world = corr_ip_world[:-1]  
-
-        return ip_world, corr_ip_world
         
     def get_corresponding_data_from_n5(self):
         """
@@ -100,6 +81,12 @@ class DataPrep():
                 id_map = root[correspondences_prefix].attrs['idMap']
             elif self.file_source == 'local':
                 id_map = self.load_json_data(attributes_path)['idMap']
+            
+            try:
+                interest_points_index_map = root[correspondences_prefix + '/data'][:]
+            except (KeyError, FileNotFoundError, AttributeError, TypeError):
+                print(f"⚠️ Skipping {view_id}: missing correspondences.")
+                continue
                 
             interest_points_index_map = root[correspondences_prefix + '/data'][:]
 
@@ -111,8 +98,6 @@ class DataPrep():
                 parts = corresponding_view_id.split(',')
                 timepoint, setup, label = parts[0], parts[1], parts[2]
                 corresponding_view_id = f"timepoint: {timepoint}, setup: {setup}"
-
-                # ip, corr_ip = self.transform_points(view_id, corresponding_view_id, self.interest_points[view_id][int(ip_index)], self.interest_points[corresponding_view_id][int(corr_index)])
 
                 ip = self.interest_points[view_id][int(ip_index)]
                 corr_ip = self.interest_points[corresponding_view_id][int(corr_index)]
@@ -163,19 +148,22 @@ class DataPrep():
             if view_id_key not in self.label_map_global:
                 self.label_map_global[view_id_key] = {}
 
-            self.label_map_global[view_id_key][row['label']] = 1.0
-    
-    def create_view_id_set(self):
-        """
-        Generates a set of unique (timepoint, setup) view ID pairs from the dataframe.
-        """
-        self.view_id_set = set(zip(self.interest_points_df['timepoint'], self.interest_points_df['setup']))
+            self.label_map_global[view_id_key][row['label']] = 1.0  
     
     def run(self):
         """
         Executes the entry point of the script.
         """
-        self.create_view_id_set()
+        # self.view_id_set = set(zip(self.interest_points_df['timepoint'], self.interest_points_df['setup']))
+        view_id_set = sorted(
+            set(zip(
+                self.interest_points_df['timepoint'].astype(int),
+                self.interest_points_df['setup'].astype(int)
+            )),
+            key=lambda x: (x[0], x[1])
+        )
+        self.view_id_set = [(str(tp), str(setup)) for tp, setup in view_id_set]
+
         self.build_label_map()
         self.get_all_interest_points_from_n5()
         self.get_corresponding_data_from_n5()
