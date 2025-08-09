@@ -10,623 +10,926 @@ from pathlib import Path
 from xml.etree import ElementTree as ET
 from itertools import product
 from Rhapso.image_split.split_views import closest_larger_long_divisable_by
+import copy
+import numpy as np
+from xml.etree import ElementTree as ET
+
 
 def last_image_size(length, size, overlap):
     """Calculates the size of the last tile in a dimension."""
     if length <= size:
         return length
-    
+
     step = size - overlap
     if step <= 0:
-         return length # Avoid infinite loops
-         
+        return length  # Avoid infinite loops
+
     num_blocks = math.ceil((length - size) / step) + 1
-    
+
     last_start = (num_blocks - 1) * step
     return length - last_start
 
 
-def distribute_intervals_fixed_overlap(input_dims, overlap, target_size, min_step_size, optimize):
-    """
-    Computes a set of overlapping intervals for each dimension.
-    """
-    interval_basis = []
-    input_mins = np.zeros(len(input_dims), dtype=np.int64)
+def last_image_size_java(l, s, o):
+    # Port of SplittingTools.lastImageSize(long l, long s, long o) with Java-style remainder
+    # Java remainder: a % b keeps the sign of 'a' (truncates toward zero). Python uses floor.
+    a = l - 2 * (s - o) - o
+    b = s - o
+    rem = a - int(a / b) * b if b != 0 else 0  # emulate Java's %
+    size = o + rem
+    if size < 0:
+        size = l + size
+    return int(size)
 
+
+def contains(point_location, interval):
+    """Checks if a point location is within a given interval."""
+    mins, maxs = interval
+    for d in range(len(point_location)):
+        if not (mins[d] <= point_location[d] <= maxs[d]):
+            return False
+    return True
+
+
+def split_dim_java(length, s, o, min0=0):
+    # Port of SplittingTools.splitDim(...) producing 1D [min,max] inclusive intervals
+    dim_intervals = []
+    from_v = int(min0)
+    max_v = int(min0 + length - 1)
+    while True:
+        to_v = min(max_v, from_v + int(s) - 1)
+        dim_intervals.append((from_v, to_v))
+        if to_v >= max_v:
+            break
+        from_v = to_v - int(o) + 1
+    return dim_intervals
+
+
+def distribute_intervals_fixed_overlap(
+    input_dims, overlap, target_size, min_step_size, optimize
+):
+    """
+    Port of SplittingTools.distributeIntervalsFixedOverlap(Interval, overlapPx, targetSize, minStepSize, optimize)
+    Returns list of (mins: np.ndarray, maxs: np.ndarray) 3D intervals (inclusive).
+    """
+    # Divisibility checks like Java
+    for d in range(len(input_dims)):
+        if int(target_size[d]) % int(min_step_size[d]) != 0:
+            print(
+                f"targetSize {target_size[d]} not divisible by minStepSize {min_step_size[d]} for dim={d}. stopping."
+            )
+            return []
+        if int(overlap[d]) % int(min_step_size[d]) != 0:
+            print(
+                f"overlapPx {overlap[d]} not divisible by minStepSize {min_step_size[d]} for dim={d}. stopping."
+            )
+            return []
+
+    interval_basis = []
+    # Java uses FinalInterval(oldSetup.getSize()) which implies min=0, max=size-1
     for d in range(len(input_dims)):
         dim_intervals = []
-        length = input_dims[d]
-        s = target_size[d]
-        o = overlap[d]
-        
-        if length <= s:
-            dim_intervals.append((input_mins[d], input_mins[d] + length - 1))
-        else:
-            final_size = s
-            # Simplified optimization logic
-            if optimize:
-                best_size = s
-                min_remainder = float('inf')
-                # Search for a better tile size to minimize the last tile's irregularity
-                for test_s in range(int(s * 0.8), int(s * 1.2)):
-                     test_s = closest_larger_long_divisable_by(test_s, min_step_size[d])
-                     if test_s <= o: continue
-                     rem = (length - test_s) % (test_s - o)
-                     if rem < min_remainder:
-                         min_remainder = rem
-                         best_size = test_s
-                final_size = best_size
+        length = int(input_dims[d])
+        s = int(target_size[d])
+        o = int(overlap[d])
 
-            # Split dimension based on final_size and overlap
-            start = input_mins[d]
-            while start < input_mins[d] + length:
-                end = min(start + final_size - 1, input_mins[d] + length - 1)
-                dim_intervals.append((start, end))
-                if end >= input_mins[d] + length - 1:
-                    break
-                start = end - o + 1
+        if length <= s:
+            # one block covering full extent [0, length-1]
+            dim_intervals.append((0, length - 1))
+        else:
+            l = length
+            last_size = last_image_size_java(l, s, o)
+            if optimize and last_size != s:
+                current_last = last_size
+                step = int(min_step_size[d])
+                if last_size <= s // 2:
+                    # increase image size until delta <= 0, then take lastSize
+                    lastS = s
+                    while True:
+                        lastS += step
+                        new_last = last_image_size_java(l, lastS, o)
+                        delta = current_last - new_last
+                        current_last = new_last
+                        if delta <= 0:
+                            break
+                    final_size = lastS
+                else:
+                    # decrease image size until delta >= 0, then take lastSize + step
+                    lastS = s
+                    while True:
+                        lastS -= step
+                        new_last = last_image_size_java(l, lastS, o)
+                        delta = current_last - new_last
+                        current_last = new_last
+                        if delta >= 0:
+                            break
+                    final_size = lastS + step
+            else:
+                final_size = s
+
+            dim_intervals.extend(split_dim_java(l, final_size, o, min0=0))
 
         interval_basis.append(dim_intervals)
-    
-    # Create combined intervals from per-dimension lists
+
+    # Combine per-dimension intervals into N-D intervals
+    # Match Java's LocalizingZeroMinIntervalIterator ordering: dim 0 fastest, last dim slowest
     interval_list = []
-    for combined in product(*interval_basis):
-        mins = [iv[0] for iv in combined]
-        maxs = [iv[1] for iv in combined]
-        interval_list.append((np.array(mins), np.array(maxs)))
-        
+    # Build over reversed dimension indices so that original dim 0 advances fastest
+    for rev_idx in product(*[range(len(b)) for b in interval_basis[::-1]]):
+        idx = rev_idx[::-1]
+        mins = [interval_basis[d][idx[d]][0] for d in range(len(interval_basis))]
+        maxs = [interval_basis[d][idx[d]][1] for d in range(len(interval_basis))]
+        interval_list.append(
+            (np.array(mins, dtype=np.int64), np.array(maxs, dtype=np.int64))
+        )
+
     return interval_list
 
+
 def max_interval_spread(old_setups, overlap, target_size, min_step_size, optimize):
-    """Calculates the maximum number of splits for any single view."""
+    """Calculates the maximum number of splits for any single view, with Java-like logging."""
+
+    # Normalize inputs for consistent printing
+    def _as_int_list(x):
+        if isinstance(x, np.ndarray):
+            return [int(v) for v in x.tolist()]
+        try:
+            return [int(v) for v in x]
+        except TypeError:
+            return [int(x)]
+
+    overlap_list = _as_int_list(overlap)
+    target_list = _as_int_list(target_size)
+    min_step_list = _as_int_list(min_step_size)
+
+    print("maxIntervalSpread inputs:")
+    print(f"oldSetups.size = {len(old_setups)}")
+    print(f"overlapPx = {overlap_list}")
+    print(f"targetSize = {target_list}")
+    print(f"minStepSize = {min_step_list}")
+    print(f"optimize = {'true' if optimize else 'false'}")
+
     max_splits = 1
+
     for old_setup in old_setups:
-        size_str = old_setup.find('size').text
-        dims = np.array([int(d) for d in size_str.split()])
-        intervals = distribute_intervals_fixed_overlap(dims, overlap, target_size, min_step_size, optimize)
-        max_splits = max(max_splits, len(intervals))
+        # Robustly fetch ViewSetup id
+        id_el = old_setup.find(".//{*}id") or old_setup.find("id")
+        try:
+            vs_id = int(id_el.text) if id_el is not None else -1
+        except Exception:
+            vs_id = -1
+
+        # Robustly fetch and parse size
+        size_el = old_setup.find(".//{*}size") or old_setup.find("size")
+        if size_el is None or size_el.text is None:
+            dims = np.array([0, 0, 0], dtype=np.int64)
+        else:
+            size_str = size_el.text.strip()
+            dims = np.array([int(d) for d in size_str.split()], dtype=np.int64)
+
+        intervals = distribute_intervals_fixed_overlap(
+            dims, overlap_list, target_list, min_step_list, optimize
+        )
+        num_intervals = len(intervals) if intervals is not None else 0
+        print(f"ViewSetup id: {vs_id}, intervals.size = {num_intervals}")
+
+        max_splits = max(max_splits, num_intervals)
+
+    print(f"maxIntervalSpread output: max = {max_splits}")
     return max_splits
 
-def split_images(
-        root, 
-        overlap, 
-        target_size, 
-        min_step_size, 
-        assign_illuminations=False,
-        optimize=False, 
-        fake_interest_points=False, 
-        fip_density=0.0, 
-        fip_min_num_points=0, 
-        fip_max_num_points=0, 
-        fip_error=0.0, 
-        fip_exclusion_radius=0.0):
-    """
-    Splits images according to the specified parameters, following the Java implementation.
-    
-    Args:
-        root: The input XML root/SpimData object
-        overlap: Array of overlap pixels [x, y, z]
-        target_size: Array of target sizes [x, y, z]
-        min_step_size: Array of minimum step sizes [x, y, z]
-        assign_illuminations: Boolean flag to assign illuminations from tile IDs
-        optimize: Boolean flag for optimization
-        fake_interest_points: Boolean flag to add interest points
-        fip_density: Point density parameter
-        fip_min_num_points: Minimum number of points
-        fip_max_num_points: Maximum number of points
-        fip_error: Error threshold
-        fip_exclusion_radius: Exclusion radius
-        
-    Returns:
-        New SpimData object with split views
-    """
-    import copy
-    import numpy as np
-    from xml.etree import ElementTree as ET
 
+def split_images(
+    spimData,
+    overlapPx,
+    targetSize,
+    minStepSize,
+    assingIlluminationsFromTileIds=False,
+    optimize=False,
+    addIPs=False,
+    pointDensity=0.0,
+    minPoints=0,
+    maxPoints=0,
+    error=0.0,
+    excludeRadius=0.0,
+):
     try:
-        print(f"\n🔧 [split_images] Starting to split images...")
-        print(f"🔧 [split_images] Parameters:")
-        print(f"  - Overlap: {overlap}")
-        print(f"  - Target size: {target_size}")
-        print(f"  - Min step size: {min_step_size}")
-        
         # Make a copy of the SpimData object to avoid modifying the original
-        new_spim_data = copy.deepcopy(root)
-        
+        new_spim_data = copy.deepcopy(spimData)
+
         # Get the XML tree from the spim_data
         xml_tree = new_spim_data
-        
-        # Get sequence description and image loader
-        seq_desc = xml_tree.find('SequenceDescription')
-        img_loader = seq_desc.find('ImageLoader') if seq_desc is not None else None
-        
-        if img_loader is not None:
-            # Clone the existing loader to become the inner duplicate
-            inner = copy.deepcopy(img_loader)
-            # Create a new outer wrapper with the same tag & format
-            outer = ET.Element(img_loader.tag, {'format': img_loader.get('format')})
-            outer.append(inner)
-            # Replace the original loader with our two-level one
-            idx = list(seq_desc).index(img_loader)
-            seq_desc.remove(img_loader)
-            seq_desc.insert(idx, outer)
+        """
+        Start of conversion
+        """
+        # get timepoints var
+        sequence_description = xml_tree.find(
+            ".//{*}SequenceDescription"
+        ) or xml_tree.find("SequenceDescription")
 
-        # Get timepoints from sequence description
-        timepoints = seq_desc.find('Timepoints') if seq_desc is not None else None
-        
-        # Get the view setups
-        view_setups = seq_desc.find('ViewSetups') if seq_desc is not None else None
-        if view_setups is None:
-            raise ValueError("No ViewSetups found in XML")
-        
-        setup_elements = view_setups.findall('ViewSetup')
-        if not setup_elements:
-            raise ValueError("No ViewSetup elements found in XML")
-        
-        # Find all existing IDs to avoid duplicates
-        existing_ids = set()
-        for setup in setup_elements:
-            id_elem = setup.find('id')
-            if id_elem is not None and id_elem.text is not None:
-                existing_ids.add(int(id_elem.text))
-        
-        # Find bounding boxes of all view setups
-        print(f"🔧 [split_images] Finding bounding boxes for all view setups...")
-        
-        # Create mappings for splitting
-        setup_id_to_grid = {}
-        new_view_setups = []
-        new2oldSetupId = {}
-        newSetupId2Interval = {}
-        next_id = max(existing_ids) + 1 if existing_ids else 0
-        
-        # Get ViewRegistrations section
-        view_registrations = xml_tree.find('ViewRegistrations')
-        
-        # Process each view setup
-        for setup in setup_elements:
-            # Extract setup ID with error checking
-            setup_id_elem = setup.find('id')
-            if setup_id_elem is None or setup_id_elem.text is None:
-                continue  # Skip setups without ID
-            setup_id = int(setup_id_elem.text)
-            print(f"🔧 [split_images] Processing ViewSetup {setup_id}...")
-            
-            # Try multiple approaches to get dimensions
-            dimensions = None
-            
-            # Approach 1: Standard size element
-            size_elem = setup.find('size')
-            if size_elem is not None:
-                width_elem = size_elem.find('width')
-                height_elem = size_elem.find('height')
-                depth_elem = size_elem.find('depth')
-                
-                if width_elem is not None and width_elem.text is not None and \
-                   height_elem is not None and height_elem.text is not None and \
-                   depth_elem is not None and depth_elem.text is not None:
-                    dimensions = [int(width_elem.text), int(height_elem.text), int(depth_elem.text)]
-            
-            # Approach 2: Look for voxelSize and voxelDimensions
-            if dimensions is None:
-                voxel_size = setup.find('voxelSize')
-                if voxel_size is not None:
-                    size_elem = voxel_size.find('size')
-                    if size_elem is not None and size_elem.text is not None:
-                        # Sometimes size is formatted as x,y,z
+        # --- BEGIN: Improved timepoints parsing and reporting ---
+        timepoints = None
+        tp_elements = []
+        tp_ids = []
+        tp_names = []
+        present_setup_ids = []
+        missing_setup_ids = []
+        present_setups_count = 0
+        missing_setups_count = 0
+
+        if sequence_description is not None:
+            # Try to find TimePoints element robustly
+            timepoints = sequence_description.find(".//{*}Timepoints") or sequence_description.find("Timepoints")
+            if timepoints is not None:
+                # Try to find all TimePoint elements (namespaced or not)
+                tp_elements = list(timepoints.findall(".//{*}TimePoint")) or list(timepoints.findall("TimePoint"))
+                if not tp_elements:
+                    # Try to parse integerpattern if present
+                    intpat = timepoints.find(".//{*}integerpattern") or timepoints.find("integerpattern")
+                    if intpat is not None and intpat.text:
+                        # Parse pattern like "0"
                         try:
-                            size_values = [float(val) for val in size_elem.text.split(',')]
-                            if len(size_values) == 3:
-                                dimensions = size_values
-                        except:
-                            pass
-            
-            # Approach 3: Look for dimensions directly in ViewSetup
-            if dimensions is None:
-                dim_x = setup.find('dimensionX')
-                dim_y = setup.find('dimensionY')
-                dim_z = setup.find('dimensionZ')
-                
-                if dim_x is not None and dim_x.text is not None and \
-                   dim_y is not None and dim_y.text is not None and \
-                   dim_z is not None and dim_z.text is not None:
-                    try:
-                        dimensions = [int(dim_x.text), int(dim_y.text), int(dim_z.text)]
-                    except:
-                        pass
-            
-            # Default if still not found
-            if dimensions is None:
-                # Use the target size as default dimensions if not specified
-                print(f"🔧 [split_images] Warning: Could not determine dimensions for ViewSetup {setup_id}. Using target size as dimensions.")
-                dimensions = [max(val, 1024) for val in target_size]  # Use target size or 1024 if target is small
-                
-            print(f"🔧 [split_images] ViewSetup {setup_id} dimensions: {dimensions}")
-            
-            # Calculate grid size based on target size and dimensions
-            grid = []
-            for d in range(3):
-                if target_size[d] <= 0:
-                    grid.append(1)  # No splitting for this dimension
+                            tp_id = int(intpat.text.strip())
+                            tp_elements = [intpat]
+                            tp_ids = [tp_id]
+                            tp_names = [str(tp_id)]
+                        except Exception:
+                            tp_ids = []
+                            tp_names = []
                 else:
-                    # Calculate number of blocks with step size constraints
-                    step = max(min_step_size[d], 1)  # Ensure step is at least 1
-                    size = ((dimensions[d] + target_size[d] - 1) // target_size[d]) * step
-                    grid.append(size)
-                    
-            print(f"🔧 [split_images] ViewSetup {setup_id} grid: {grid}")
-            setup_id_to_grid[setup_id] = grid
-            
-            # Create new view setups for each grid position
-            for x in range(0, grid[0], min_step_size[0]):
-                for y in range(0, grid[1], min_step_size[1]):
-                    for z in range(0, grid[2], min_step_size[2]):
-                        if grid[0] > 1 or grid[1] > 1 or grid[2] > 1:
-                            # Create a new view setup only if we're actually splitting
-                            min_x = max(0, x - overlap[0])
-                            max_x = min(dimensions[0], x + target_size[0] + overlap[0])
-                            
-                            min_y = max(0, y - overlap[1])
-                            max_y = min(dimensions[1], y + target_size[1] + overlap[1])
-                            
-                            min_z = max(0, z - overlap[2])
-                            max_z = min(dimensions[2], z + target_size[2] + overlap[2])
-                            
-                            # Create a copy of the current view setup
-                            new_setup = copy.deepcopy(setup)
-                            
-                            # Update the ID
-                            id_elem = new_setup.find('id')
-                            if id_elem is not None:
-                                id_elem.text = str(next_id)
-                            else:
-                                # Create ID element if it doesn't exist
-                                id_elem = ET.SubElement(new_setup, 'id')
-                                id_elem.text = str(next_id)
-                            
-                            # Update the name to include grid position
-                            name_elem = new_setup.find('name')
-                            orig_name = "setup" if name_elem is None or name_elem.text is None else name_elem.text
-                            
-                            if name_elem is None:
-                                # Create name element if it doesn't exist
-                                name_elem = ET.SubElement(new_setup, 'name')
-                            
-                            name_elem.text = f"{orig_name}_grid_{x}_{y}_{z}"
-                            
-                            # Store the bounding box information (for future use)
-                            bbox = {
-                                'min': [min_x, min_y, min_z],
-                                'max': [max_x, max_y, max_z],
-                                'original_setup_id': setup_id
-                            }
-                            
-                            # Update the view setup with the bounding box information
-                            # This could be stored as attributes or child elements
-                            new_view_setups.append((new_setup, bbox))
-                            # --- Add to SetupIds mapping ---
-                            new2oldSetupId[next_id] = setup_id
-                            newSetupId2Interval[next_id] = {
-                                "min": [min_x, min_y, min_z],
-                                "max": [max_x, max_y, max_z]
-                            }
-                            next_id += 1
-        
-        # --- Collect new view setups and mappings ---
-        new2oldSetupId = {}
-        newSetupId2Interval = {}
-        new_view_setups = []
-        next_id = 0
+                    for tp in tp_elements:
+                        # Try to get id from attribute or child
+                        tp_id = None
+                        tp_name = None
+                        if hasattr(tp, "attrib") and "id" in tp.attrib:
+                            try:
+                                tp_id = int(tp.get("id"))
+                            except Exception:
+                                tp_id = tp.get("id")
+                        if tp_id is None:
+                            tpid_el = tp.find(".//{*}id") or tp.find("id")
+                            if tpid_el is not None and tpid_el.text:
+                                txt = tpid_el.text.strip()
+                                tp_id = int(txt) if txt.isdigit() else txt
+                        tp_ids.append(tp_id)
+                        tp_name = tp.get("name") if hasattr(tp, "attrib") and "name" in tp.attrib else None
+                        if tp_name is None:
+                            tpname_el = tp.find(".//{*}name") or tp.find("name")
+                            if tpname_el is not None and tpname_el.text:
+                                tp_name = tpname_el.text.strip()
+                        tp_names.append(tp_name if tp_name is not None else str(tp_id))
 
-        # Get timepoints as a list of ints
-        timepoints_elem = seq_desc.find('Timepoints')
-        timepoints = []
-        if timepoints_elem is not None:
-            pattern = timepoints_elem.find('integerpattern')
-            if pattern is not None and pattern.text is not None:
-                timepoints = [int(x) for x in pattern.text.strip().split()]
-        if not timepoints:
-            timepoints = [0]
+                # Find present/missing setups for each timepoint
+                view_setups_parent = sequence_description.find(".//{*}ViewSetups") or sequence_description.find("ViewSetups")
+                setup_elements = []
+                if view_setups_parent is not None:
+                    setup_elements = list(view_setups_parent.findall(".//{*}ViewSetup")) or list(view_setups_parent.findall("ViewSetup"))
+                present_setup_ids = []
+                for vs in setup_elements:
+                    id_el = vs.find(".//{*}id") or vs.find("id")
+                    if id_el is not None and id_el.text:
+                        present_setup_ids.append(int(id_el.text.strip()))
+                present_setups_count = len(present_setup_ids)
 
-        # For each original setup, split and collect info
-        for setup in setup_elements:
-            # Extract setup ID with error checking
-            setup_id_elem = setup.find('id')
-            if setup_id_elem is None or setup_id_elem.text is None:
-                continue  # Skip setups without ID
-            setup_id = int(setup_id_elem.text)
-            print(f"🔧 [split_images] Processing ViewSetup {setup_id}...")
-            
-            # Try multiple approaches to get dimensions
-            dimensions = None
-            
-            # Approach 1: Standard size element
-            size_elem = setup.find('size')
-            if size_elem is not None:
-                width_elem = size_elem.find('width')
-                height_elem = size_elem.find('height')
-                depth_elem = size_elem.find('depth')
-                
-                if width_elem is not None and width_elem.text is not None and \
-                   height_elem is not None and height_elem.text is not None and \
-                   depth_elem is not None and depth_elem.text is not None:
-                    dimensions = [int(width_elem.text), int(height_elem.text), int(depth_elem.text)]
-            
-            # Approach 2: Look for voxelSize and voxelDimensions
-            if dimensions is None:
-                voxel_size = setup.find('voxelSize')
-                if voxel_size is not None:
-                    size_elem = voxel_size.find('size')
-                    if size_elem is not None and size_elem.text is not None:
-                        # Sometimes size is formatted as x,y,z
-                        try:
-                            size_values = [float(val) for val in size_elem.text.split(',')]
-                            if len(size_values) == 3:
-                                dimensions = size_values
-                        except:
-                            pass
-            
-            # Approach 3: Look for dimensions directly in ViewSetup
-            if dimensions is None:
-                dim_x = setup.find('dimensionX')
-                dim_y = setup.find('dimensionY')
-                dim_z = setup.find('dimensionZ')
-                
-                if dim_x is not None and dim_x.text is not None and \
-                   dim_y is not None and dim_y.text is not None and \
-                   dim_z is not None and dim_z.text is not None:
-                    try:
-                        dimensions = [int(dim_x.text), int(dim_y.text), int(dim_z.text)]
-                    except:
-                        pass
-            
-            # Default if still not found
-            if dimensions is None:
-                # Use the target size as default dimensions if not specified
-                print(f"🔧 [split_images] Warning: Could not determine dimensions for ViewSetup {setup_id}. Using target size as dimensions.")
-                dimensions = [max(val, 1024) for val in target_size]  # Use target size or 1024 if target is small
-                
-            print(f"🔧 [split_images] ViewSetup {setup_id} dimensions: {dimensions}")
-            
-            # Calculate grid size based on target size and dimensions
-            grid = []
-            for d in range(3):
-                if target_size[d] <= 0:
-                    grid.append(1)  # No splitting for this dimension
+                # Try to find missing setups (not present in ViewSetups)
+                # For now, assume all setups are present
+                missing_setups_count = 0
+                missing_setup_ids = []
+
+                # Print summary
+                if tp_ids:
+                    tp_min = min(tp_ids)
+                    tp_max = max(tp_ids)
+                    print(f"TimePoints: count={len(tp_ids)}, idRange=[{tp_min}..{tp_max}]")
+                    for i, tp_id in enumerate(tp_ids):
+                        print(f"  - tpId={tp_id}, name={tp_names[i]}, presentSetups={present_setups_count}/{present_setups_count}, missingSetups={missing_setups_count}, presentSetupIds=[ {', '.join(str(sid) for sid in present_setup_ids)} ]")
                 else:
-                    # Calculate number of blocks with step size constraints
-                    step = max(min_step_size[d], 1)  # Ensure step is at least 1
-                    size = ((dimensions[d] + target_size[d] - 1) // target_size[d]) * step
-                    grid.append(size)
-                    
-            print(f"🔧 [split_images] ViewSetup {setup_id} grid: {grid}")
-            setup_id_to_grid[setup_id] = grid
-            
-            # Create new view setups for each grid position
-            for x in range(0, grid[0], min_step_size[0]):
-                for y in range(0, grid[1], min_step_size[1]):
-                    for z in range(0, grid[2], min_step_size[2]):
-                        if grid[0] > 1 or grid[1] > 1 or grid[2] > 1:
-                            # Create a new view setup only if we're actually splitting
-                            min_x = max(0, x - overlap[0])
-                            max_x = min(dimensions[0], x + target_size[0] + overlap[0])
-                            
-                            min_y = max(0, y - overlap[1])
-                            max_y = min(dimensions[1], y + target_size[1] + overlap[1])
-                            
-                            min_z = max(0, z - overlap[2])
-                            max_z = min(dimensions[2], z + target_size[2] + overlap[2])
-                            
-                            # Create a copy of the current view setup
-                            new_setup = copy.deepcopy(setup)
-                            
-                            # Update the ID
-                            id_elem = new_setup.find('id')
-                            if id_elem is not None:
-                                id_elem.text = str(next_id)
-                            else:
-                                # Create ID element if it doesn't exist
-                                id_elem = ET.SubElement(new_setup, 'id')
-                                id_elem.text = str(next_id)
-                            
-                            # Update the name to include grid position
-                            name_elem = new_setup.find('name')
-                            orig_name = "setup" if name_elem is None or name_elem.text is None else name_elem.text
-                            
-                            if name_elem is None:
-                                # Create name element if it doesn't exist
-                                name_elem = ET.SubElement(new_setup, 'name')
-                            
-                            name_elem.text = f"{orig_name}_grid_{x}_{y}_{z}"
-                            
-                            # Store the bounding box information (for future use)
-                            bbox = {
-                                'min': [min_x, min_y, min_z],
-                                'max': [max_x, max_y, max_z],
-                                'original_setup_id': setup_id
-                            }
-                            
-                            # Update the view setup with the bounding box information
-                            # This could be stored as attributes or child elements
-                            new_view_setups.append((new_setup, bbox))
-                            # --- Add to SetupIds mapping ---
-                            new2oldSetupId[next_id] = setup_id
-                            newSetupId2Interval[next_id] = {
-                                "min": [min_x, min_y, min_z],
-                                "max": [max_x, max_y, max_z]
-                            }
-                            next_id += 1
-
-        # --- Build <SequenceDescription> ---
-        seq_desc_elem = ET.Element("SequenceDescription")
-        # <ViewSetups>
-        view_setups_elem = ET.SubElement(seq_desc_elem, "ViewSetups")
-        for new_setup, bbox in new_view_setups:
-            # Extract info from new_setup and bbox as needed
-            vs_elem = ET.SubElement(view_setups_elem, "ViewSetup")
-            # id
-            id_elem = new_setup.find('id')
-            ET.SubElement(vs_elem, "id").text = id_elem.text if id_elem is not None else ""
-            # size
-            size_elem = new_setup.find('size')
-            if size_elem is not None and size_elem.text:
-                ET.SubElement(vs_elem, "size").text = size_elem.text
+                    print("TimePoints: No timepoints found.")
             else:
-                # fallback: use bbox max-min+1
-                size_str = " ".join(str(bbox['max'][i] - bbox['min'][i] + 1) for i in range(3))
-                ET.SubElement(vs_elem, "size").text = size_str
-            # voxelSize
-            voxel_elem = new_setup.find('voxelSize')
-            if voxel_elem is not None:
-                voxel_xml = ET.SubElement(vs_elem, "voxelSize")
-                unit_elem = voxel_elem.find('unit')
-                size_elem = voxel_elem.find('size')
-                ET.SubElement(voxel_xml, "unit").text = unit_elem.text if unit_elem is not None else "µm"
-                ET.SubElement(voxel_xml, "size").text = size_elem.text if size_elem is not None else "1.0 1.0 1.0"
-            # attributes
-            attrs_elem = new_setup.find('attributes')
-            if attrs_elem is not None:
-                attrs_xml = ET.SubElement(vs_elem, "attributes")
-                for attr in ["illumination", "channel", "tile", "angle"]:
-                    val_elem = attrs_elem.find(attr)
-                    ET.SubElement(attrs_xml, attr).text = val_elem.text if val_elem is not None else "0"
-        # <Attributes> blocks
-        # Illumination
-        illum_ids = set()
-        channel_ids = set()
-        tile_ids = set()
-        tile_locations = {}
-        angle_ids = set()
-        for new_setup, bbox in new_view_setups:
-            attrs_elem = new_setup.find('attributes')
-            if attrs_elem is not None:
-                illum_elem = attrs_elem.find('illumination')
-                channel_elem = attrs_elem.find('channel')
-                tile_elem = attrs_elem.find('tile')
-                angle_elem = attrs_elem.find('angle')
-                if illum_elem is not None and illum_elem.text is not None:
-                    illum_ids.add(illum_elem.text)
-                if channel_elem is not None and channel_elem.text is not None:
-                    channel_ids.add(channel_elem.text)
-                if tile_elem is not None and tile_elem.text is not None:
-                    tile_ids.add(tile_elem.text)
-                    # Try to get tile location from bbox or elsewhere
-                    tile_locations[tile_elem.text] = " ".join(str(x) for x in bbox['min'])
-                if angle_elem is not None and angle_elem.text is not None:
-                    angle_ids.add(angle_elem.text)
+                print("TimePoints: No Timepoints element found.")
+        else:
+            print("TimePoints: No SequenceDescription found.")
+        # --- END: Improved timepoints parsing and reporting ---
 
-        illum_elem = ET.SubElement(view_setups_elem, "Attributes", name="illumination")
-        for illum_id in sorted(illum_ids, key=lambda x: int(x)):
-            ill = ET.SubElement(illum_elem, "Illumination")
-            ET.SubElement(ill, "id").text = str(illum_id)
-            ET.SubElement(ill, "name").text = str(illum_id)
-        # Channel
-        chan_elem = ET.SubElement(view_setups_elem, "Attributes", name="channel")
-        for chan_id in sorted(channel_ids, key=lambda x: int(x)):
-            ch = ET.SubElement(chan_elem, "Channel")
-            ET.SubElement(ch, "id").text = str(chan_id)
-            ET.SubElement(ch, "name").text = str(chan_id)
-        # Tile
-        tile_elem = ET.SubElement(view_setups_elem, "Attributes", name="tile")
-        for tile_id in sorted(tile_ids, key=lambda x: int(x)):
-            t = ET.SubElement(tile_elem, "Tile")
-            ET.SubElement(t, "id").text = str(tile_id)
-            ET.SubElement(t, "name").text = str(tile_id)
-            ET.SubElement(t, "location").text = tile_locations.get(tile_id, "0 0 0")
-        # Angle
-        angle_elem = ET.SubElement(view_setups_elem, "Attributes", name="angle")
-        for angle_id in sorted(angle_ids, key=lambda x: int(x)):
-            ang = ET.SubElement(angle_elem, "Angle")
-            ET.SubElement(ang, "id").text = str(angle_id)
-            ET.SubElement(ang, "name").text = str(angle_id)
-        # <Timepoints>
-        timepoints_elem = ET.SubElement(seq_desc_elem, "Timepoints", type="pattern")
-        ET.SubElement(timepoints_elem, "integerpattern").text = " ".join(map(str, timepoints))
-        # <MissingViews /> as self-closing
-        ET.SubElement(seq_desc_elem, "MissingViews")
+        # get the old setups: sequenceDescription ViewSetups values
+        def _strip(tag):
+            return tag.split("}")[-1] if "}" in tag else tag
 
-        # --- Build <SetupIds> ---
-        setup_ids_elem = ET.Element("SetupIds")
-        for new_id in sorted(new2oldSetupId.keys()):
-            setup_def = ET.SubElement(setup_ids_elem, "SetupIdDefinition")
-            ET.SubElement(setup_def, "NewId").text = str(new_id)
-            ET.SubElement(setup_def, "OldId").text = str(new2oldSetupId[new_id])
-            interval = newSetupId2Interval[new_id]
-            ET.SubElement(setup_def, "min").text = " ".join(str(x) for x in interval["min"])
-            ET.SubElement(setup_def, "max").text = " ".join(str(x) for x in interval["max"])
+        view_setups_parent = None
+        if sequence_description is not None:
+            view_setups_parent = sequence_description.find(
+                ".//{*}ViewSetups"
+            ) or sequence_description.find("ViewSetups")
+        if view_setups_parent is None:
+            view_setups_parent = xml_tree.find(".//{*}ViewSetups") or xml_tree.find(
+                "ViewSetups"
+            )
 
-        # --- Insert into XML tree ---
-        # Find the outer ImageLoader (the one wrapping the inner)
-        seq_desc = xml_tree.find('SequenceDescription')
-        img_loader_outer = seq_desc.find('ImageLoader')
-        if img_loader_outer is not None:
-            # Insert SequenceDescription and SetupIds after the nested ImageLoader
-            # Remove any existing SequenceDescription/SetupIds under ImageLoader if present
-            for tag in ["SequenceDescription", "SetupIds"]:
-                for elem in img_loader_outer.findall(tag):
-                    img_loader_outer.remove(elem)
-            img_loader_outer.append(seq_desc_elem)
-            img_loader_outer.append(setup_ids_elem)
+        old_setups = []
+        if view_setups_parent is not None:
+            candidates = [
+                vs for vs in list(view_setups_parent) if _strip(vs.tag) == "ViewSetup"
+            ]
 
-        # --- Add empty elements at the end of root as self-closing ---
-        for tag in ["BoundingBoxes", "PointSpreadFunctions", "StitchingResults", "IntensityAdjustments"]:
-            if xml_tree.find(tag) is None:
-                ET.SubElement(xml_tree, tag)
+            def _get_vs_id(vs):
+                id_el = vs.find(".//{*}id") or vs.find("id")
+                try:
+                    return int(id_el.text) if id_el is not None else 0
+                except Exception:
+                    return 0
 
-        # --- Ensure each ViewRegistration has exactly: Translation, actual split, identity split ---
-        view_regs = xml_tree.find('ViewRegistrations')
-        if view_regs is not None:
-            for vreg in view_regs.findall('ViewRegistration'):
-                transforms = vreg.findall('ViewTransform')
-                # check for nominal‐grid translation
-                has_nom = any(
-                    t.find('Name') is not None and t.find('Name').text == "Translation to Nominal Grid"
-                    for t in transforms
+            old_setups = sorted(candidates, key=_get_vs_id)
+
+        print(f"Found and sorted {len(old_setups)} ViewSetups")
+
+        # var creation
+        # oldRegistrations
+        old_registrations = xml_tree.find(".//{*}ViewRegistrations") or xml_tree.find(
+            "ViewRegistrations"
+        )
+
+        # underlyingImgLoader
+        underlying_img_loader = None
+        if sequence_description is not None:
+            img_loader = (
+                sequence_description.find(".//{*}ImageLoader")
+                or sequence_description.find("ImageLoader")
+                or sequence_description.find(".//{*}ImgLoader")
+                or sequence_description.find("ImgLoader")
+            )
+            if img_loader is not None:
+                underlying_img_loader = copy.deepcopy(img_loader)
+                # Try to remove; if not a direct child, ignore failure safely
+                try:
+                    sequence_description.remove(img_loader)
+                except ValueError:
+                    pass  # Not a direct child; leave as-is
+
+        # new2oldSetupId
+        new2old_setup_id = {}
+
+        # newSetupId2Interval
+        new_setup_id2_interval = {}
+
+        # newSetups
+        new_setups = []
+
+        # newRegistrations
+        new_registrations = {}
+
+        # newInterestpoints
+        new_interestpoints = {}
+
+        # newId
+        new_id = 0
+
+        # maxIntervalSpread
+        max_interval_spread_value = max_interval_spread(
+            old_setups, overlapPx, targetSize, minStepSize, optimize
+        )
+        print(f"maxIntervalSpread = {max_interval_spread_value}")
+
+        # check that there is only one illumination
+        if assingIlluminationsFromTileIds:
+            # Try to derive unique illumination ids from ViewSetups
+            illum_ids = set()
+            for vs in old_setups:
+                illum_el = vs.find(".//{*}illumination") or vs.find("illumination")
+                if (
+                    illum_el is not None
+                    and illum_el.text
+                    and illum_el.text.strip().isdigit()
+                ):
+                    try:
+                        illum_ids.add(int(illum_el.text.strip()))
+                    except Exception:
+                        pass
+
+            # Fallback: count defined Illuminations under SequenceDescription
+            if not illum_ids and sequence_description is not None:
+                illums_parent = sequence_description.find(
+                    ".//{*}Illuminations"
+                ) or sequence_description.find("Illuminations")
+                if illums_parent is not None:
+                    illum_ids = {
+                        i
+                        for i, el in enumerate(list(illums_parent))
+                        if el.tag.split("}")[-1] == "Illumination"
+                    }
+
+            if len(illum_ids) > 1:
+                raise ValueError(
+                    "Cannot SplittingTools.assingIlluminationsFromTileIds because more than one Illumination exists."
                 )
-                # detect existing splitting transforms
-                split_ts = [t for t in transforms
-                            if t.find('Name') is not None and t.find('Name').text == "Image Splitting"]
-                has_act = False
-                has_id  = False
-                for t in split_ts:
-                    aff = t.find('affine')
-                    if aff is None: continue
-                    vals = [float(x) for x in aff.text.strip().split()]
-                    # translation components at indices 3,7,11
-                    tx, ty, tz = vals[3], vals[7], vals[11]
-                    if tx == 0 and ty == 0 and tz == 0:
-                        has_id = True
+
+        # create fakeLabel var
+        import time
+
+        fakeLabel = f"splitPoints_{int(time.time() * 1000)}"
+
+        # create rnd var
+        import random
+
+        rnd = random.Random(23424459)
+
+        # for loop through oldSetups
+        print(f"Splitting {len(old_setups)} old setups...")
+        for old_setup in old_setups:
+
+            # set vars 1
+            id_el = old_setup.find(".//{*}id") or old_setup.find("id")
+            oldID = int(id_el.text) if id_el is not None else None
+            oldTile = ""
+            tile_el = old_setup.find(".//{*}tile") or old_setup.find("tile")
+            if tile_el is not None:
+                tile_id_el = tile_el.find(".//{*}id") or tile_el.find("id")
+                tile_name_el = tile_el.find(".//{*}name") or tile_el.find("name")
+                tile_loc_el = tile_el.find(".//{*}location") or tile_el.find("location")
+                oldTile = {
+                    "id": int(tile_id_el.text) if tile_id_el is not None else None,
+                    "name": tile_name_el.text if tile_name_el is not None else None,
+                    "location": (
+                        [float(x) for x in tile_loc_el.text.strip().split()]
+                        if tile_loc_el is not None and tile_loc_el.text
+                        else None
+                    ),
+                }
+            else:
+                oldTile = None
+
+            localNewTileId = 0
+
+            # Print current loop index and variable values
+            print(
+                f"Loop index: {old_setups.index(old_setup)}, oldID: {oldID}, oldTile: {oldTile}, localNewTileId: {localNewTileId}"
+            )
+
+            # set vars 2
+            # angle
+            angle_el = old_setup.find(".//{*}angle") or old_setup.find("angle")
+            if angle_el is not None and angle_el.text:
+                angle_txt = angle_el.text.strip()
+                angle = int(angle_txt) if angle_txt.isdigit() else angle_txt
+            else:
+                angle = 0
+
+            # channel
+            channel_el = old_setup.find(".//{*}channel") or old_setup.find("channel")
+            if channel_el is not None and channel_el.text:
+                channel_txt = channel_el.text.strip()
+                channel = int(channel_txt) if channel_txt.isdigit() else channel_txt
+            else:
+                channel = 0
+
+            # illum
+            illum_el = old_setup.find(".//{*}illumination") or old_setup.find(
+                "illumination"
+            )
+            if illum_el is not None and illum_el.text:
+                illum_txt = illum_el.text.strip()
+                illum = int(illum_txt) if illum_txt.isdigit() else illum_txt
+            else:
+                illum = 0
+
+            # voxDim
+            vox_el = old_setup.find(".//{*}voxelSize") or old_setup.find("voxelSize")
+            voxDim = 0
+            if vox_el is not None:
+                # Try attributes first
+                size_text = vox_el.get("size") if hasattr(vox_el, "get") else None
+                unit = vox_el.get("unit") if hasattr(vox_el, "get") else None
+
+                # Children fallback
+                if size_text is None:
+                    size_child = vox_el.find(".//{*}size") or vox_el.find("size")
+                    size_text = (
+                        size_child.text.strip()
+                        if size_child is not None and size_child.text
+                        else None
+                    )
+                if unit is None:
+                    unit_child = vox_el.find(".//{*}unit") or vox_el.find("unit")
+                    unit = (
+                        unit_child.text.strip()
+                        if unit_child is not None and unit_child.text
+                        else None
+                    )
+
+                # Direct text fallback
+                if size_text is None and vox_el.text:
+                    size_text = vox_el.text.strip()
+
+                try:
+                    size_vals = (
+                        [float(x) for x in size_text.split()] if size_text else None
+                    )
+                except Exception:
+                    size_vals = None
+
+                # Only set dict if we parsed something meaningful
+                if size_vals is not None or unit is not None:
+                    voxDim = {"size": size_vals, "unit": unit}
+
+            print(f"angle: {angle}")
+            print(f"channel: {channel}")
+            print(f"illum: {illum}")
+            print(f"voxDim: {voxDim}")
+
+            # set vars 3
+            size_el = old_setup.find(".//{*}size") or old_setup.find("size")
+            if size_el is not None and size_el.text:
+                dims = [int(x) for x in size_el.text.strip().split()]
+            else:
+                dims = [0, 0, 0]
+
+            # input: interval [min, max] per dim (inclusive), equivalent of FinalInterval(oldSetup.getSize())
+            input = [(0, s - 1) for s in dims]
+
+            def _format_bounds(mins, maxs):
+                return (
+                    "["
+                    + ", ".join(str(v) for v in mins)
+                    + "] -> ["
+                    + ", ".join(str(v) for v in maxs)
+                    + "]"
+                )
+
+            def _format_interval_with_dims(mins, maxs):
+                dims_tuple = tuple(mx - mn + 1 for mn, mx in zip(mins, maxs))
+                return f"{_format_bounds(mins, maxs)}, dimensions {dims_tuple}"
+
+            # Log like IOFunctions.println/Util.printInterval (bounds only)
+            input_mins = [mn for mn, _ in input]
+            input_maxs = [mx for _, mx in input]
+            print(
+                f"ViewId {oldID} with interval {_format_bounds(input_mins, input_maxs)} will be split as follows: "
+            )
+
+            # intervals: distributeIntervalsFixedOverlap(...)
+            intervals = distribute_intervals_fixed_overlap(
+                dims, overlapPx, targetSize, minStepSize, optimize
+            )
+
+            # interval2ViewSetup map (empty for now, to be filled later)
+            interval2ViewSetup = {}
+
+            # Print Java-like parameters and interval list
+            print(f"Split parameters for ViewSetup {oldID}:")
+            print(
+                f"  input      = {_format_interval_with_dims(input_mins, input_maxs)}"
+            )
+            print(f"  overlapPx  = {[int(v) for v in overlapPx]}")
+            print(f"  targetSize = {[int(v) for v in targetSize]}")
+            # minStepSize may be a numpy array
+            print(
+                f"  minStep    = {[int(v) for v in (minStepSize.tolist() if hasattr(minStepSize, 'tolist') else minStepSize)]}"
+            )
+            print(f"  optimize   = {'true' if optimize else 'false'}")
+
+            if intervals is None:
+                print("  intervals  = null")
+            else:
+                print(f"  intervals ({len(intervals)}):")
+                for ii, (mins_arr, maxs_arr) in enumerate(intervals):
+                    mins = (
+                        [int(x) for x in mins_arr.tolist()]
+                        if hasattr(mins_arr, "tolist")
+                        else [int(x) for x in mins_arr]
+                    )
+                    maxs = (
+                        [int(x) for x in maxs_arr.tolist()]
+                        if hasattr(maxs_arr, "tolist")
+                        else [int(x) for x in maxs_arr]
+                    )
+                    print(f"    [{ii}] {_format_interval_with_dims(mins, maxs)}")
+
+            print(f"  interval2ViewSetup.size = {len(interval2ViewSetup)}")
+
+            # loop through intervals
+            print(f"Entering interval loop, total count: {len(intervals)}")
+            for i in range(len(intervals)):
+                (mins_arr, maxs_arr) = intervals[i]
+                mins = [
+                    int(x)
+                    for x in (
+                        mins_arr.tolist() if hasattr(mins_arr, "tolist") else mins_arr
+                    )
+                ]
+                maxs = [
+                    int(x)
+                    for x in (
+                        maxs_arr.tolist() if hasattr(maxs_arr, "tolist") else maxs_arr
+                    )
+                ]
+                print(f"        Processing interval index: {i + 1}")
+                print(
+                    f"        Interval {i + 1}: {_format_interval_with_dims(mins, maxs)}"
+                )
+
+                # interval loop 1
+                # from the new ID get the old ID and the corresponding interval
+                new2old_setup_id[new_id] = oldID
+                new_setup_id2_interval[new_id] = (mins_arr, maxs_arr)
+
+                # size/newDim equivalent
+                size = [int(mx - mn + 1) for mn, mx in zip(mins, maxs)]
+                newDim = tuple(size)
+
+                # translated tile location = oldTile.location + interval.min per dim
+                if isinstance(oldTile, dict) and oldTile.get("location") is not None:
+                    location = list(oldTile["location"])
+                else:
+                    location = [0.0] * len(mins)
+                for d in range(len(mins)):
+                    location[d] += mins[d]
+
+                # Print statement similar to Java's System.out.println
+                print(
+                    f"\tCreated new ViewSetup: newId={new_id}, oldID={oldID}, "
+                    f"interval={_format_bounds(mins, maxs)}, size={size}, location={location}"
+                )
+
+                # interval loop 2
+                # compute new tile id and create new tile dict
+                old_tile_id = (
+                    oldTile["id"]
+                    if isinstance(oldTile, dict) and oldTile.get("id") is not None
+                    else 0
+                )
+                newTileId = old_tile_id * max_interval_spread_value + localNewTileId
+                localNewTileId += 1
+                newTile = {
+                    "id": newTileId,
+                    "name": str(newTileId),
+                    "location": location,
+                }
+
+                # illumination for new setup
+                newIllum = (
+                    {"id": old_tile_id, "name": f"old_tile_{old_tile_id}"}
+                    if assingIlluminationsFromTileIds
+                    else illum
+                )
+
+                # create a Python dict for the new setup
+                newSetup = {
+                    "id": new_id,
+                    "dim": newDim,
+                    "voxDim": voxDim,
+                    "tile": newTile,
+                    "channel": channel,
+                    "angle": angle,
+                    "illum": newIllum,
+                }
+                new_setups.append(newSetup)
+
+                # map interval -> newSetup (use tuple(mins), tuple(maxs) as key)
+                interval_key = (tuple(mins), tuple(maxs))
+                interval2ViewSetup[interval_key] = newSetup
+
+                # Print statements for newly created objects
+                print(
+                    f"\tCreated newTile: id={newTile['id']}, name={newTile['name']}, location={newTile['location']}"
+                )
+                if isinstance(newIllum, dict):
+                    print(
+                        f"\tCreated newIllum: id={newIllum.get('id')}, name={newIllum.get('name')}"
+                    )
+                else:
+                    print(f"\tCreated newIllum: id={newIllum}")
+                channel_id = (
+                    channel
+                    if isinstance(channel, int)
+                    else (channel.get("id") if isinstance(channel, dict) else channel)
+                )
+                angle_id = (
+                    angle
+                    if isinstance(angle, int)
+                    else (angle.get("id") if isinstance(angle, dict) else angle)
+                )
+                illum_id = (
+                    newIllum.get("id") if isinstance(newIllum, dict) else newIllum
+                )
+                vox_unit = voxDim.get("unit") if isinstance(voxDim, dict) else "null"
+                print(
+                    f"\tCreated newSetup: id={newSetup['id']}, tileId={newTile['id']}, channel={channel_id if channel_id is not None else 'null'}, angle={angle_id if angle_id is not None else 'null'}, illum={illum_id if illum_id is not None else 'null'}, dim={size}, voxDim={vox_unit}"
+                )
+                print("")
+
+                # timepoint loop start
+                # Use the same logic as in the timepoints summary: check for integerpattern if no TimePoint elements
+                tp_elements = []
+                if timepoints is not None:
+                    tp_elements = list(timepoints.findall(".//{*}TimePoint")) or list(timepoints.findall("TimePoint"))
+                    if not tp_elements:
+                        # Try integerpattern fallback
+                        intpat = timepoints.find(".//{*}integerpattern") or timepoints.find("integerpattern")
+                        if intpat is not None and intpat.text:
+                            tp_id = intpat.text.strip()
+                            tp_elements = [intpat]
+                tp_total = len(tp_elements)
+                print(f"\tStarting timepoint loop for interval index {i}: {tp_total} timepoints total.")
+                tpIdx = 0
+                for tp in tp_elements:
+                    # Resolve timepoint id from attribute or child element or integerpattern
+                    tp_id = None
+                    if hasattr(tp, "attrib") and "id" in tp.attrib:
+                        try:
+                            tp_id = int(tp.get("id"))
+                        except Exception:
+                            tp_id = tp.get("id")
+                    if tp_id is None:
+                        tpid_el = tp.find(".//{*}id") or tp.find("id")
+                        if tpid_el is not None and tpid_el.text:
+                            txt = tpid_el.text.strip()
+                            tp_id = int(txt) if txt.isdigit() else txt
+                        elif tp.tag.lower().endswith("integerpattern") and tp.text:
+                            tp_id = int(tp.text.strip()) if tp.text.strip().isdigit() else tp.text.strip()
+                        else:
+                            tp_id = "unknown"
+                    print(f"\t\tProcessing timepoint {tpIdx + 1}/{tp_total} (id={tp_id})")
+                    tpIdx += 1
+
+                    # timepoint loop var setup CODE START
+                    # Build oldViewId and fetch oldVR from <ViewRegistrations>
+                    oldViewId_str = f"ViewId{{timepoint={tp_id}, setup={oldID}}}"
+                    oldVR_el = None
+                    if old_registrations is not None:
+                        vr_candidates = list(old_registrations.findall(".//{*}ViewRegistration")) or list(old_registrations.findall("ViewRegistration"))
+                        for vr in vr_candidates:
+                            if str(vr.get("timepoint")) == str(tp_id) and str(vr.get("setup")) == str(oldID):
+                                oldVR_el = vr
+                                break
+
+                    # Extract transformList (name + 12-number row-packed affine) from oldVR
+                    transformList = []
+                    old_transform_count = 0
+                    if oldVR_el is not None:
+                        vt_elems = list(oldVR_el.findall(".//{*}ViewTransform")) or list(oldVR_el.findall("ViewTransform"))
+                        for vt in vt_elems:
+                            name_el = vt.find(".//{*}Name") or vt.find("Name")
+                            aff_el = vt.find(".//{*}affine") or vt.find("affine")
+                            name = name_el.text.strip() if (name_el is not None and name_el.text) else ""
+                            affine_vals = []
+                            if aff_el is not None and aff_el.text:
+                                try:
+                                    affine_vals = [float(x) for x in aff_el.text.strip().split()]
+                                except Exception:
+                                    affine_vals = []
+                            transformList.append({"name": name, "affine": affine_vals})
+                        old_transform_count = len(transformList)
+
+                    # Create translation (3x4) for current interval mins and append as "Image Splitting"
+                    tx = float(mins[0] if len(mins) > 0 else 0.0)
+                    ty = float(mins[1] if len(mins) > 1 else 0.0)
+                    tz = float(mins[2] if len(mins) > 2 else 0.0)
+                    translation_affine = [1.0, 0.0, 0.0, tx, 0.0, 1.0, 0.0, ty, 0.0, 0.0, 1.0, tz]
+                    transform = {"name": "Image Splitting", "affine": translation_affine}
+                    transformList = list(transformList)  # copy
+                    transformList.append(transform)
+
+                    # Build newViewId and newVR, add to new_registrations
+                    newViewId_key = (int(tp_id) if str(tp_id).isdigit() else tp_id, new_id)
+                    newVR = {
+                        "timepoint": newViewId_key[0],
+                        "setup": new_id,
+                        "transforms": transformList,
+                    }
+                    new_registrations[newViewId_key] = newVR
+
+                    # Interest points placeholders: discover oldVipl presence in <ViewInterestPoints>
+                    vip_root = xml_tree.find(".//{*}ViewInterestPoints") or xml_tree.find("ViewInterestPoints")
+                    oldVipl = None
+                    if vip_root is not None:
+                        vipl_files = list(vip_root.findall(".//{*}ViewInterestPointsFile")) or list(vip_root.findall("ViewInterestPointsFile"))
+                        for vf in vipl_files:
+                            if str(vf.get("timepoint")) == str(tp_id) and str(vf.get("setup")) == str(oldID):
+                                oldVipl = {"timepointId": int(tp_id) if str(tp_id).isdigit() else tp_id, "viewSetupId": oldID}
+                                break
+                    newVipl = {"timepointId": newViewId_key[0], "viewSetupId": new_id}
+
+                    # --- timepoint loop var setup checkpoint ---
+                    print("\n\t\t--- timepoint loop var setup checkpoint ---")
+                    print(f"\t\toldViewId: {oldViewId_str}")
+                    if oldVR_el is None:
+                        print("\t\toldVR: null")
                     else:
-                        has_act = True
-                # get interval for actual translation
-                sid = vreg.get('setup')
-                interval = newSetupId2Interval.get(int(sid)) if sid and sid.isdigit() else None
-                # add missing transforms
-                if not has_nom:
-                    tn = ET.SubElement(vreg, 'ViewTransform', type="affine")
-                    ET.SubElement(tn, 'Name').text = "Translation to Nominal Grid"
-                    # Optionally build nominal transform dynamically here
-                    ET.SubElement(tn, 'affine').text = "1.0 0.0 0.0 0.0 0.0 1.0 0.0 0.0 0.0 0.0 1.0 0.0"
-                if not has_act and interval:
-                    ta = ET.SubElement(vreg, 'ViewTransform', type="affine")
-                    ET.SubElement(ta, 'Name').text = "Image Splitting"
-                    tx, ty, tz = interval['min']
-                    matrix = [
-                        1.0, 0.0, 0.0, tx,
-                        0.0, 1.0, 0.0, ty,
-                        0.0, 0.0, 1.0, tz
-                    ]
-                    ET.SubElement(ta, 'affine').text = " ".join(str(val) for val in matrix)
-                if not has_id:
-                    ti = ET.SubElement(vreg, 'ViewTransform', type="affine")
-                    ET.SubElement(ti, 'Name').text = "Image Splitting"
-                    identity = [
-                        1.0, 0.0, 0.0, 0.0,
-                        0.0, 1.0, 0.0, 0.0,
-                        0.0, 0.0, 1.0, 0.0
-                    ]
-                    ET.SubElement(ti, 'affine').text = " ".join(str(val) for val in identity)
+                        print(f"\t\toldVR: ViewRegistration with {old_transform_count} transforms")
+                    last_name = transformList[-1]["name"] if len(transformList) > 0 else "n/a"
+                    print(f"\t\ttransformList: size={len(transformList)}, last transform name={last_name}")
+                    # Match Java-like printing for translation and row-packed copy
+                    trans_tuple_str = ", ".join(f"{v:.1f}" if float(v).is_integer() else f"{v}" for v in translation_affine)
+                    print(f"\t\ttranslation: 3d-affine: ({trans_tuple_str})")
+                    print(f"\t\ttransform: {transform['name']}, affine={[float(v) for v in translation_affine]}")
+                    newViewId_str = f"ViewId{{timepoint={newViewId_key[0]}, setup={new_id}}}"
+                    print(f"\t\tnewViewId: {newViewId_str}")
+                    print(f"\t\tnewVR: {'null' if newVR is None else f'ViewRegistration with {len(transformList)} transforms'}")
+                    print(f"\t\tnewRegistrations: total entries={len(new_registrations)}")
+                    print(f"\t\tnewVipl: timepointId={newVipl['timepointId']}, viewSetupId={newVipl['viewSetupId']}")
+                    if oldVipl is None:
+                        print("\t\toldVipl: null")
+                    else:
+                        print(f"\t\toldVipl: timepointId={oldVipl['timepointId']}, viewSetupId={oldVipl['viewSetupId']}")
+                    print("\t\t--- end checkpoint ---\n")
+                    # timepoint loop var setup CODE END 
+
+                    # only update interest points for present views
+                    # oldVipl may be null for missing views
+                    missing_views_el = xml_tree.find(".//{*}MissingViews")
+                    is_missing = False
+                    if missing_views_el is not None:
+                        # Check if the current viewId is in the list of missing views
+                        for view in missing_views_el.findall(".//{*}View") or missing_views_el.findall("View"):
+                            if view.get("timepoint") == str(tp_id) and view.get("setup") == str(oldID):
+                                is_missing = True
+                                break
+                    
+                    # The condition is true if the view is NOT missing.
+                    # This matches the Java logic: `!missingViews.contains(oldViewId)`
+                    if not is_missing:
+                        labelIdx = 0
+                        
+                        # Find all labels for the old view
+                        old_labels = []
+                        if vip_root is not None:
+                            for vf in vip_root.findall(".//{*}ViewInterestPointsFile") or vip_root.findall("ViewInterestPointsFile"):
+                                if vf.get("timepoint") == str(tp_id) and vf.get("setup") == str(oldID):
+                                    if vf.get("label"):
+                                        old_labels.append(vf.get("label"))
+                        
+                        for label in old_labels:
+                            print(f"\t\tProcessing label index: {labelIdx}, label: {label}")
+                            id = 0
+                            labelIdx += 1
+
+                            # labels loop var creation
+                            newIp1 = []
+                            oldIpl1_el = None
+                            if vip_root is not None:
+                                for vf in vip_root.findall(".//{*}ViewInterestPointsFile") or vip_root.findall("ViewInterestPointsFile"):
+                                    if vf.get("timepoint") == str(tp_id) and vf.get("setup") == str(oldID) and vf.get("label") == label:
+                                        oldIpl1_el = vf
+                                        break
+                            
+                            # In Python, we don't load the actual points from file. 
+                            # This list would need to be populated for the loop to run.
+                            oldIp1 = [] # Placeholder for list of InterestPoint objects/dicts
+
+                            # ip for loop
+                            for ip in oldIp1:
+                                # ip is expected to be a dict with a 'location' key, e.g., {'location': [x, y, z]}
+                                if contains(ip['location'], (mins_arr, maxs_arr)):
+                                    l = list(ip['location'])
+                                    for d in range(len(l)):
+                                        l[d] -= mins_arr[d]
+                                    
+                                    newIp1.append({'id': id, 'location': l})
+                                    id += 1
+                        
+                        # adding random corresponding interest points in overlapping areas of introduced split views
+                        if addIPs:
+                            newIp = []
+                            id = 0
+
+                            # for each overlapping tile that has not been processed yet
+                            for j in range(i):
+                                # if addIps for loop
+                                
+                                pass # Rest of the loop logic will go here
+                            
+                            # In Python, we represent InterestPoints as a dictionary
+                            params_str = (
+                                f"Fake points for image splitting: overlapPx={list(overlapPx)}"
+                                f", targetSize={list(targetSize)}"
+                                f", minStepSize={list(minStepSize)}"
+                                f", optimize={optimize}"
+                                f", pointDensity={pointDensity}"
+                                f", minPoints={minPoints}"
+                                f", maxPoints={maxPoints}"
+                                f", error={error}"
+                                f", excludeRadius={excludeRadius}"
+                            )
+                            
+                            newIpl = {
+                                "label": fakeLabel,
+                                "points": newIp,
+                                "params": params_str,
+                                "corresponding_points": [] # Java: new ArrayList<>()
+                            }
+                            
+                            # newVipl is a dictionary in Python
+                            if 'interest_points_lists' not in newVipl:
+                                newVipl['interest_points_lists'] = {}
+                            newVipl['interest_points_lists'][fakeLabel] = newIpl
+                        
+                    new_interestpoints[newViewId_key] = newVipl
+
+
+                new_id += 1
+
+        """
+        End of conversion
+        """
 
         print(f"🔧 [split_images] Image splitting completed successfully.")
         return xml_tree

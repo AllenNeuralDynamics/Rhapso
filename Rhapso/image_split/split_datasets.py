@@ -30,11 +30,14 @@ def main():
     display_result = False
 
     # CLI user input values - these would be replaced with proper argument parsing
-    xml_input = "/mnt/c/Users/marti/Documents/allen/data/exaSPIM_686951_2025-02-25_09-45-02_alignment_2025-06-12_19-58-52/interest_point_detection/original_bigstitcher_ip.xml"
-    xml_output = "/mnt/c/Users/marti/Documents/allen/data/exaSPIM_686951_2025-02-25_09-45-02_alignment_2025-06-12_19-58-52/interest_point_detection/RHAPSO_OUT.xml"
-    target_image_size_string = "7000,7000,4000" 
+    xml_input = "/home/martin/Documents/Allen/Data/exaSPIM_686951 EXAMPLE/ip_affine_alignment/bigstitcher_affine.xml"
+    xml_output = "/home/martin/Documents/Allen/Data/exaSPIM_686951 EXAMPLE/results/bigstitcher_affine_split-RHAPSO.xml"
+    target_image_size_string = "7000,7000,4000"
     target_overlap_string = "128,128,128"
-
+    fake_interest_points = True
+    fip_exclusion_radius = 200
+    assign_illuminations = True
+    
     # Register a namespace to handle the default namespace in BigStitcher XML
     try:
         ET.register_namespace('', 'SpimData.xsd')
@@ -121,18 +124,18 @@ def main():
     try:
         print("\nStarting image splitting process...")
         new_data = split_images(
-            root=data_global,
-            overlap=[ox, oy, oz],
-            target_size=[sx, sy, sz],
-            min_step_size=min_step_size,
-            assign_illuminations=assign_illuminations,
-            optimize=(not disable_optimization),
-            fake_interest_points=fake_interest_points,
-            fip_density=fip_density,
-            fip_min_num_points=fip_min_num_points,
-            fip_max_num_points=fip_max_num_points,
-            fip_error=fip_error,
-            fip_exclusion_radius=fip_exclusion_radius
+            data_global,
+            [ox, oy, oz],
+            [sx, sy, sz],
+            min_step_size,
+            assign_illuminations,
+            not disable_optimization,
+            fake_interest_points,
+            fip_density,
+            fip_min_num_points,
+            fip_max_num_points,
+            fip_error,
+            fip_exclusion_radius
         )
         print("Splitting process finished.")
         if new_data is None:
