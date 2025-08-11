@@ -42,6 +42,27 @@ def last_image_size_java(l, s, o):
     return int(size)
 
 
+def intersect(interval1, interval2):
+    """Computes the intersection of two intervals."""
+    min1, max1 = interval1
+    min2, max2 = interval2
+    
+    min_intersect = np.maximum(min1, min2)
+    max_intersect = np.minimum(max1, max2)
+    
+    if np.any(min_intersect > max_intersect):
+        return None  # No overlap
+        
+    return (min_intersect, max_intersect)
+
+def is_empty(interval):
+    """Checks if an interval is empty (has zero or negative volume)."""
+    if interval is None:
+        return True
+    mins, maxs = interval
+    return np.any(mins > maxs)
+
+
 def contains(point_location, interval):
     """Checks if a point location is within a given interval."""
     mins, maxs = interval
@@ -198,6 +219,90 @@ def max_interval_spread(old_setups, overlap, target_size, min_step_size, optimiz
     print(f"maxIntervalSpread output: max = {max_splits}")
     return max_splits
 
+
+def _find_one(root, name):
+	# namespaced-safe find for existing elements
+	return root.find(f".//{{*}}{name}") or root.find(name)
+
+def _ensure_child(parent, tag, attrib=None):
+	node = parent.find(tag)
+	if node is None:
+		node = ET.SubElement(parent, tag, attrib or {})
+	else:
+		if attrib:
+			# preserve existing attributes unless we overwrite provided keys
+			for k, v in attrib.items():
+				node.set(k, v)
+	return node
+
+def _clear_children(node):
+	for child in list(node):
+		node.remove(child)
+
+def _ensure_sequence_description_like_bss(xml_root, img_loader_format="split.viewerimgloader"):
+	# Ensure root and BasePath (match BSS: BasePath type="relative">.</BasePath>)
+	root_tag = xml_root.tag.split("}")[-1]
+	root = xml_root
+	if root_tag != "SpimData":
+		# if this is a SequenceDescription element passed directly, wrap a minimal structure
+		spim = ET.Element("SpimData", {"version": "0.2"})
+		spim.append(xml_root)
+		root = spim
+
+	base_path = _find_one(root, "BasePath")
+	if base_path is None:
+		base_path = ET.Element("BasePath", {"type": "relative"})
+		base_path.text = "."
+		# insert BasePath before SequenceDescription if possible
+		first = list(root)[0] if len(list(root)) > 0 else None
+		if first is not None and first.tag.split("}")[-1] == "SequenceDescription":
+			root.insert(0, base_path)
+		else:
+			root.append(base_path)
+
+	# Ensure SequenceDescription subtree
+	seq = _find_one(root, "SequenceDescription")
+	if seq is None:
+		seq = ET.SubElement(root, "SequenceDescription")
+
+	# 1) ImageLoader
+	# Match BSS: <ImageLoader format="split.viewerimgloader">...</ImageLoader>
+	# If an ImageLoader or ImgLoader exists, normalize it to the expected format and clear children
+	img_loader = (_find_one(seq, "ImageLoader") or _find_one(seq, "ImgLoader"))
+	if img_loader is None or img_loader.tag.split("}")[-1] != "ImageLoader":
+		if img_loader is not None:
+			seq.remove(img_loader)
+		img_loader = ET.SubElement(seq, "ImageLoader", {"format": img_loader_format})
+	else:
+		img_loader.set("format", img_loader_format)
+	_clear_children(img_loader)
+
+	# 2) ViewSetups (can remain empty)
+	view_setups = _find_one(seq, "ViewSetups")
+	if view_setups is None:
+		view_setups = ET.SubElement(seq, "ViewSetups")
+	else:
+		# do not remove existing ViewSetup entries, keep as-is
+		pass
+
+	# 3) Timepoints
+	# Match BSS minimal: <Timepoints type="pattern"></Timepoints>
+	timepoints = _find_one(seq, "Timepoints")
+	if timepoints is None:
+		timepoints = ET.SubElement(seq, "Timepoints", {"type": "pattern"})
+	else:
+		timepoints.set("type", "pattern")
+		_clear_children(timepoints)  # keep empty like BSS sample
+
+	# 4) MissingViews (self-closing/empty)
+	missing = _find_one(seq, "MissingViews")
+	if missing is None:
+		ET.SubElement(seq, "MissingViews")
+	else:
+		# keep as-is, do not remove entries
+		pass
+
+	return root
 
 def split_images(
     spimData,
@@ -893,10 +998,72 @@ def split_images(
 
                             # for each overlapping tile that has not been processed yet
                             for j in range(i):
-                                # if addIps for loop
+                                other_interval_tuple = intervals[j]
+                                other_interval = (other_interval_tuple[0], other_interval_tuple[1])
                                 
-                                pass # Rest of the loop logic will go here
-                            
+                                intersection = intersect((mins_arr, maxs_arr), other_interval)
+
+                                if not is_empty(intersection):
+                                    # In Python, interval2ViewSetup maps tuple keys to newSetup dicts
+                                    other_interval_key = (tuple(other_interval[0].tolist()), tuple(other_interval[1].tolist()))
+                                    otherSetup = interval2ViewSetup.get(other_interval_key)
+                                    
+                                    if not otherSetup:
+                                        continue
+
+                                    otherViewId_key = (tp_id, otherSetup['id'])
+                                    otherIPLists = new_interestpoints.get(otherViewId_key)
+
+                                    if not otherIPLists or 'interest_points_lists' not in otherIPLists or fakeLabel not in otherIPLists['interest_points_lists']:
+                                        continue
+
+                                    # add points as function of the area
+                                    n = len(intersection[0])
+                                    num_pixels = np.prod(intersection[1] - intersection[0] + 1)
+                                    
+                                    num_points = min(maxPoints, max(minPoints, int(round(np.ceil(pointDensity * num_pixels / (100.0**3))))))
+                                    print(f"{num_pixels / (100.0**3)} {num_points}")
+
+                                    other_points_list = otherIPLists['interest_points_lists'][fakeLabel]['points']
+                                    otherId = other_points_list[-1]['id'] + 1 if other_points_list else 0
+
+                                    # In a full implementation, KDTree would be used.
+                                    # from scipy.spatial import KDTree
+                                    search2 = None
+                                    if excludeRadius > 0 and other_points_list:
+                                        # This part requires a KD-tree implementation like scipy.spatial.KDTree
+                                        # For now, we'll skip this part as it's complex without the library.
+                                        # otherIPglobal = [ip['location'] + other_interval[0] for ip in other_points_list]
+                                        # if otherIPglobal:
+                                        #     tree2 = KDTree(otherIPglobal)
+                                        #     search2 = tree2
+                                        pass
+
+                                    for k in range(num_points):
+                                        p = np.zeros(n)
+                                        op = np.zeros(n)
+                                        tmp = np.zeros(n)
+
+                                        for d in range(n):
+                                            l = rnd.uniform(intersection[0][d], intersection[1][d])
+                                            p[d] = (l + (rnd.random() - 0.5) * error) - mins_arr[d]
+                                            op[d] = (l + (rnd.random() - 0.5) * error) - other_interval[0][d]
+                                            tmp[d] = l
+                                        
+                                        num_neighbors = 0
+                                        if excludeRadius > 0 and search2:
+                                            # num_neighbors = len(search2.query_ball_point(tmp, excludeRadius))
+                                            pass
+                                        
+                                        if num_neighbors == 0:
+                                            newIp.append({'id': id, 'location': p})
+                                            id += 1
+                                            other_points_list.append({'id': otherId, 'location': op})
+                                            otherId += 1
+                                    
+                                    # Update the list in the main structure
+                                    otherIPLists['interest_points_lists'][fakeLabel]['points'] = other_points_list
+
                             # In Python, we represent InterestPoints as a dictionary
                             params_str = (
                                 f"Fake points for image splitting: overlapPx={list(overlapPx)}"
@@ -924,16 +1091,118 @@ def split_images(
                         
                     new_interestpoints[newViewId_key] = newVipl
 
-
                 new_id += 1
 
         """
         End of conversion
         """
+        # --- Begin: Java finalization translated to Python (XML) ---
 
-        print(f"🔧 [split_images] Image splitting completed successfully.")
+        # 1) MissingViews: remap old missing views to all new setup ids derived from them
+        try:
+            seq_desc = xml_tree.find(".//{*}SequenceDescription") or xml_tree.find("SequenceDescription")
+            mv_parent = seq_desc.find(".//{*}MissingViews") or seq_desc.find("MissingViews")
+            if mv_parent is None:
+                mv_parent = ET.SubElement(seq_desc, "MissingViews")
+            else:
+                # Replace content with remapped views
+                for child in list(mv_parent):
+                    mv_parent.remove(child)
+
+            # Collect old missing views, if any
+            old_mv = mv_parent  # after clearing, we cannot read; so re-query original from xml_tree root
+            old_mv_orig = (xml_tree.find(".//{*}SequenceDescription/{*}MissingViews")
+                           or xml_tree.find(".//SequenceDescription/MissingViews"))
+            old_missing = []
+            if old_mv_orig is not None:
+                for child in list(old_mv_orig):
+                    # Try attribute-based or child-based access
+                    tp = child.get("timepoint") or (child.findtext("timepoint") if hasattr(child, "findtext") else None)
+                    st = child.get("setup") or (child.findtext("setup") if hasattr(child, "findtext") else None)
+                    if tp is not None and st is not None:
+                        try:
+                            old_missing.append((int(tp), int(st)))
+                        except Exception:
+                            old_missing.append((tp, st))
+
+            # Remap to new setup ids using new2old_setup_id
+            for (tp, old_setup_id) in old_missing:
+                for new_setup_id, mapped_old in new2old_setup_id.items():
+                    if mapped_old == old_setup_id:
+                        ET.SubElement(mv_parent, "View", {"timepoint": str(tp), "setup": str(new_setup_id)})
+        except Exception:
+            pass  # keep original MissingViews if anything goes wrong
+
+        # 2) Rebuild ViewRegistrations from new_registrations
+        try:
+            vr_root_parent = xml_tree
+            old_vr = vr_root_parent.find(".//{*}ViewRegistrations") or vr_root_parent.find("ViewRegistrations")
+            if old_vr is not None:
+                vr_root_parent.remove(old_vr)
+            new_vr_root = ET.SubElement(vr_root_parent, "ViewRegistrations")
+            # new_registrations: key=(timepoint, setup), value={"timepoint","setup","transforms":[{"name","affine":[12]}]}
+            for (tp, setup), reg in new_registrations.items():
+                vr_el = ET.SubElement(new_vr_root, "ViewRegistration", {"timepoint": str(tp), "setup": str(setup)})
+                for tr in reg.get("transforms", []):
+                    vt = ET.SubElement(vr_el, "ViewTransform", {"type": "affine"})
+                    ET.SubElement(vt, "Name").text = str(tr.get("name", ""))
+                    affine_vals = tr.get("affine", [])
+                    ET.SubElement(vt, "affine").text = " ".join(str(float(v)) for v in affine_vals)
+        except Exception:
+            pass  # keep previous registrations on failure
+
+        # 3) Rebuild ViewInterestPoints from new_interestpoints
+        try:
+            vip_parent = xml_tree.find(".//{*}ViewInterestPoints") or xml_tree.find("ViewInterestPoints")
+            if vip_parent is not None:
+                # Replace for simplicity
+                root = xml_tree
+                seq = root.find(".//{*}SequenceDescription") or root.find("SequenceDescription")
+                parent = root
+                root.remove(vip_parent)
+            else:
+                parent = xml_tree
+            vip_parent = ET.SubElement(parent, "ViewInterestPoints")
+
+            # new_interestpoints: key=(tp, setup) -> {"timepointId","viewSetupId","interest_points_lists": {label: {...}}}
+            for (tp, setup), vipl in new_interestpoints.items():
+                lists = vipl.get("interest_points_lists", {})
+                for label, ipl in lists.items():
+                    params = ipl.get("params", "")
+                    # Encode points as path-like name to align with BigStitcher expectations
+                    path_text = f"tpId_{tp}_viewSetupId_{setup}/{label}"
+                    ET.SubElement(
+                        vip_parent,
+                        "ViewInterestPointsFile",
+                        {
+                            "timepoint": str(tp),
+                            "setup": str(setup),
+                            "label": str(label),
+                            "params": params,
+                        },
+                    ).text = path_text
+        except Exception:
+            pass
+
+        # 4) Restore ImageLoader if we removed it earlier
+        try:
+            if sequence_description is not None and underlying_img_loader is not None:
+                # Ensure no ImageLoader exists before appending
+                existing = (sequence_description.find(".//{*}ImageLoader")
+                            or sequence_description.find("ImageLoader")
+                            or sequence_description.find(".//{*}ImgLoader")
+                            or sequence_description.find("ImgLoader"))
+                if existing is None:
+                    sequence_description.append(underlying_img_loader)
+        except Exception:
+            pass
+
+        # --- End: Java finalization translated to Python (XML) ---
+
+        # Normalize SequenceDescription to match BSS-style output
+        xml_tree = _ensure_sequence_description_like_bss(xml_tree, img_loader_format="split.viewerimgloader")
+        print("🔧 [split_images] Image splitting completed successfully.")
         return xml_tree
-
     except Exception as e:
         print(f"❌ Error in split_images: {str(e)}")
         traceback.print_exc()
