@@ -1,6 +1,9 @@
 import numpy as np
 from collections import defaultdict
 
+# ============================================================================
+# Mathematical Utilities
+# ============================================================================
 
 def gcd(a, b):
     """Calculate the greatest common divisor of two numbers."""
@@ -21,6 +24,39 @@ def next_multiple(a, b):
     return (a + b) - (a % b)
 
 
+# ============================================================================
+# XML Processing Utilities
+# ============================================================================
+
+def _find_one(root, name):
+    """Namespaced-safe find for existing elements."""
+    return root.find(f'.//{{*}}{name}') or root.find(name)
+
+
+def _find_all(root, name):
+    """Namespaced-safe findall for existing elements."""
+    return root.findall(f'.//{{*}}{name}') or root.findall(name)
+
+
+def _get_text_safe(elem, default=""):
+    """Safely extract text from XML element."""
+    if elem is not None and elem.text:
+        return elem.text.strip()
+    return default
+
+
+def _safe_eval(text, default=None):
+    """Safely evaluate text with fallback."""
+    try:
+        return eval(text) if text else default
+    except (SyntaxError, NameError):
+        return default
+
+
+# ============================================================================
+# Core Functions
+# ============================================================================
+
 def collect_image_sizes(root):
     """
     Collect image sizes from all ViewSetups in the XML.
@@ -32,14 +68,14 @@ def collect_image_sizes(root):
     """
     sizes = defaultdict(int)
     min_size = None
-    view_setups = root.find('SequenceDescription/ViewSetups')
+    view_setups = _find_one(root, 'SequenceDescription/ViewSetups')
     
     if view_setups is None:
         return dict(sizes), min_size
 
-    for vs in view_setups.findall('ViewSetup'):
-        size_elem = vs.find('size')
-        if size_elem is None or size_elem.text is None:
+    for vs in _find_all(view_setups, 'ViewSetup'):
+        size_elem = _find_one(vs, 'size')
+        if not size_elem or not size_elem.text:
             continue
             
         size_dims = np.array([int(d) for d in size_elem.text.split()])
@@ -67,31 +103,28 @@ def _is_multi_resolution_loader(img_loader):
 def _get_mipmap_resolutions(vs, nested_loader, img_loader, vs_id):
     """Extract mipmap resolutions from various possible locations in the XML."""
     # Try direct child of view setup
-    resolutions = vs.find('mipmapResolutions')
-    if resolutions is not None and resolutions.text:
-        try:
-            return eval(resolutions.text)
-        except (SyntaxError, NameError):
-            pass
+    resolutions = _find_one(vs, 'mipmapResolutions')
+    if resolutions:
+        result = _safe_eval(_get_text_safe(resolutions))
+        if result:
+            return result
     
     # Try nested structure
     if nested_loader is not None:
         setup_loader = nested_loader.find(f'SetupImgLoader[@id="{vs_id}"]')
         if setup_loader is not None:
-            resolutions = setup_loader.find('mipmapResolutions')
-            if resolutions is not None and resolutions.text:
-                try:
-                    return eval(resolutions.text)
-                except (SyntaxError, NameError):
-                    pass
+            resolutions = _find_one(setup_loader, 'mipmapResolutions')
+            if resolutions:
+                result = _safe_eval(_get_text_safe(resolutions))
+                if result:
+                    return result
     
     # Try main image loader
-    resolutions = img_loader.find('mipmapResolutions')
-    if resolutions is not None and resolutions.text:
-        try:
-            return eval(resolutions.text)
-        except (SyntaxError, NameError):
-            pass
+    resolutions = _find_one(img_loader, 'mipmapResolutions')
+    if resolutions:
+        result = _safe_eval(_get_text_safe(resolutions))
+        if result:
+            return result
     
     # Default mipmap resolutions for common multi-resolution formats
     return [
@@ -121,13 +154,13 @@ def find_min_step_size(root):
     min_step_size = np.array([1, 1, 1], dtype=np.int64)
     
     try:
-        img_loader = root.find('SequenceDescription/ImageLoader')
+        img_loader = _find_one(root, 'SequenceDescription/ImageLoader')
         if img_loader is None:
             return min_step_size
 
         # Check for multi-resolution support
         is_multi_res = _is_multi_resolution_loader(img_loader)
-        nested_loader = img_loader.find('ImageLoader')
+        nested_loader = _find_one(img_loader, 'ImageLoader')
         if nested_loader is not None:
             is_multi_res = is_multi_res or _is_multi_resolution_loader(nested_loader)
 
@@ -135,11 +168,11 @@ def find_min_step_size(root):
             return min_step_size
 
         # Process multi-resolution view setups
-        view_setups = root.findall('SequenceDescription/ViewSetups/ViewSetup')
+        view_setups = _find_all(root, 'SequenceDescription/ViewSetups/ViewSetup')
         
         for vs in view_setups:
-            vs_id = vs.find('id')
-            vs_id_text = vs_id.text if vs_id is not None else "unknown"
+            vs_id_elem = _find_one(vs, 'id')
+            vs_id_text = _get_text_safe(vs_id_elem, "unknown")
             
             mipmap_resolutions = _get_mipmap_resolutions(vs, nested_loader, img_loader, vs_id_text)
             

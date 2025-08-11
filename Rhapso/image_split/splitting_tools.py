@@ -1,5 +1,3 @@
-"""Simplified image splitting tools for Rhapso."""
-
 import math
 import numpy as np
 import copy
@@ -10,6 +8,101 @@ from xml.etree import ElementTree as ET
 from itertools import product
 from Rhapso.image_split.split_views import next_multiple
 
+
+# ============================================================================
+# Utility Functions
+# ============================================================================
+
+def _find_one(root, name):
+    """Namespaced-safe find for existing elements."""
+    return root.find(f".//{{*}}{name}") or root.find(name)
+
+
+def _find_all(root, name):
+    """Namespaced-safe findall for existing elements."""
+    return root.findall(f".//{{*}}{name}") or root.findall(name)
+
+
+def _get_text_safe(elem, default=""):
+    """Safely extract text from XML element."""
+    if elem is not None and elem.text:
+        return elem.text.strip()
+    return default
+
+
+def _get_attr_safe(elem, attr, default=None):
+    """Safely extract attribute from XML element."""
+    if elem is not None and hasattr(elem, "get"):
+        return elem.get(attr, default)
+    return default
+
+
+def _safe_int_parse(value, default=0):
+    """Safely parse integer value."""
+    try:
+        return int(value) if value is not None else default
+    except (ValueError, TypeError):
+        return default
+
+
+def _safe_float_parse(value, default=0.0):
+    """Safely parse float value."""
+    try:
+        return float(value) if value is not None else default
+    except (ValueError, TypeError):
+        return default
+
+
+def _extract_voxel_size(vox_el):
+    """Extract voxel size information from XML element."""
+    if vox_el is None:
+        return None
+    
+    # Try attributes first
+    size_text = _get_attr_safe(vox_el, "size")
+    unit = _get_attr_safe(vox_el, "unit")
+    
+    # Children fallback
+    if size_text is None:
+        size_child = _find_one(vox_el, "size")
+        size_text = _get_text_safe(size_child)
+    
+    if unit is None:
+        unit_child = _find_one(vox_el, "unit")
+        unit = _get_text_safe(unit_child)
+    
+    # Direct text fallback
+    if size_text is None and vox_el.text:
+        size_text = vox_el.text.strip()
+    
+    # Parse size values
+    size_vals = None
+    if size_text:
+        try:
+            size_vals = [float(x) for x in size_text.split()]
+        except Exception:
+            pass
+    
+    # Only return dict if we have meaningful data
+    if size_vals is not None or unit:
+        return {"size": size_vals, "unit": unit}
+    
+    return None
+
+
+def _create_affine_matrix(x_offset=0.0, y_offset=0.0, z_offset=0.0):
+    """Create standard affine transform matrix."""
+    return f"1.0 0.0 0.0 {x_offset} 0.0 1.0 0.0 {y_offset} 0.0 0.0 1.0 {z_offset}"
+
+
+def _create_identity_matrix():
+    """Create identity affine transform matrix."""
+    return "1.0 0.0 0.0 0.0 0.0 1.0 0.0 0.0 0.0 0.0 1.0 0.0"
+
+
+# ============================================================================
+# Core Mathematical Functions
+# ============================================================================
 
 def last_image_size(length, size, overlap):
     """Calculate the size of the last tile in a dimension."""
@@ -80,6 +173,7 @@ def split_dim_java(length, s, o, min0=0):
 
 def distribute_intervals_fixed_overlap(input_dims, overlap, target_size, min_step_size, optimize):
     """Port of Java SplittingTools.distributeIntervalsFixedOverlap."""
+    # Validation
     for d in range(len(input_dims)):
         if int(target_size[d]) % int(min_step_size[d]) != 0:
             logging.warning(f"targetSize {target_size[d]} not divisible by minStepSize {min_step_size[d]} for dim={d}")
@@ -127,9 +221,9 @@ def distribute_intervals_fixed_overlap(input_dims, overlap, target_size, min_ste
                 final_size = s
 
             dim_intervals = split_dim_java(l, final_size, o, min0=0)
-
         interval_basis.append(dim_intervals)
 
+    # Combine per-dimension intervals into N-D intervals
     interval_list = []
     for rev_idx in product(*[range(len(b)) for b in interval_basis[::-1]]):
         idx = rev_idx[::-1]
@@ -156,17 +250,17 @@ def max_interval_spread(old_setups, overlap, target_size, min_step_size, optimiz
 
     max_splits = 1
     for old_setup in old_setups:
-        id_el = old_setup.find(".//{*}id") or old_setup.find("id")
+        id_el = _find_one(old_setup, "id")
         try:
-            vs_id = int(id_el.text) if id_el is not None else -1
+            vs_id = _safe_int_parse(_get_text_safe(id_el), -1)
         except Exception:
             vs_id = -1
 
-        size_el = old_setup.find(".//{*}size") or old_setup.find("size")
-        if size_el is None or size_el.text is None:
+        size_el = _find_one(old_setup, "size")
+        if size_el is None or not size_el.text:
             dims = np.array([0, 0, 0], dtype=np.int64)
         else:
-            size_str = size_el.text.strip()
+            size_str = _get_text_safe(size_el)
             dims = np.array([int(d) for d in size_str.split()], dtype=np.int64)
 
         intervals = distribute_intervals_fixed_overlap(dims, overlap_list, target_list, min_step_list, optimize)
@@ -176,10 +270,9 @@ def max_interval_spread(old_setups, overlap, target_size, min_step_size, optimiz
     return max_splits
 
 
-def _find_one(root, name):
-    """Namespaced-safe find for existing elements."""
-    return root.find(f".//{{*}}{name}") or root.find(name)
-
+# ============================================================================
+# XML Structure Management
+# ============================================================================
 
 def _ensure_child(parent, tag, attrib=None):
     """Ensure a child element exists, creating it if necessary."""
@@ -352,20 +445,11 @@ def split_images(spimData, overlapPx, targetSize, minStepSize, assingIlluminatio
             
             # Extract voxel size
             vox_el = old_setup.find(".//{*}voxelSize") or old_setup.find("voxelSize")
-            voxDim = 0
-            if vox_el is not None:
-                size_text = vox_el.get("size") or (vox_el.findtext(".//{*}size") or vox_el.findtext("size"))
-                unit = vox_el.get("unit") or (vox_el.findtext(".//{*}unit") or vox_el.findtext("unit"))
-                if size_text or unit:
-                    try:
-                        size_vals = [float(x) for x in size_text.split()] if size_text else None
-                        voxDim = {"size": size_vals, "unit": unit}
-                    except Exception:
-                        pass
+            voxDim = _extract_voxel_size(vox_el)
 
             # Get dimensions
             size_el = old_setup.find(".//{*}size") or old_setup.find("size")
-            dims = [int(x) for x in size_el.text.strip().split()] if size_el is not None and size_el.text else [0, 0, 0]
+            dims = [int(x) for x in _get_text_safe(size_el).split()] if size_el is not None and size_el.text else [0, 0, 0]
             
             # Generate intervals
             intervals = distribute_intervals_fixed_overlap(dims, overlapPx, targetSize, minStepSize, optimize)
@@ -391,7 +475,7 @@ def split_images(spimData, overlapPx, targetSize, minStepSize, assingIlluminatio
                 if tile_el is not None:
                     tile_loc_el = tile_el.find(".//{*}location") or tile_el.find("location")
                     if tile_loc_el is not None and tile_loc_el.text:
-                        location = [float(x) for x in tile_loc_el.text.strip().split()]
+                        location = [float(x) for x in _get_text_safe(tile_loc_el).split()]
                         for d in range(len(mins)):
                             location[d] += mins[d]
                     else:
@@ -448,11 +532,11 @@ def split_images(spimData, overlapPx, targetSize, minStepSize, assingIlluminatio
                                 for vt in vt_elems:
                                     name_el = vt.find(".//{*}Name") or vt.find("Name")
                                     aff_el = vt.find(".//{*}affine") or vt.find("affine")
-                                    name = name_el.text.strip() if (name_el is not None and name_el.text) else ""
+                                    name = _get_text_safe(name_el) if name_el is not None else ""
                                     affine_vals = []
                                     if aff_el is not None and aff_el.text:
                                         try:
-                                            affine_vals = [float(x) for x in aff_el.text.strip().split()]
+                                            affine_vals = [float(x) for x in _get_text_safe(aff_el).split()]
                                         except Exception:
                                             affine_vals = []
                                     transformList.append({"name": name, "affine": affine_vals})
@@ -508,8 +592,8 @@ def _rebuild_xml_structure(xml_tree, old_setups, new_setups, new2old_setup_id,
         old_missing = []
         if old_mv_orig is not None:
             for child in list(old_mv_orig):
-                tp = child.get("timepoint") or (child.findtext("timepoint") if hasattr(child, "findtext") else None)
-                st = child.get("setup") or (child.findtext("setup") if hasattr(child, "findtext") else None)
+                tp = _get_attr_safe(child, "timepoint") or (_get_text_safe(child.find("timepoint")) if hasattr(child, "findtext") else None)
+                st = _get_attr_safe(child, "setup") or (_get_text_safe(child.find("setup")) if hasattr(child, "findtext") else None)
                 if tp is not None and st is not None:
                     try:
                         old_missing.append((int(tp), int(st)))
@@ -532,16 +616,16 @@ def _rebuild_xml_structure(xml_tree, old_setups, new_setups, new2old_setup_id,
             # Extract original ViewRegistrations to get real affine transforms
             original_vr_elements = []
             for vr_elem in old_vr.findall(".//{*}ViewRegistration") or old_vr.findall("ViewRegistration"):
-                timepoint = vr_elem.get("timepoint")
-                setup = vr_elem.get("setup")
+                timepoint = _get_attr_safe(vr_elem, "timepoint")
+                setup = _get_attr_safe(vr_elem, "setup")
                 transforms = []
                 for vt_elem in vr_elem.findall(".//{*}ViewTransform") or vr_elem.findall("ViewTransform"):
                     name_elem = vt_elem.find(".//{*}Name") or vt_elem.find("Name")
                     affine_elem = vt_elem.find(".//{*}affine") or vt_elem.find("affine")
                     if name_elem is not None and affine_elem is not None:
                         transforms.append({
-                            "name": name_elem.text.strip() if name_elem.text else "",
-                            "affine": affine_elem.text.strip() if affine_elem.text else ""
+                            "name": _get_text_safe(name_elem),
+                            "affine": _get_text_safe(affine_elem)
                         })
                 original_vr_elements.append({
                     "timepoint": timepoint,
@@ -586,7 +670,7 @@ def _rebuild_xml_structure(xml_tree, old_setups, new_setups, new2old_setup_id,
                     ET.SubElement(vt1, "affine").text = original_vr["transforms"][0]["affine"]
             else:
                 # Fallback to identity matrix
-                ET.SubElement(vt1, "affine").text = "1.0 0.0 0.0 0.0 0.0 1.0 0.0 0.0 0.0 0.0 1.0 0.0"
+                ET.SubElement(vt1, "affine").text = _create_identity_matrix()
             
             # 2. RigidModel3D
             vt2 = ET.SubElement(vr_el, "ViewTransform", {"type": "affine"})
@@ -604,7 +688,7 @@ def _rebuild_xml_structure(xml_tree, old_setups, new_setups, new2old_setup_id,
                     ET.SubElement(vt2, "affine").text = original_vr["transforms"][1]["affine"]
             else:
                 # Fallback to identity matrix
-                ET.SubElement(vt2, "affine").text = "1.0 0.0 0.0 0.0 0.0 1.0 0.0 0.0 0.0 0.0 1.0 0.0"
+                ET.SubElement(vt2, "affine").text = _create_identity_matrix()
             
             # 3. Translation to Nominal Grid
             vt3 = ET.SubElement(vr_el, "ViewTransform", {"type": "affine"})
@@ -622,7 +706,7 @@ def _rebuild_xml_structure(xml_tree, old_setups, new_setups, new2old_setup_id,
                     ET.SubElement(vt3, "affine").text = original_vr["transforms"][2]["affine"]
             else:
                 # Fallback to identity matrix
-                ET.SubElement(vt3, "affine").text = "1.0 0.0 0.0 0.0 0.0 1.0 0.0 0.0 0.0 0.0 1.0 0.0"
+                ET.SubElement(vt3, "affine").text = _create_identity_matrix()
             
             # 4. Image Splitting - This is the key transform for split tiles
             vt4 = ET.SubElement(vr_el, "ViewTransform", {"type": "affine"})
@@ -642,7 +726,7 @@ def _rebuild_xml_structure(xml_tree, old_setups, new_setups, new2old_setup_id,
             z_offset = (sub_index // 4) * z_step
             
             # Create the affine transform matrix for image splitting
-            affine_matrix = f"1.0 0.0 0.0 {x_offset} 0.0 1.0 0.0 {y_offset} 0.0 0.0 1.0 {z_offset}"
+            affine_matrix = _create_affine_matrix(x_offset, y_offset, z_offset)
             ET.SubElement(vt4, "affine").text = affine_matrix
         
         logging.info(f"Created {total_split_tiles} ViewRegistration items (timepoint=0, setup=0 to setup={total_split_tiles-1})")
@@ -658,7 +742,7 @@ def _rebuild_xml_structure(xml_tree, old_setups, new_setups, new2old_setup_id,
             # Extract original labels from existing ViewInterestPoints before removing
             original_labels = set()
             for vip_file in vip_parent.findall(".//{*}ViewInterestPointsFile") or vip_parent.findall("ViewInterestPointsFile"):
-                label_attr = vip_file.get("label")
+                label_attr = _get_attr_safe(vip_file, "label")
                 if label_attr:
                     original_labels.add(label_attr)
             
@@ -693,7 +777,7 @@ def _rebuild_xml_structure(xml_tree, old_setups, new_setups, new2old_setup_id,
         try:
             # Try to find timepoint from ViewInterestPointsFile elements
             for vip_file in vip_parent.findall(".//{*}ViewInterestPointsFile") if vip_parent is not None else []:
-                tp_attr = vip_file.get("timepoint")
+                tp_attr = _get_attr_safe(vip_file, "timepoint")
                 if tp_attr:
                     timepoint_id = tp_attr
                     break
@@ -703,7 +787,7 @@ def _rebuild_xml_structure(xml_tree, old_setups, new_setups, new2old_setup_id,
                 timepoints_elem = xml_tree.find(".//{*}Timepoints") or xml_tree.find("Timepoints")
                 if timepoints_elem is not None:
                     for tp_elem in timepoints_elem.findall(".//{*}Timepoint") or timepoints_elem.findall("Timepoint"):
-                        tp_id = tp_elem.get("id")
+                        tp_id = _get_attr_safe(tp_elem, "id")
                         if tp_id:
                             timepoint_id = tp_id
                             break
@@ -845,45 +929,13 @@ def _rebuild_xml_structure(xml_tree, old_setups, new_setups, new2old_setup_id,
 
             # Extract voxelSize (like Java BSS)
             vox_el = old_setup.find(".//{*}voxelSize") or old_setup.find("voxelSize")
-            if vox_el is not None:
-                # Try attributes first
-                size_text = vox_el.get("size") if hasattr(vox_el, "get") else None
-                unit = vox_el.get("unit") if hasattr(vox_el, "get") else None
-
-                # Children fallback
-                if size_text is None:
-                    size_child = vox_el.find(".//{*}size") or vox_el.find("size")
-                    size_text = (
-                        size_child.text.strip()
-                        if size_child is not None and size_child.text
-                        else None
-                    )
-                if unit is None:
-                    unit_child = vox_el.find(".//{*}unit") or vox_el.find("unit")
-                    unit = (
-                        unit_child.text.strip()
-                        if unit_child is not None and unit_child.text
-                        else None
-                    )
-
-                # Direct text fallback
-                if size_text is None and vox_el.text:
-                    size_text = vox_el.text.strip()
-
-                try:
-                    size_vals = (
-                        [float(x) for x in size_text.split()] if size_text else None
-                    )
-                except Exception:
-                    size_vals = None
-
-                # Only create voxelSize if we parsed something meaningful
-                if size_vals is not None or unit is not None:
-                    vox_elem = ET.SubElement(vs, "voxelSize")
-                    if unit is not None:
-                        ET.SubElement(vox_elem, "unit").text = unit
-                    if size_vals is not None:
-                        ET.SubElement(vox_elem, "size").text = " ".join(str(x) for x in size_vals)
+            voxDim = _extract_voxel_size(vox_el)
+            if voxDim is not None:
+                vox_elem = ET.SubElement(vs, "voxelSize")
+                if voxDim.get("unit"):
+                    ET.SubElement(vox_elem, "unit").text = voxDim["unit"]
+                if voxDim.get("size"):
+                    ET.SubElement(vox_elem, "size").text = " ".join(str(x) for x in voxDim["size"])
             else:
                 # Create default voxelSize if none exists (like Java BSS)
                 vox_elem = ET.SubElement(vs, "voxelSize")
@@ -1009,40 +1061,7 @@ def _rebuild_xml_structure(xml_tree, old_setups, new_setups, new2old_setup_id,
                         # Found the original setup, extract voxelSize
                         vox_el = old_setup.find(".//{*}voxelSize") or old_setup.find("voxelSize")
                         if vox_el is not None:
-                            # Try attributes first
-                            size_text = vox_el.get("size") if hasattr(vox_el, "get") else None
-                            unit = vox_el.get("unit") if hasattr(vox_el, "get") else None
-
-                            # Children fallback
-                            if size_text is None:
-                                size_child = vox_el.find(".//{*}size") or vox_el.find("size")
-                                size_text = (
-                                    size_child.text.strip()
-                                    if size_child is not None and size_child.text
-                                    else None
-                                )
-                            if unit is None:
-                                unit_child = vox_el.find(".//{*}unit") or vox_el.find("unit")
-                                unit = (
-                                    unit_child.text.strip()
-                                    if unit_child is not None and unit_child.text
-                                    else None
-                                )
-
-                            # Direct text fallback
-                            if size_text is None and vox_el.text:
-                                size_text = vox_el.text.strip()
-
-                            try:
-                                size_vals = (
-                                    [float(x) for x in size_text.split()] if size_text else None
-                                )
-                            except Exception:
-                                size_vals = None
-
-                            # Only create voxelSize if we parsed something meaningful
-                            if size_vals is not None or unit is not None:
-                                original_voxDim = {"size": size_vals, "unit": unit}
+                            original_voxDim = _extract_voxel_size(vox_el)
                             break
             
             # Create voxelSize element
