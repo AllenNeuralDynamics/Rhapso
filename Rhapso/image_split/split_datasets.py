@@ -8,8 +8,33 @@ import sys
 import numpy as np
 from xml.etree import ElementTree as ET
 
-from Rhapso.image_split.split_views import collect_image_sizes, find_min_step_size, closest_larger_long_divisable_by
+from Rhapso.image_split.split_views import collect_image_sizes, find_min_step_size, next_multiple
 from Rhapso.image_split.splitting_tools import split_images
+
+def closest_larger_long_divisable_by(value, divisor):
+    """
+    Find the closest larger number that is divisible by the given divisor.
+    This is equivalent to the Java function closestLargerLongDivisableBy.
+    
+    Args:
+        value: The input value to find the closest larger divisible number for
+        divisor: The divisor that the result must be divisible by
+        
+    Returns:
+        The smallest number >= value that is divisible by divisor
+    """
+    if divisor <= 0:
+        raise ValueError("Divisor must be positive")
+    
+    # Calculate how many complete divisors fit in the value
+    quotient = value // divisor
+    
+    # If value is already divisible, return it
+    if value % divisor == 0:
+        return value
+    
+    # Otherwise, return the next multiple of the divisor
+    return (quotient + 1) * divisor
 
 def main():
     print("beginning image splitting...")

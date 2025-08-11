@@ -1,4 +1,10 @@
 # splitting_tools.py
+"""
+Image splitting tools for Rhapso.
+
+This module provides utilities for splitting large images into smaller tiles
+while maintaining XML metadata structure and interest point information.
+"""
 
 import math
 import numpy as np
@@ -6,16 +12,16 @@ import copy
 import os
 import logging
 import traceback
+import time
+import random
 from pathlib import Path
 from xml.etree import ElementTree as ET
 from itertools import product
-from Rhapso.image_split.split_views import closest_larger_long_divisable_by
-import copy
-import numpy as np
-from xml.etree import ElementTree as ET
+from Rhapso.image_split.split_views import next_multiple
+
 
 def last_image_size(length, size, overlap):
-    """Calculates the size of the last tile in a dimension."""
+    """Calculate the size of the last tile in a dimension."""
     if length <= size:
         return length
 
@@ -24,13 +30,16 @@ def last_image_size(length, size, overlap):
         return length  # Avoid infinite loops
 
     num_blocks = math.ceil((length - size) / step) + 1
-
     last_start = (num_blocks - 1) * step
     return length - last_start
 
+
 def last_image_size_java(l, s, o):
-    # Port of SplittingTools.lastImageSize(long l, long s, long o) with Java-style remainder
-    # Java remainder: a % b keeps the sign of 'a' (truncates toward zero). Python uses floor.
+    """
+    Port of SplittingTools.lastImageSize(long l, long s, long o) with Java-style remainder.
+    
+    Java remainder: a % b keeps the sign of 'a' (truncates toward zero). Python uses floor.
+    """
     a = l - 2 * (s - o) - o
     b = s - o
     rem = a - int(a / b) * b if b != 0 else 0  # emulate Java's %
@@ -39,8 +48,9 @@ def last_image_size_java(l, s, o):
         size = l + size
     return int(size)
 
+
 def intersect(interval1, interval2):
-    """Computes the intersection of two intervals."""
+    """Compute the intersection of two intervals."""
     min1, max1 = interval1
     min2, max2 = interval2
     
@@ -52,32 +62,39 @@ def intersect(interval1, interval2):
         
     return (min_intersect, max_intersect)
 
+
 def is_empty(interval):
-    """Checks if an interval is empty (has zero or negative volume)."""
+    """Check if an interval is empty (has zero or negative volume)."""
     if interval is None:
         return True
     mins, maxs = interval
     return np.any(mins > maxs)
 
+
 def contains(point_location, interval):
-    """Checks if a point location is within a given interval."""
+    """Check if a point location is within a given interval."""
     mins, maxs = interval
     for d in range(len(point_location)):
         if not (mins[d] <= point_location[d] <= maxs[d]):
             return False
     return True
 
+
 def split_dim_java(length, s, o, min0=0):
-    # Port of SplittingTools.splitDim(...) producing 1D [min,max] inclusive intervals
+    """
+    Port of SplittingTools.splitDim(...) producing 1D [min,max] inclusive intervals.
+    """
     dim_intervals = []
     from_v = int(min0)
     max_v = int(min0 + length - 1)
+    
     while True:
         to_v = min(max_v, from_v + int(s) - 1)
         dim_intervals.append((from_v, to_v))
         if to_v >= max_v:
             break
         from_v = to_v - int(o) + 1
+    
     return dim_intervals
 
 def distribute_intervals_fixed_overlap(
@@ -90,12 +107,12 @@ def distribute_intervals_fixed_overlap(
     # Divisibility checks like Java
     for d in range(len(input_dims)):
         if int(target_size[d]) % int(min_step_size[d]) != 0:
-            print(
+            logging.warning(
                 f"targetSize {target_size[d]} not divisible by minStepSize {min_step_size[d]} for dim={d}. stopping."
             )
             return []
         if int(overlap[d]) % int(min_step_size[d]) != 0:
-            print(
+            logging.warning(
                 f"overlapPx {overlap[d]} not divisible by minStepSize {min_step_size[d]} for dim={d}. stopping."
             )
             return []
@@ -144,11 +161,6 @@ def distribute_intervals_fixed_overlap(
 
             # Generate intervals for this dimension
             dim_intervals = split_dim_java(l, final_size, o, min0=0)
-            
-            # Debug: Show what's happening in this dimension
-            print(f"🔧 [distribute_intervals_fixed_overlap] Dimension {d}:")
-            print(f"  Length: {length}, Target: {s}, Overlap: {o}, Final size: {final_size}")
-            print(f"  Generated {len(dim_intervals)} intervals: {dim_intervals}")
 
         interval_basis.append(dim_intervals)
 
@@ -164,13 +176,13 @@ def distribute_intervals_fixed_overlap(
             (np.array(mins, dtype=np.int64), np.array(maxs, dtype=np.int64))
         )
 
-    print(f"🔧 [distribute_intervals_fixed_overlap] Total intervals generated: {len(interval_list)}")
+    logging.debug(f"Generated {len(interval_list)} total intervals")
     return interval_list
 
 def max_interval_spread(old_setups, overlap, target_size, min_step_size, optimize):
-    """Calculates the maximum number of splits for any single view, with Java-like logging."""
+    """Calculate the maximum number of splits for any single view, with Java-like logging."""
 
-    # Normalize inputs for consistent printing
+    # Normalize inputs for consistent processing
     def _as_int_list(x):
         if isinstance(x, np.ndarray):
             return [int(v) for v in x.tolist()]
@@ -183,12 +195,7 @@ def max_interval_spread(old_setups, overlap, target_size, min_step_size, optimiz
     target_list = _as_int_list(target_size)
     min_step_list = _as_int_list(min_step_size)
 
-    print("maxIntervalSpread inputs:")
-    print(f"oldSetups.size = {len(old_setups)}")
-    print(f"overlapPx = {overlap_list}")
-    print(f"targetSize = {target_list}")
-    print(f"minStepSize = {min_step_list}")
-    print(f"optimize = {'true' if optimize else 'false'}")
+    logging.debug(f"maxIntervalSpread: setups={len(old_setups)}, overlap={overlap_list}, target={target_list}, minStep={min_step_list}, optimize={optimize}")
 
     max_splits = 1
 
@@ -212,18 +219,19 @@ def max_interval_spread(old_setups, overlap, target_size, min_step_size, optimiz
             dims, overlap_list, target_list, min_step_list, optimize
         )
         num_intervals = len(intervals) if intervals is not None else 0
-        print(f"ViewSetup id: {vs_id}, intervals.size = {num_intervals}")
+        logging.debug(f"ViewSetup {vs_id}: {num_intervals} intervals")
 
         max_splits = max(max_splits, num_intervals)
 
-    print(f"maxIntervalSpread output: max = {max_splits}")
+    logging.debug(f"maxIntervalSpread result: {max_splits}")
     return max_splits
 
 def _find_one(root, name):
-    # namespaced-safe find for existing elements
+    """Namespaced-safe find for existing elements."""
     return root.find(f".//{{*}}{name}") or root.find(name)
 
 def _ensure_child(parent, tag, attrib=None):
+    """Ensure a child element exists, creating it if necessary."""
     node = parent.find(tag)
     if node is None:
         node = ET.SubElement(parent, tag, attrib or {})
@@ -235,96 +243,99 @@ def _ensure_child(parent, tag, attrib=None):
     return node
 
 def _clear_children(node):
+    """Remove all children from a node."""
     for child in list(node):
         node.remove(child)
 
 def _ensure_sequence_description_like_bss(xml_root, img_loader_format="split.viewerimgloader"):
-	# Ensure root and BasePath (match BSS: BasePath type="relative">.</BasePath>)
-	root_tag = xml_root.tag.split("}")[-1]
-	root = xml_root
-	if root_tag != "SpimData":
-		# if this is a SequenceDescription element passed directly, wrap a minimal structure
-		spim = ET.Element("SpimData", {"version": "0.2"})
-		spim.append(xml_root)
-		root = spim
+    """
+    Ensure root and BasePath (match BSS: BasePath type="relative">.</BasePath>)
+    """
+    # Ensure root and BasePath (match BSS: BasePath type="relative">.</BasePath>)
+    root_tag = xml_root.tag.split("}")[-1]
+    root = xml_root
+    if root_tag != "SpimData":
+        # if this is a SequenceDescription element passed directly, wrap a minimal structure
+        spim = ET.Element("SpimData", {"version": "0.2"})
+        spim.append(xml_root)
+        root = spim
 
-	base_path = _find_one(root, "BasePath")
-	if base_path is None:
-		base_path = ET.Element("BasePath", {"type": "relative"})
-		base_path.text = "."
-		# insert BasePath before SequenceDescription if possible
-		first = list(root)[0] if len(list(root)) > 0 else None
-		if first is not None and first.tag.split("}")[-1] == "SequenceDescription":
-			root.insert(0, base_path)
-		else:
-			root.append(base_path)
+    base_path = _find_one(root, "BasePath")
+    if base_path is None:
+        base_path = ET.Element("BasePath", {"type": "relative"})
+        base_path.text = "."
+        # insert BasePath before SequenceDescription if possible
+        first = list(root)[0] if len(list(root)) > 0 else None
+        if first is not None and first.tag.split("}")[-1] == "SequenceDescription":
+            root.insert(0, base_path)
+        else:
+            root.append(base_path)
 
-	# Ensure SequenceDescription subtree
-	seq = _find_one(root, "SequenceDescription")
-	if seq is None:
-		seq = ET.SubElement(root, "SequenceDescription")
+    # Ensure SequenceDescription subtree
+    seq = _find_one(root, "SequenceDescription")
+    if seq is None:
+        seq = ET.SubElement(root, "SequenceDescription")
 
-	# 1) ImageLoader
-	# Match BSS: <ImageLoader format="split.viewerimgloader">...</ImageLoader>
-	# If an ImageLoader or ImgLoader exists, normalize it to the expected format
-	# BUT preserve the nested structure if it already exists
-	img_loader = (_find_one(seq, "ImageLoader") or _find_one(seq, "ImgLoader"))
-	if img_loader is None or img_loader.tag.split("}")[-1] != "ImageLoader":
-		if img_loader is not None:
-			seq.remove(img_loader)
-		img_loader = ET.SubElement(seq, "ImageLoader", {"format": img_loader_format})
-	else:
-		# Only set format if it's different, don't clear children
-		if img_loader.get("format") != img_loader_format:
-			img_loader.set("format", img_loader_format)
-		# Don't clear children - preserve nested ImageLoader structure
+    # 1) ImageLoader
+    # Match BSS: <ImageLoader format="split.viewerimgloader">...</ImageLoader>
+    # If an ImageLoader or ImgLoader exists, normalize it to the expected format
+    # BUT preserve the nested structure if it already exists
+    img_loader = (_find_one(seq, "ImageLoader") or _find_one(seq, "ImgLoader"))
+    if img_loader is None or img_loader.tag.split("}")[-1] != "ImageLoader":
+        if img_loader is not None:
+            seq.remove(img_loader)
+        img_loader = ET.SubElement(seq, "ImageLoader", {"format": img_loader_format})
+    else:
+        # Only set format if it's different, don't clear children
+        if img_loader.get("format") != img_loader_format:
+            img_loader.set("format", img_loader_format)
+        # Don't clear children - preserve nested ImageLoader structure
 
-	# 2) ViewSetups (can remain empty)
-	view_setups = _find_one(seq, "ViewSetups")
-	if view_setups is None:
-		view_setups = ET.SubElement(seq, "ViewSetups")
-	else:
-		# do not remove existing ViewSetup entries, keep as-is
-		pass
+    # 2) ViewSetups (can remain empty)
+    view_setups = _find_one(seq, "ViewSetups")
+    if view_setups is None:
+        view_setups = ET.SubElement(seq, "ViewSetups")
+    else:
+        # do not remove existing ViewSetup entries, keep as-is
+        pass
 
-	# 3) Timepoints
-	# Match BSS minimal: <Timepoints type="pattern"></Timepoints>
-	timepoints = _find_one(seq, "Timepoints")
-	if timepoints is None:
-		timepoints = ET.SubElement(seq, "Timepoints", {"type": "pattern"})
-	else:
-		timepoints.set("type", "pattern")
-		_clear_children(timepoints)  # keep empty like BSS sample
+    # 3) Timepoints
+    # Match BSS minimal: <Timepoints type="pattern"></Timepoints>
+    timepoints = _find_one(seq, "Timepoints")
+    if timepoints is None:
+        timepoints = ET.SubElement(seq, "Timepoints", {"type": "pattern"})
+    else:
+        timepoints.set("type", "pattern")
+        _clear_children(timepoints)  # keep empty like BSS sample
 
-	# 4) MissingViews (self-closing/empty)
-	missing = _find_one(seq, "MissingViews")
-	if missing is None:
-		ET.SubElement(seq, "MissingViews")
-	else:
-		# keep as-is, do not remove entries
-		pass
+    # 4) MissingViews (self-closing/empty)
+    missing = _find_one(seq, "MissingViews")
+    if missing is None:
+        ET.SubElement(seq, "MissingViews")
+    else:
+        # keep as-is, do not remove entries
+        pass
 
-	# 5) Ensure nested ImageLoader structure exists if this is a split operation
-	# Check if we have the expected nested structure
-	img_loader = _find_one(seq, "ImageLoader")
-	if img_loader is not None and img_loader.get("format") == "split.viewerimgloader":
-		print("test")
+    # 5) Ensure nested ImageLoader structure exists if this is a split operation
+    # Check if we have the expected nested structure
+    img_loader = _find_one(seq, "ImageLoader")
+    if img_loader is not None and img_loader.get("format") == "split.viewerimgloader":
         # Ensure nested ImageLoader exists
-		nested_loader = img_loader.find(".//{*}ImageLoader") or img_loader.find("ImageLoader")
-		if nested_loader is None:
+        nested_loader = img_loader.find(".//{*}ImageLoader") or img_loader.find("ImageLoader")
+        if nested_loader is None:
             # Create minimal nested structure if missing
-			nested_img_loader = ET.SubElement(img_loader, "ImageLoader", {"format": "bdv.multimg.zarr", "version": "3.0"})
-			zarr_elem = ET.SubElement(nested_img_loader, "zarr", {"type": "absolute"})
-			zarr_elem.text = "unknown"
-			zgroups_elem = ET.SubElement(nested_img_loader, "zgroups")
+            nested_img_loader = ET.SubElement(img_loader, "ImageLoader", {"format": "bdv.multimg.zarr", "version": "3.0"})
+            zarr_elem = ET.SubElement(nested_img_loader, "zarr", {"type": "absolute"})
+            zarr_elem.text = "unknown"
+            zgroups_elem = ET.SubElement(nested_img_loader, "zgroups")
             # Add a placeholder zgroup with meaningful defaults (no shape element like Java)
-			ET.SubElement(zgroups_elem, "zgroup", {
+            ET.SubElement(zgroups_elem, "zgroup", {
                 "setup": "0", 
                 "tp": "0", 
                 "path": "tile_000000_ch_561.zarr", 
                 "indicies": "[]"
             })
-	return root
+    return root
 
 def split_images(
     spimData,
@@ -340,21 +351,25 @@ def split_images(
     error=0.0,
     excludeRadius=0.0,
 ):
+    """
+    Split images into smaller tiles while maintaining XML metadata structure.
+    
+    This function takes a SpimData object and splits it into smaller tiles based on
+    the specified parameters, updating all XML metadata accordingly.
+    """
     try:
         # Make a copy of the SpimData object to avoid modifying the original
         new_spim_data = copy.deepcopy(spimData)
 
         # Get the XML tree from the spim_data
         xml_tree = new_spim_data
-        """
-        Start of conversion
-        """
-        # get timepoints var
+        
+        # Get timepoints var
         sequence_description = xml_tree.find(
             ".//{*}SequenceDescription"
         ) or xml_tree.find("SequenceDescription")
 
-        # --- BEGIN: Improved timepoints parsing and reporting ---
+        # Parse timepoints
         timepoints = None
         tp_elements = []
         tp_ids = []
@@ -423,20 +438,17 @@ def split_images(
                 missing_setups_count = 0
                 missing_setup_ids = []
 
-                # Print summary
+                # Log summary
                 if tp_ids:
                     tp_min = min(tp_ids)
                     tp_max = max(tp_ids)
-                    print(f"TimePoints: count={len(tp_ids)}, idRange=[{tp_min}..{tp_max}]")
-                    for i, tp_id in enumerate(tp_ids):
-                        print(f"  - tpId={tp_id}, name={tp_names[i]}, presentSetups={present_setups_count}/{present_setups_count}, missingSetups={missing_setups_count}, presentSetupIds=[ {', '.join(str(sid) for sid in present_setup_ids)} ]")
+                    logging.info(f"TimePoints: count={len(tp_ids)}, idRange=[{tp_min}..{tp_max}]")
                 else:
-                    print("TimePoints: No timepoints found.")
+                    logging.info("TimePoints: No timepoints found.")
             else:
-                print("TimePoints: No Timepoints element found.")
+                logging.info("TimePoints: No Timepoints element found.")
         else:
-            print("TimePoints: No SequenceDescription found.")
-        # --- END: Improved timepoints parsing and reporting ---
+            logging.info("TimePoints: No SequenceDescription found.")
 
         # get the old setups: sequenceDescription ViewSetups values
         def _strip(tag):
@@ -467,7 +479,7 @@ def split_images(
 
             old_setups = sorted(candidates, key=_get_vs_id)
 
-        print(f"Found and sorted {len(old_setups)} ViewSetups")
+        logging.info(f"Found and sorted {len(old_setups)} ViewSetups")
 
         # var creation
         # oldRegistrations
@@ -514,7 +526,7 @@ def split_images(
         max_interval_spread_value = max_interval_spread(
             old_setups, overlapPx, targetSize, minStepSize, optimize
         )
-        print(f"maxIntervalSpread = {max_interval_spread_value}")
+        logging.info(f"maxIntervalSpread = {max_interval_spread_value}")
 
         # check that there is only one illumination
         if assingIlluminationsFromTileIds:
@@ -560,7 +572,7 @@ def split_images(
         rnd = random.Random(23424459)
 
         # for loop through oldSetups
-        print(f"Splitting {len(old_setups)} old setups...")
+        logging.info(f"Splitting {len(old_setups)} old setups...")
         new_id = 0  # Ensure new_id starts at 0
         for old_setup in old_setups:
             # set vars 1
@@ -587,7 +599,7 @@ def split_images(
             localNewTileId = 0
 
             # Print current loop index and variable values
-            print(
+            logging.info(
                 f"Loop index: {old_setups.index(old_setup)}, oldID: {oldID}, oldTile: {oldTile}, localNewTileId: {localNewTileId}"
             )
 
@@ -657,10 +669,10 @@ def split_images(
                 if size_vals is not None or unit is not None:
                     voxDim = {"size": size_vals, "unit": unit}
 
-            print(f"angle: {angle}")
-            print(f"channel: {channel}")
-            print(f"illum: {illum}")
-            print(f"voxDim: {voxDim}")
+            logging.info(f"angle: {angle}")
+            logging.info(f"channel: {channel}")
+            logging.info(f"illum: {illum}")
+            logging.info(f"voxDim: {voxDim}")
 
             # set vars 3
             size_el = old_setup.find(".//{*}size") or old_setup.find("size")
@@ -688,7 +700,7 @@ def split_images(
             # Log like IOFunctions.println/Util.printInterval (bounds only)
             input_mins = [mn for mn, _ in input]
             input_maxs = [mx for _, mx in input]
-            print(
+            logging.info(
                 f"ViewId {oldID} with interval {_format_bounds(input_mins, input_maxs)} will be split as follows: "
             )
 
@@ -698,12 +710,12 @@ def split_images(
             )
 
             # Debug: Show interval generation details
-            print(f"🔧 [split_images] Interval generation for ViewSetup {oldID}:")
-            print(f"  Original dimensions: {dims}")
-            print(f"  Target size: {[int(x) for x in targetSize]}")
-            print(f"  Overlap: {[int(x) for x in overlapPx]}")
-            print(f"  Min step size: {[int(x) for x in minStepSize]}")
-            print(f"  Generated intervals: {len(intervals) if intervals else 0}")
+            logging.info(f"🔧 [split_images] Interval generation for ViewSetup {oldID}:")
+            logging.info(f"  Original dimensions: {dims}")
+            logging.info(f"  Target size: {[int(x) for x in targetSize]}")
+            logging.info(f"  Overlap: {[int(x) for x in overlapPx]}")
+            logging.info(f"  Min step size: {[int(x) for x in minStepSize]}")
+            logging.info(f"  Generated intervals: {len(intervals) if intervals else 0}")
             
             # Show intervals per dimension
             if intervals:
@@ -723,30 +735,30 @@ def split_images(
                         else:
                             dim_counts.append(1)
                 
-                print(f"  Expected intervals per dimension: {dim_counts}")
-                print(f"  Total expected intervals: {np.prod(dim_counts)}")
-                print(f"  Actual intervals generated: {len(intervals)}")
+                logging.info(f"  Expected intervals per dimension: {dim_counts}")
+                logging.info(f"  Total expected intervals: {np.prod(dim_counts)}")
+                logging.info(f"  Actual intervals generated: {len(intervals)}")
 
             # interval2ViewSetup map (empty for now, to be filled later)
             interval2ViewSetup = {}
 
             # Print Java-like parameters and interval list
-            print(f"Split parameters for ViewSetup {oldID}:")
-            print(
+            logging.info(f"Split parameters for ViewSetup {oldID}:")
+            logging.info(
                 f"  input      = {_format_interval_with_dims(input_mins, input_maxs)}"
             )
-            print(f"  overlapPx  = {[int(v) for v in overlapPx]}")
-            print(f"  targetSize = {[int(v) for v in targetSize]}")
+            logging.info(f"  overlapPx  = {[int(v) for v in overlapPx]}")
+            logging.info(f"  targetSize = {[int(v) for v in targetSize]}")
             # minStepSize may be a numpy array
-            print(
+            logging.info(
                 f"  minStep    = {[int(v) for v in (minStepSize.tolist() if hasattr(minStepSize, 'tolist') else minStepSize)]}"
             )
-            print(f"  optimize   = {'true' if optimize else 'false'}")
+            logging.info(f"  optimize   = {'true' if optimize else 'false'}")
 
             if intervals is None:
-                print("  intervals  = null")
+                logging.info("  intervals  = null")
             else:
-                print(f"  intervals ({len(intervals)}):")
+                logging.info(f"  intervals ({len(intervals)}):")
                 for ii, (mins_arr, maxs_arr) in enumerate(intervals):
                     mins = (
                         [int(x) for x in mins_arr.tolist()]
@@ -758,12 +770,12 @@ def split_images(
                         if hasattr(maxs_arr, "tolist")
                         else [int(x) for x in maxs_arr]
                     )
-                    print(f"    [{ii}] {_format_interval_with_dims(mins, maxs)}")
+                    logging.info(f"    [{ii}] {_format_interval_with_dims(mins, maxs)}")
 
-            print(f"  interval2ViewSetup.size = {len(interval2ViewSetup)}")
+            logging.info(f"  interval2ViewSetup.size = {len(interval2ViewSetup)}")
 
             # loop through intervals
-            print(f"Entering interval loop, total count: {len(intervals)}")
+            logging.info(f"Entering interval loop, total count: {len(intervals)}")
             for i in range(len(intervals)):
                 (mins_arr, maxs_arr) = intervals[i]
                 mins = [
@@ -778,8 +790,8 @@ def split_images(
                         maxs_arr.tolist() if hasattr(maxs_arr, "tolist") else maxs_arr
                     )
                 ]
-                print(f"        Processing interval index: {i + 1}")
-                print(
+                logging.info(f"        Processing interval index: {i + 1}")
+                logging.info(
                     f"        Interval {i + 1}: {_format_interval_with_dims(mins, maxs)}"
                 )
 
@@ -801,7 +813,7 @@ def split_images(
                     location[d] += mins[d]
 
                 # Print statement similar to Java's System.out.println
-                print(
+                logging.info(
                     f"\tCreated new ViewSetup: newId={new_id}, oldID={oldID}, "
                     f"interval={_format_bounds(mins, maxs)}, size={size}, location={location}"
                 )
@@ -845,15 +857,15 @@ def split_images(
                 interval2ViewSetup[interval_key] = newSetup
 
                 # Print statements for newly created objects
-                print(
+                logging.info(
                     f"\tCreated newTile: id={newTile['id']}, name={newTile['name']}, location={newTile['location']}"
                 )
                 if isinstance(newIllum, dict):
-                    print(
+                    logging.info(
                         f"\tCreated newIllum: id={newIllum.get('id')}, name={newIllum.get('name')}"
                     )
                 else:
-                    print(f"\tCreated newIllum: id={newIllum}")
+                    logging.info(f"\tCreated newIllum: id={newIllum}")
                 channel_id = (
                     channel
                     if isinstance(channel, int)
@@ -868,10 +880,10 @@ def split_images(
                     newIllum.get("id") if isinstance(newIllum, dict) else newIllum
                 )
                 vox_unit = voxDim.get("unit") if isinstance(voxDim, dict) else "null"
-                print(
+                logging.info(
                     f"\tCreated newSetup: id={newSetup['id']}, tileId={newTile['id']}, channel={channel_id if channel_id is not None else 'null'}, angle={angle_id if angle_id is not None else 'null'}, illum={illum_id if illum_id is not None else 'null'}, dim={size}, voxDim={vox_unit}"
                 )
-                print("")
+                logging.info("")
 
                 # Increment new_id for the next interval (this ensures each interval gets a unique ID)
                 new_id += 1
@@ -888,11 +900,11 @@ def split_images(
                             tp_id = intpat.text.strip()
                             tp_elements = [intpat]
                 tp_total = len(tp_elements)
-                print(f"\tStarting timepoint loop for interval index {i}: {tp_total} timepoints total.")
+                logging.info(f"\tStarting timepoint loop for interval index {i}: {tp_total} timepoints total.")
             
             # Print summary of all new setups created
-            print(f"🔧 [split_images] Total new_setups created: {len(new_setups)}")
-            print(f"🔧 [split_images] Expected zgroups count: {len(old_setups)} (based on original tile count)")
+            logging.info(f"🔧 [split_images] Total new_setups created: {len(new_setups)}")
+            logging.info(f"🔧 [split_images] Expected zgroups count: {len(old_setups)} (based on original tile count)")
             tpIdx = 0
             for tp in tp_elements:
                 # Resolve timepoint id from attribute or child element or integerpattern
@@ -911,7 +923,7 @@ def split_images(
                         tp_id = int(tp.text.strip()) if tp.text.strip().isdigit() else tp.text.strip()
                     else:
                         tp_id = "unknown"
-                print(f"\t\tProcessing timepoint {tpIdx + 1}/{tp_total} (id={tp_id})")
+                logging.info(f"\t\tProcessing timepoint {tpIdx + 1}/{tp_total} (id={tp_id})")
                 tpIdx += 1
 
                 # timepoint loop var setup CODE START
@@ -973,28 +985,28 @@ def split_images(
                 newVipl = {"timepointId": newViewId_key[0], "viewSetupId": new_id}
 
                 # --- timepoint loop var setup checkpoint ---
-                print("\n\t\t--- timepoint loop var setup checkpoint ---")
-                print(f"\t\toldViewId: {oldViewId_str}")
+                logging.info("\n\t\t--- timepoint loop var setup checkpoint ---")
+                logging.info(f"\t\toldViewId: {oldViewId_str}")
                 if oldVR_el is None:
-                    print("\t\toldVR: null")
+                    logging.info("\t\toldVR: null")
                 else:
-                    print(f"\t\toldVR: ViewRegistration with {old_transform_count} transforms")
+                    logging.info(f"\t\toldVR: ViewRegistration with {old_transform_count} transforms")
                 last_name = transformList[-1]["name"] if len(transformList) > 0 else "n/a"
-                print(f"\t\ttransformList: size={len(transformList)}, last transform name={last_name}")
+                logging.info(f"\t\ttransformList: size={len(transformList)}, last transform name={last_name}")
                 # Match Java-like printing for translation and row-packed copy
                 trans_tuple_str = ", ".join(f"{v:.1f}" if float(v).is_integer() else f"{v}" for v in translation_affine)
-                print(f"\t\ttranslation: 3d-affine: ({trans_tuple_str})")
-                print(f"\t\ttransform: {transform['name']}, affine={[float(v) for v in translation_affine]}")
+                logging.info(f"\t\ttranslation: 3d-affine: ({trans_tuple_str})")
+                logging.info(f"\t\ttransform: {transform['name']}, affine={[float(v) for v in translation_affine]}")
                 newViewId_str = f"ViewId{{timepoint={newViewId_key[0]}, setup={new_id}}}"
-                print(f"\t\tnewViewId: {newViewId_str}")
-                print(f"\t\tnewVR: {'null' if newVR is None else f'ViewRegistration with {len(transformList)} transforms'}")
-                print(f"\t\tnewRegistrations: total entries={len(new_registrations)}")
-                print(f"\t\tnewVipl: timepointId={newVipl['timepointId']}, viewSetupId={newVipl['viewSetupId']}")
+                logging.info(f"\t\tnewViewId: {newViewId_str}")
+                logging.info(f"\t\tnewVR: {'null' if newVR is None else f'ViewRegistration with {len(transformList)} transforms'}")
+                logging.info(f"\t\tnewRegistrations: total entries={len(new_registrations)}")
+                logging.info(f"\t\tnewVipl: timepointId={newVipl['timepointId']}, viewSetupId={newVipl['viewSetupId']}")
                 if oldVipl is None:
-                    print("\t\toldVipl: null")
+                    logging.info("\t\toldVipl: null")
                 else:
-                    print(f"\t\toldVipl: timepointId={oldVipl['timepointId']}, viewSetupId={oldVipl['viewSetupId']}")
-                print("\t\t--- end checkpoint ---\n")
+                    logging.info(f"\t\toldVipl: timepointId={oldVipl['timepointId']}, viewSetupId={oldVipl['viewSetupId']}")
+                logging.info("\t\t--- end checkpoint ---\n")
                 # timepoint loop var setup CODE END 
 
                 # only update interest points for present views
@@ -1022,7 +1034,7 @@ def split_images(
                                     old_labels.append(vf.get("label"))
                     
                     for label in old_labels:
-                        print(f"\t\tProcessing label index: {labelIdx}, label: {label}")
+                        logging.info(f"\t\tProcessing label index: {labelIdx}, label: {label}")
                         id = 0
                         labelIdx += 1
 
@@ -1080,8 +1092,8 @@ def split_images(
                                 n = len(intersection[0])
                                 num_pixels = np.prod(intersection[1] - intersection[0] + 1)
                                 
-                                num_points = min(maxPoints, max(minPoints, int(round(np.ceil(pointDensity * num_pixels / (100.0**3))))))
-                                print(f"{num_pixels / (100.0**3)} {num_points}")
+                                num_points = min(maxPoints, max(minPoints, int(round(pointDensity * num_pixels / (100.0**3)))))
+                                logging.info(f"{num_pixels / (100.0**3)} {num_points}")
 
                                 other_points_list = otherIPLists['interest_points_lists'][fakeLabel]['points']
                                 otherId = other_points_list[-1]['id'] + 1 if other_points_list else 0
@@ -1298,11 +1310,11 @@ def split_images(
                 vt4 = ET.SubElement(vr_el, "ViewTransform", {"type": "affine"})
                 ET.SubElement(vt4, "Name").text = "Image Splitting"
                 
-                # Calculate the offset for this split tile based on its position in the 2x2x5 grid
-                # Each original tile is split into 20 sub-regions (2x2x5)
+                # Calculate the offset for this split tile based on its position in the dynamic grid
+                # Each original tile is split into max_interval_spread_value sub-regions
                 # Use the same logic we used for the tile Attributes in ViewSetups
-                original_tile = setup_id // 20  # Which original tile this split tile belongs to
-                sub_index = setup_id % 20       # Position within the original tile (0-19)
+                original_tile = setup_id // max_interval_spread_value  # Which original tile this split tile belongs to
+                sub_index = setup_id % max_interval_spread_value       # Position within the original tile (0 to max_interval_spread_value-1)
                 
                 # Calculate x, y, z offsets based on sub_index and actual tile dimensions
                 # Pattern: 2x2x5 grid within each original tile
@@ -1320,11 +1332,11 @@ def split_images(
                 affine_matrix = f"1.0 0.0 0.0 {x_offset} 0.0 1.0 0.0 {y_offset} 0.0 0.0 1.0 {z_offset}"
                 ET.SubElement(vt4, "affine").text = affine_matrix
             
-            print(f"🔧 [split_images] Created {total_split_tiles} ViewRegistration items (timepoint=0, setup=0 to setup={total_split_tiles-1})")
-            print(f"🔧 [split_images] Used dynamic affine transforms from original ViewRegistrations and calculated Image Splitting transforms")
+            logging.info(f"🔧 [split_images] Created {total_split_tiles} ViewRegistration items (timepoint=0, setup=0 to setup={total_split_tiles-1})")
+            logging.info(f"🔧 [split_images] Used dynamic affine transforms from original ViewRegistrations and calculated Image Splitting transforms")
             
         except Exception as e:
-            print(f"⚠️ [split_images] Error rebuilding ViewRegistrations: {str(e)}")
+            logging.error(f"⚠️ [split_images] Error rebuilding ViewRegistrations: {str(e)}")
             # Fallback: keep previous registrations on failure
             pass
 
@@ -1366,7 +1378,7 @@ def split_images(
             fakeLabel = f"splitPoints_{int(time.time() * 1000)}"
             labels.append(fakeLabel)
             
-            print(f"🔧 [split_images] Using labels: {labels} (original labels with '_split' suffix + fake label)")
+            logging.info(f"🔧 [split_images] Using labels: {labels} (original labels with '_split' suffix + fake label)")
             
             # Get timepoint ID dynamically from the input XML
             timepoint_id = "0"  # Default fallback
@@ -1388,9 +1400,9 @@ def split_images(
                                 timepoint_id = tp_id
                                 break
                 
-                print(f"🔧 [split_images] Using timepoint ID: {timepoint_id}")
+                logging.info(f"🔧 [split_images] Using timepoint ID: {timepoint_id}")
             except Exception as e:
-                print(f"⚠️ [split_images] Could not determine timepoint ID, using default: {timepoint_id}")
+                logging.error(f"⚠️ [split_images] Could not determine timepoint ID, using default: {timepoint_id}")
             
             # Generate ViewInterestPointsFile for each label and each split tile
             for label in labels:
@@ -1411,10 +1423,10 @@ def split_images(
                     )
                     vip_file.text = path_text
             
-            print(f"🔧 [split_images] Created {len(labels) * total_split_tiles} ViewInterestPointsFile items ({len(labels)} labels × {total_split_tiles} split tiles)")
+            logging.info(f"🔧 [split_images] Created {len(labels) * total_split_tiles} ViewInterestPointsFile items ({len(labels)} labels × {total_split_tiles} split tiles)")
             
         except Exception as e:
-            print(f"⚠️ [split_images] Error rebuilding ViewInterestPoints: {str(e)}")
+            logging.error(f"⚠️ [split_images] Error rebuilding ViewInterestPoints: {str(e)}")
             # Fallback: keep previous interest points on failure
             pass
 
@@ -1455,9 +1467,9 @@ def split_images(
             # Extract zarr path and zgroups from input XML using improved extraction
             input_zarr_path = _extract_zarr_path_from_xml(xml_tree)
             if input_zarr_path != "unknown":
-                print(f"🔧 [split_images] Found input zarr path: {input_zarr_path}")
+                logging.info(f"🔧 [split_images] Found input zarr path: {input_zarr_path}")
             else:
-                print("⚠️  [split_images] No zarr path found in input, using default")
+                logging.warning("⚠️  [split_images] No zarr path found in input, using default")
             
             # Look for the original ImageLoader in the root XML tree
             input_img_loader = xml_tree.find(".//{*}ImageLoader") or xml_tree.find("ImageLoader")
@@ -1471,9 +1483,9 @@ def split_images(
                 input_zgroups_elem = input_img_loader.find(".//{*}zgroups") or input_img_loader.find("zgroups")
                 if input_zgroups_elem is not None:
                     input_zgroups = input_zgroups_elem.findall(".//{*}zgroup") or input_zgroups_elem.findall("zgroup")
-                    print(f"🔧 [split_images] Found {len(input_zgroups)} input zgroups")
+                    logging.info(f"🔧 [split_images] Found {len(input_zgroups)} input zgroups")
             else:
-                print("⚠️  [split_images] No input ImageLoader found")
+                logging.warning("⚠️  [split_images] No input ImageLoader found")
 
             # Outer ImageLoader - ensure it's the first element in SequenceDescription
             main_img_loader = ET.Element("ImageLoader", {"format": "split.viewerimgloader"})
@@ -1527,7 +1539,7 @@ def split_images(
                     # Note: Java code doesn't include shape elements in zgroups, so we don't add them
                     # The zgroup is self-closing with just attributes
                 
-                print(f"🔧 [split_images] Initial build: Created {len(old_setups)} zgroups in nested ImageLoader (based on original tile count)")
+                logging.info(f"🔧 [split_images] Initial build: Created {len(old_setups)} zgroups in nested ImageLoader (based on original tile count)")
 
 
 
@@ -1700,18 +1712,18 @@ def split_images(
                 ET.SubElement(setup_def, "max").text = " ".join(str(int(x)) for x in interval_maxs)
         
         # Debug: Show the final element order in SequenceDescription
-        print("🔧 [split_images] Final SequenceDescription element order:")
+        logging.info("🔧 [split_images] Final SequenceDescription element order:")
         for i, child in enumerate(seq_desc):
-            print(f"  {i}: {child.tag}")
+            logging.info(f"  {i}: {child.tag}")
         
         # Also show the nested SequenceDescription structure
         img_loader = seq_desc.find(".//{*}ImageLoader") or seq_desc.find("ImageLoader")
         if img_loader is not None:
             nested_seq = img_loader.find(".//{*}SequenceDescription") or img_loader.find("SequenceDescription")
             if nested_seq is not None:
-                print("🔧 [split_images] Nested SequenceDescription element order:")
+                logging.info("🔧 [split_images] Nested SequenceDescription element order:")
                 for i, child in enumerate(nested_seq):
-                    print(f"    {i}: {child.tag}")
+                    logging.info(f"    {i}: {child.tag}")
 
         # Populate the main ViewSetups (outside ImageLoader) with 400 ViewSetup items (id=0 to id=399)
         # This represents all the split tiles, not just the original tiles
@@ -1858,17 +1870,18 @@ def split_images(
             ET.SubElement(channel, "id").text = "0"
             ET.SubElement(channel, "name").text = "0"
             
-            # Tile (400 tiles from 0-399)
+            # Tile (dynamically calculated total tiles)
+            total_tiles = len(old_setups) * max_interval_spread_value
             tile_attr = ET.SubElement(main_view_setups, "Attributes", {"name": "tile"})
-            for i in range(400):  # 0-399 for all split tiles
+            for i in range(total_tiles):  # 0 to total_tiles-1 for all split tiles
                 tile = ET.SubElement(tile_attr, "Tile")
                 ET.SubElement(tile, "id").text = str(i)
                 ET.SubElement(tile, "name").text = str(i)
                 
-                # Calculate location based on tile index (2x2x5 grid pattern)
-                # Each original tile is split into 20 sub-regions (2x2x5)
-                original_tile = i // 20  # Which original tile this split tile belongs to
-                sub_index = i % 20       # Position within the original tile (0-19)
+                # Calculate location based on tile index (dynamic grid pattern)
+                # Each original tile is split into max_interval_spread_value sub-regions
+                original_tile = i // max_interval_spread_value  # Which original tile this split tile belongs to
+                sub_index = i % max_interval_spread_value       # Position within the original tile (0 to max_interval_spread_value-1)
                 
                 # Calculate x, y, z offsets based on sub_index
                 # Pattern: 2x2x5 grid within each original tile
@@ -1885,10 +1898,10 @@ def split_images(
             ET.SubElement(angle, "id").text = "0"
             ET.SubElement(angle, "name").text = "0"
             
-            print(f"🔧 [split_images] Populated main ViewSetups (outside ImageLoader) with {len(new_setups)} ViewSetup items (id=0 to id={len(new_setups)-1})")
-            print(f"🔧 [split_images] Added Attributes sections: illumination ({len(old_setups)} items), channel (1 item), tile (400 items), angle (1 item)")
+            logging.info(f"🔧 [split_images] Populated main ViewSetups (outside ImageLoader) with {len(new_setups)} ViewSetup items (id=0 to id={len(new_setups)-1})")
+            logging.info(f"🔧 [split_images] Added Attributes sections: illumination ({len(old_setups)} items), channel (1 item), tile (400 items), angle (1 item)")
         else:
-            print("⚠️ [split_images] Main ViewSetups (outside ImageLoader) not found - cannot populate with split tiles")
+            logging.warning("⚠️ [split_images] Main ViewSetups (outside ImageLoader) not found - cannot populate with split tiles")
 
         # Ensure correct element order in SequenceDescription (ImageLoader first, like Java BSS)
         seq_desc = xml_tree.find(".//{*}SequenceDescription") or xml_tree.find("SequenceDescription")
@@ -1899,7 +1912,7 @@ def split_images(
                 # Remove and re-insert at the beginning to ensure it's first
                 seq_desc.remove(img_loader)
                 seq_desc.insert(0, img_loader)
-                print("🔧 [split_images] Ensured ImageLoader is first element in SequenceDescription")
+                logging.info("🔧 [split_images] Ensured ImageLoader is first element in SequenceDescription")
         
         # Final verification: ensure nested ImageLoader structure is preserved
         seq_desc = xml_tree.find(".//{*}SequenceDescription") or xml_tree.find("SequenceDescription")
@@ -1908,8 +1921,8 @@ def split_images(
             if img_loader is not None:
                 nested_loader = img_loader.find(".//{*}ImageLoader") or img_loader.find("ImageLoader")
                 if nested_loader is None:
-                    print("❌ [split_images] CRITICAL: Nested ImageLoader structure was lost during normalization!")
-                    print("🔧 [split_images] Rebuilding final nested structure...")
+                    logging.error("❌ [split_images] CRITICAL: Nested ImageLoader structure was lost during normalization!")
+                    logging.info("🔧 [split_images] Rebuilding final nested structure...")
                     # Final rebuild attempt
                     nested_img_loader = ET.SubElement(img_loader, "ImageLoader", {"format": "bdv.multimg.zarr", "version": "3.0"})
                     zarr_elem = ET.SubElement(nested_img_loader, "zarr", {"type": "absolute"})
@@ -1938,9 +1951,9 @@ def split_images(
                             "indicies": "[]"
                         })
                         # Note: Java code doesn't include shape elements in zgroups, so we don't add them
-                    print(f"✅ [split_images] Final nested structure rebuilt with {len(old_setups)} zgroups (based on original tile count)")
+                    logging.info(f"✅ [split_images] Final nested structure rebuilt with {len(old_setups)} zgroups (based on original tile count)")
                 else:
-                    print("✅ [split_images] Final verification: nested ImageLoader structure intact")
+                    logging.info("✅ [split_images] Final verification: nested ImageLoader structure intact")
         
         # Print summary before returning
         _print_split_result_summary(xml_tree)
@@ -1948,32 +1961,32 @@ def split_images(
         # Final validation: ensure the XML structure contains the expected nested ImageLoader
         final_validation = _validate_final_xml_structure(xml_tree, len(old_setups))
         if final_validation:
-            print("✅ [split_images] Final XML structure validation passed")
+            logging.info("✅ [split_images] Final XML structure validation passed")
         else:
-            print("❌ [split_images] Final XML structure validation failed")
+            logging.error("❌ [split_images] Final XML structure validation failed")
         
-        print("🔧 [split_images] Image splitting completed successfully.")
+        logging.info("🔧 [split_images] Image splitting completed successfully.")
         return xml_tree
     except Exception as e:
-        print(f"❌ Error in split_images: {str(e)}")
+        logging.error(f"❌ Error in split_images: {str(e)}")
         traceback.print_exc()
         return None
 
 def _print_split_result_summary(xml_tree):
     """Print a comprehensive summary of the split result XML structure."""
-    print("\n=== Split Result Summary (about to be written to XML) ===")
+    logging.info("\n=== Split Result Summary (about to be written to XML) ===")
     
     # BasePathURI
     base_path = xml_tree.find(".//{*}BasePath") or xml_tree.find("BasePath")
     base_path_text = base_path.text if base_path is not None else "."
     base_path_type = base_path.get("type", "relative") if base_path is not None else "relative"
-    print(f"BasePathURI: {base_path_type}:{base_path_text}")
+    logging.info(f"BasePathURI: {base_path_type}:{base_path_text}")
     
     # ImageLoader
     seq_desc = xml_tree.find(".//{*}SequenceDescription") or xml_tree.find("SequenceDescription")
     img_loader = seq_desc.find(".//{*}ImageLoader") or seq_desc.find("ImageLoader") if seq_desc is not None else None
     img_loader_format = img_loader.get("format", "unknown") if img_loader is not None else "unknown"
-    print(f"ImageLoader: {img_loader_format}")
+    logging.info(f"ImageLoader: {img_loader_format}")
     
     # TimePoints
     timepoints = seq_desc.find(".//{*}Timepoints") or seq_desc.find("Timepoints") if seq_desc is not None else None
@@ -1987,7 +2000,7 @@ def _print_split_result_summary(xml_tree):
             intpat = timepoints.find(".//{*}integerpattern") or timepoints.find("integerpattern")
             if intpat is not None and intpat.text:
                 tp_count = 1  # Assuming single timepoint from pattern
-    print(f"TimePoints: {tp_count}")
+    logging.info(f"TimePoints: {tp_count}")
     
     # ViewSetups analysis
     view_setups_parent = seq_desc.find(".//{*}ViewSetups") or seq_desc.find("ViewSetups") if seq_desc is not None else None
@@ -2028,7 +2041,7 @@ def _print_split_result_summary(xml_tree):
             size_str = size_elem.text.strip().replace(" ", "x")
             size_counts[size_str] = size_counts.get(size_str, 0) + 1
     
-    print(f"ViewSetups: {total_view_setups} (tiles={len(tiles)}, channels={len(channels)}, angles={len(angles)}, illuminations={len(illuminations)})")
+    logging.info(f"ViewSetups: {total_view_setups} (tiles={len(tiles)}, channels={len(channels)}, angles={len(angles)}, illuminations={len(illuminations)})")
     
     # ViewDescriptions (present/missing)
     missing_views = xml_tree.find(".//{*}MissingViews") or xml_tree.find("MissingViews")
@@ -2037,7 +2050,7 @@ def _print_split_result_summary(xml_tree):
         missing_views_list = missing_views.findall(".//{*}View") or missing_views.findall("View")
         missing_count = len(missing_views_list)
     present_count = total_view_setups - missing_count
-    print(f"ViewDescriptions: total={total_view_setups}, present={present_count}, missing={missing_count}")
+    logging.info(f"ViewDescriptions: total={total_view_setups}, present={present_count}, missing={missing_count}")
     
     # Registrations
     view_registrations = xml_tree.find(".//{*}ViewRegistrations") or xml_tree.find("ViewRegistrations")
@@ -2045,7 +2058,7 @@ def _print_split_result_summary(xml_tree):
     if view_registrations is not None:
         registrations = view_registrations.findall(".//{*}ViewRegistration") or view_registrations.findall("ViewRegistration")
         reg_count = len(registrations)
-    print(f"Registrations: {reg_count}")
+    logging.info(f"Registrations: {reg_count}")
     
     # InterestPoints
     view_ips = xml_tree.find(".//{*}ViewInterestPoints") or xml_tree.find("ViewInterestPoints")
@@ -2060,7 +2073,7 @@ def _print_split_result_summary(xml_tree):
     
     views_with_ips = len(set((f.get("timepoint"), f.get("setup")) for f in ip_files if f.get("timepoint") and f.get("setup")))
     labels_list = sorted(list(labels))
-    print(f"InterestPoints: viewsWithIPs={views_with_ips}, lists={len(ip_files)}, totalPoints=estimated, labels={labels_list}")
+    logging.info(f"InterestPoints: viewsWithIPs={views_with_ips}, lists={len(ip_files)}, totalPoints=estimated, labels={labels_list}")
     
     # Other sections
     psf_present = (xml_tree.find(".//{*}PointSpreadFunctions") or xml_tree.find("PointSpreadFunctions")) is not None
@@ -2068,13 +2081,13 @@ def _print_split_result_summary(xml_tree):
     stitch_present = (xml_tree.find(".//{*}StitchingResults") or xml_tree.find("StitchingResults")) is not None
     intensity_present = (xml_tree.find(".//{*}IntensityAdjustments") or xml_tree.find("IntensityAdjustments")) is not None
     
-    print(f"PointSpreadFunctions: {'present=true' if psf_present else '0'}")
-    print(f"BoundingBoxes: present={str(bbox_present).lower()}, StitchingResults: present={str(stitch_present).lower()}, IntensityAdjustments: present={str(intensity_present).lower()}")
+    logging.info(f"PointSpreadFunctions: {'present=true' if psf_present else '0'}")
+    logging.info(f"BoundingBoxes: present={str(bbox_present).lower()}, StitchingResults: present={str(stitch_present).lower()}, IntensityAdjustments: present={str(intensity_present).lower()}")
     
     # Detailed SequenceDescription summary
-    print("SequenceDescription {")
-    print(f"  imgLoader={img_loader_format}")
-    print(f"  viewSetups: {total_view_setups} (tiles={len(tiles)}, channels={len(channels)}, angles={len(angles)}, illuminations={len(illuminations)}) sizesPreview={dict(list(size_counts.items())[:6])}")
+    logging.info("SequenceDescription {")
+    logging.info(f"  imgLoader={img_loader_format}")
+    logging.info(f"  viewSetups: {total_view_setups} (tiles={len(tiles)}, channels={len(channels)}, angles={len(angles)}, illuminations={len(illuminations)}) sizesPreview={dict(list(size_counts.items())[:6])}")
     
     # TimePoints range
     tp_ids = []
@@ -2098,36 +2111,36 @@ def _print_split_result_summary(xml_tree):
     if tp_ids:
         tp_min = min(tp_ids) if all(isinstance(x, int) for x in tp_ids) else tp_ids[0]
         tp_max = max(tp_ids) if all(isinstance(x, int) for x in tp_ids) else tp_ids[-1]
-        print(f"  timepoints: count={len(tp_ids)} idRange=[{tp_min}..{tp_max}]")
+        logging.info(f"  timepoints: count={len(tp_ids)} idRange=[{tp_min}..{tp_max}]")
     else:
-        print(f"  timepoints: count=0 idRange=[]")
+        logging.info(f"  timepoints: count=0 idRange=[]")
     
-    print(f"  missingViewsElement: {missing_views is not None}")
-    print(f"  viewDescriptions: total={total_view_setups}, present={present_count}, missing={missing_count}")
-    print("}")
+    logging.info(f"  missingViewsElement: {missing_views is not None}")
+    logging.info(f"  viewDescriptions: total={total_view_setups}, present={present_count}, missing={missing_count}")
+    logging.info("}")
     
     # ImageLoader XML preview
-    print("ImageLoader XML preview:")
+    logging.info("ImageLoader XML preview:")
     if img_loader is not None:
-        print(f"  <ImageLoader format=\"{img_loader_format}\">")
+        logging.info(f"  <ImageLoader format=\"{img_loader_format}\">")
         
         # Check for nested ImageLoader
         inner_loader = img_loader.find(".//{*}ImageLoader") or img_loader.find("ImageLoader")
         if inner_loader is not None:
             inner_format = inner_loader.get("format", "unknown")
-            print(f"    <ImageLoader format=\"{inner_format}\">")
+            logging.info(f"    <ImageLoader format=\"{inner_format}\">")
             
             # Check for zarr element
             zarr_elem = inner_loader.find(".//{*}zarr") or inner_loader.find("zarr")
             zarr_text = zarr_elem.text if zarr_elem is not None and zarr_elem.text else "unknown"
-            print(f"      <zarr>{zarr_text}</zarr>")
+            logging.info(f"      <zarr>{zarr_text}</zarr>")
             
             # Check for zgroups
             zgroups = inner_loader.find(".//{*}zgroups") or inner_loader.find("zgroups")
             if zgroups is not None:
                 zgroup_list = zgroups.findall(".//{*}zgroup") or zgroups.findall("zgroup")
                 zgroup_count = len(zgroup_list)
-                print(f"      <zgroups>  // {zgroup_count} groups total")
+                logging.info(f"      <zgroups>  // {zgroup_count} groups total")
                 
                 # Show first 10 zgroups as examples
                 for i, zgroup in enumerate(zgroup_list[:10]):
@@ -2137,16 +2150,16 @@ def _print_split_result_summary(xml_tree):
                     indices = zgroup.get("indicies", "[]")  # Note: keeping original typo "indicies"
                     # Truncate long paths for display
                     display_path = path[:30] + "..." if len(path) > 30 else path
-                    print(f"        <zgroup setup=\"{setup}\" tp=\"{tp}\" path=\"{display_path}\" indicies=\"{indices}\" />")
+                    logging.info(f"        <zgroup setup=\"{setup}\" tp=\"{tp}\" path=\"{display_path}\" indicies=\"{indices}\" />")
                 
                 if zgroup_count > 10:
-                    print(f"        <!-- ... {zgroup_count - 10} more ... -->")
-                print("      </zgroups>")
+                    logging.info(f"        <!-- ... {zgroup_count - 10} more ... -->")
+                logging.info("      </zgroups>")
             else:
-                print("      <zgroups>NOT FOUND</zgroups>")
-            print("    </ImageLoader>")
+                logging.info("      <zgroups>NOT FOUND</zgroups>")
+            logging.info("    </ImageLoader>")
         else:
-            print("    <ImageLoader>NOT FOUND</ImageLoader>")
+            logging.info("    <ImageLoader>NOT FOUND</ImageLoader>")
         
         # Check for SequenceDescription in ImageLoader
         seq_in_loader = img_loader.find(".//{*}SequenceDescription") or img_loader.find("SequenceDescription")
@@ -2167,18 +2180,18 @@ def _print_split_result_summary(xml_tree):
             mv_in_loader = seq_in_loader.find(".//{*}MissingViews") or seq_in_loader.find("MissingViews")
             mv_present = mv_in_loader is not None
             
-            print("    <SequenceDescription>")
-            print(f"      <ViewSetups count=\"{vs_count}\" />")
-            print(f"      <Timepoints count=\"{tp_count}\" idRange=\"{tp_range}\" />")
-            print(f"      <MissingViews present=\"{str(mv_present).lower()}\" />")
-            print("    </SequenceDescription>")
+            logging.info("    <SequenceDescription>")
+            logging.info(f"      <ViewSetups count=\"{vs_count}\" />")
+            logging.info(f"      <Timepoints count=\"{tp_count}\" idRange=\"{tp_range}\" />")
+            logging.info(f"      <MissingViews present=\"{str(mv_present).lower()}\" />")
+            logging.info("    </SequenceDescription>")
         
         # Check for SetupIds
         setup_ids = img_loader.find(".//{*}SetupIds") or img_loader.find("SetupIds")
         if setup_ids is not None:
             setup_defs = setup_ids.findall(".//{*}SetupIdDefinition") or setup_ids.findall("SetupIdDefinition")
             setup_count = len(setup_defs)
-            print(f"    <SetupIds>  // {setup_count} mappings total")
+            logging.info(f"    <SetupIds>  // {setup_count} mappings total")
             
             # Show first 10 SetupIdDefinitions as examples
             for i, setup_def in enumerate(setup_defs[:10]):
@@ -2192,18 +2205,18 @@ def _print_split_result_summary(xml_tree):
                 min_val = min_elem.text if min_elem is not None else "? ? ?"
                 max_val = max_elem.text if max_elem is not None else "? ? ?"
                 
-                print("      <SetupIdDefinition>")
-                print(f"        <NewId>{new_id}</NewId>")
-                print(f"        <OldId>{old_id}</OldId>")
-                print(f"        <min>{min_val}</min>")
-                print(f"        <max>{max_val}</max>")
-                print("      </SetupIdDefinition>")
+                logging.info("      <SetupIdDefinition>")
+                logging.info(f"        <NewId>{new_id}</NewId>")
+                logging.info(f"        <OldId>{old_id}</OldId>")
+                logging.info(f"        <min>{min_val}</min>")
+                logging.info(f"        <max>{max_val}</max>")
+                logging.info("      </SetupIdDefinition>")
             
             if setup_count > 10:
-                print(f"      <!-- ... {setup_count - 10} more ... -->")
-            print("    </SetupIds>")
+                logging.info(f"      <!-- ... {setup_count - 10} more ... -->")
+            logging.info("    </SetupIds>")
         
-        print("  </ImageLoader>")
+        logging.info("  </ImageLoader>")
         
         # Summary of ImageLoader structure
         if img_loader is not None:
@@ -2212,18 +2225,18 @@ def _print_split_result_summary(xml_tree):
                 zgroups = inner_loader.find(".//{*}zgroups") or inner_loader.find("zgroups")
                 if zgroups is not None:
                     zgroup_list = zgroups.findall(".//{*}zgroup") or zgroups.findall("zgroup")
-                    print(f"  Summary: ImageLoader contains {len(zgroup_list)} zgroups")
+                    logging.info(f"  Summary: ImageLoader contains {len(zgroup_list)} zgroups")
                 else:
-                    print("  Summary: ImageLoader found but no zgroups")
+                    logging.info("  Summary: ImageLoader found but no zgroups")
             else:
-                print("  Summary: ImageLoader found but no nested structure")
+                logging.info("  Summary: ImageLoader found but no nested structure")
         else:
-            print("  Summary: No ImageLoader found")
+            logging.info("  Summary: No ImageLoader found")
     else:
-        print("  <ImageLoader>NOT FOUND</ImageLoader>")
-        print("  Summary: No ImageLoader found")
+        logging.info("  <ImageLoader>NOT FOUND</ImageLoader>")
+        logging.info("  Summary: No ImageLoader found")
     
-    print("=========================================================\n")
+    logging.info("=========================================================\n")
 
 def _extract_zarr_path_from_xml(xml_tree):
     """
@@ -2267,7 +2280,7 @@ def _extract_zarr_path_from_xml(xml_tree):
         return "unknown"
         
     except Exception as e:
-        print(f"⚠️  [extract_zarr_path] Error extracting zarr path: {str(e)}")
+        logging.error(f"⚠️  [extract_zarr_path] Error extracting zarr path: {str(e)}")
         return "unknown"
 
 def _validate_final_xml_structure(xml_tree, expected_zgroups_count):
@@ -2294,48 +2307,48 @@ def _validate_final_xml_structure(xml_tree, expected_zgroups_count):
         # Check SequenceDescription
         seq_desc = xml_tree.find(".//{*}SequenceDescription") or xml_tree.find("SequenceDescription")
         if seq_desc is None:
-            print("❌ [validation] SequenceDescription not found")
+            logging.error("❌ [validation] SequenceDescription not found")
             return False
         
         # Check ImageLoader
         img_loader = seq_desc.find(".//{*}ImageLoader") or seq_desc.find("ImageLoader")
         if img_loader is None:
-            print("❌ [validation] ImageLoader not found in SequenceDescription")
+            logging.error("❌ [validation] ImageLoader not found in SequenceDescription")
             return False
         
         # Check format
         if img_loader.get("format") != "split.viewerimgloader":
-            print(f"❌ [validation] ImageLoader format incorrect: {img_loader.get('format')}")
+            logging.error(f"❌ [validation] ImageLoader format incorrect: {img_loader.get('format')}")
             return False
         
         # Check nested ImageLoader
         nested_loader = img_loader.find(".//{*}ImageLoader") or img_loader.find("ImageLoader")
         if nested_loader is None:
-            print("❌ [validation] Nested ImageLoader not found")
+            logging.error("❌ [validation] Nested ImageLoader not found")
             return False
         
         # Check nested format
         if nested_loader.get("format") != "bdv.multimg.zarr":
-            print(f"❌ [validation] Nested ImageLoader format incorrect: {nested_loader.get('format')}")
+            logging.error(f"❌ [validation] Nested ImageLoader format incorrect: {nested_loader.get('format')}")
             return False
         
         # Check zarr element
         zarr_elem = nested_loader.find(".//{*}zarr") or nested_loader.find("zarr")
         if zarr_elem is None:
-            print("❌ [validation] zarr element not found in nested ImageLoader")
+            logging.error("❌ [validation] zarr element not found in nested ImageLoader")
             return False
         
         # Check zgroups
         zgroups = nested_loader.find(".//{*}zgroups") or nested_loader.find("zgroups")
         if zgroups is None:
-            print("❌ [validation] zgroups element not found in nested ImageLoader")
+            logging.error("❌ [validation] zgroups element not found in nested ImageLoader")
             return False
         
         # Check zgroup count
         zgroup_list = zgroups.findall(".//{*}zgroup") or zgroups.findall("zgroup")
         actual_count = len(zgroup_list)
         if actual_count != expected_zgroups_count:
-            print(f"❌ [validation] zgroup count mismatch: expected {expected_zgroups_count}, got {actual_count}")
+            logging.error(f"❌ [validation] zgroup count mismatch: expected {expected_zgroups_count}, got {actual_count}")
             return False
         
         # Check first few zgroups have required attributes
@@ -2343,12 +2356,12 @@ def _validate_final_xml_structure(xml_tree, expected_zgroups_count):
             required_attrs = ["setup", "tp", "path", "indicies"]
             for attr in required_attrs:
                 if attr not in zgroup.attrib:
-                    print(f"❌ [validation] zgroup {i} missing required attribute: {attr}")
+                    logging.error(f"❌ [validation] zgroup {i} missing required attribute: {attr}")
                     return False
         
-        print(f"✅ [validation] All checks passed: {actual_count} zgroups found with correct structure")
+        logging.info(f"✅ [validation] All checks passed: {actual_count} zgroups found with correct structure")
         return True
         
     except Exception as e:
-        print(f"❌ [validation] Validation error: {str(e)}")
+        logging.error(f"❌ [validation] Validation error: {str(e)}")
         return False
