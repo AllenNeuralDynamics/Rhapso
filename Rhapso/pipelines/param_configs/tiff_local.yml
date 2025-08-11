@@ -17,13 +17,13 @@ file_source_detection: 'local'
 xml_bucket_name_detection: None
 image_bucket_name: None
 output_bucket_name: None
-run_type: dask
+detection_run_type: dask
 # xml_file_path_detection: '/home/martin/Documents/allen/clean-bss-mvr/IP_TIFF_XML_2/dataset.xml'
 # image_file_path:  '/home/martin/Documents/allen/clean-bss-mvr/IP_TIFF_XML_2/'
 # output_file_path: '/home/martin/Documents/allen/clean-bss-mvr/IP_TIFF_XML_2/output'
 xml_file_path_detection: '/Users/seanfite/Desktop/IP_TIFF_XML/dataset.xml'
 image_file_path:  '/Users/seanfite/Desktop/IP_TIFF_XML/' 
-output_file_path: '/Users/seanfite/Desktop/IP_TIFF_XML/interestpoints.n5/'
+output_file_path: '/Users/seanfite/Desktop/IP_TIFF_XML/'
 
 
 # INTEREST POINT MATCHING
@@ -31,6 +31,7 @@ output_file_path: '/Users/seanfite/Desktop/IP_TIFF_XML/interestpoints.n5/'
 
 xml_file_path_matching: "/Users/seanfite/Desktop/IP_TIFF_XML/dataset-detection.xml"
 n5_matching_output_path: '/Users/seanfite/Desktop/IP_TIFF_XML'
+input_type: "tiff"
 
 # match_type: "rigid"               
 # # -- Candidates --
@@ -64,17 +65,17 @@ regularization_weight: 1.0
 # -----------------------------------
 
 fixed_views: [ 'timepoint: 18, setup: 0', 'timepoint: 30, setup: 0']
-model: "affine"
-alignment_option: 1
 relative_threshold: 3.5
 absolute_threshold: 7.0
 min_matches: 3
-damp: .4
+damp: 1.0
 max_iterations: 100000
-max_allowed_error: 5.0
+max_allowed_error: .inf
 max_plateauwidth: 200
 file_source_solver: 'local'
 xml_bucket_name_solver: None
-xml_file_path_solver: '/home/martin/Documents/allen/clean-bss-mvr/IP_TIFF_XML_2/output/dataset-detection.xml'
-data_prefix: '/home/martin/Documents/allen/clean-bss-mvr/IP_TIFF_XML_2/output/interestpoints.n5'
-xml_file_path_output: '/home/martin/Documents/allen/clean-bss-mvr/IP_TIFF_XML_2/output/dataset-solve.xml'
+xml_file_path_solver: '/Users/seanfite/Desktop/IP_TIFF_XML/dataset-detection.xml'
+data_prefix: '/Users/seanfite/Desktop/IP_TIFF_XML/interestpoints.n5'
+xml_file_path_output: '/Users/seanfite/Desktop/IP_TIFF_XML/rhapso_solver.xml' 
+metrics_output_path: "metrics/metrics.json"
+run_type_solver: "affine"
