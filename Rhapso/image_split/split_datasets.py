@@ -30,8 +30,8 @@ def main():
     display_result = False
 
     # CLI user input values - these would be replaced with proper argument parsing
-    xml_input = "/home/martin/Documents/Allen/Data/exaSPIM_686951 EXAMPLE/ip_affine_alignment/bigstitcher_affine.xml"
-    xml_output = "/home/martin/Documents/Allen/Data/exaSPIM_686951 EXAMPLE/results/bigstitcher_affine_split-RHAPSO.xml"
+    xml_input = "/mnt/c/Users/marti/Documents/allen/data/exaSPIM_686951 EXAMPLE/ip_affine_alignment/bigstitcher_affine.xml"
+    xml_output = "/mnt/c/Users/marti/Documents/allen/data/exaSPIM_686951 EXAMPLE/results/bigstitcher_affine_split-RHAPSO.xml"
     target_image_size_string = "7000,7000,4000"
     target_overlap_string = "128,128,128"
     fake_interest_points = True

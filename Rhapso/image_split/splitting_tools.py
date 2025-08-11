@@ -14,7 +14,6 @@ import copy
 import numpy as np
 from xml.etree import ElementTree as ET
 
-
 def last_image_size(length, size, overlap):
     """Calculates the size of the last tile in a dimension."""
     if length <= size:
@@ -29,7 +28,6 @@ def last_image_size(length, size, overlap):
     last_start = (num_blocks - 1) * step
     return length - last_start
 
-
 def last_image_size_java(l, s, o):
     # Port of SplittingTools.lastImageSize(long l, long s, long o) with Java-style remainder
     # Java remainder: a % b keeps the sign of 'a' (truncates toward zero). Python uses floor.
@@ -40,7 +38,6 @@ def last_image_size_java(l, s, o):
     if size < 0:
         size = l + size
     return int(size)
-
 
 def intersect(interval1, interval2):
     """Computes the intersection of two intervals."""
@@ -62,7 +59,6 @@ def is_empty(interval):
     mins, maxs = interval
     return np.any(mins > maxs)
 
-
 def contains(point_location, interval):
     """Checks if a point location is within a given interval."""
     mins, maxs = interval
@@ -70,7 +66,6 @@ def contains(point_location, interval):
         if not (mins[d] <= point_location[d] <= maxs[d]):
             return False
     return True
-
 
 def split_dim_java(length, s, o, min0=0):
     # Port of SplittingTools.splitDim(...) producing 1D [min,max] inclusive intervals
@@ -84,7 +79,6 @@ def split_dim_java(length, s, o, min0=0):
             break
         from_v = to_v - int(o) + 1
     return dim_intervals
-
 
 def distribute_intervals_fixed_overlap(
     input_dims, overlap, target_size, min_step_size, optimize
@@ -148,7 +142,13 @@ def distribute_intervals_fixed_overlap(
             else:
                 final_size = s
 
-            dim_intervals.extend(split_dim_java(l, final_size, o, min0=0))
+            # Generate intervals for this dimension
+            dim_intervals = split_dim_java(l, final_size, o, min0=0)
+            
+            # Debug: Show what's happening in this dimension
+            print(f"🔧 [distribute_intervals_fixed_overlap] Dimension {d}:")
+            print(f"  Length: {length}, Target: {s}, Overlap: {o}, Final size: {final_size}")
+            print(f"  Generated {len(dim_intervals)} intervals: {dim_intervals}")
 
         interval_basis.append(dim_intervals)
 
@@ -164,8 +164,8 @@ def distribute_intervals_fixed_overlap(
             (np.array(mins, dtype=np.int64), np.array(maxs, dtype=np.int64))
         )
 
+    print(f"🔧 [distribute_intervals_fixed_overlap] Total intervals generated: {len(interval_list)}")
     return interval_list
-
 
 def max_interval_spread(old_setups, overlap, target_size, min_step_size, optimize):
     """Calculates the maximum number of splits for any single view, with Java-like logging."""
@@ -219,25 +219,24 @@ def max_interval_spread(old_setups, overlap, target_size, min_step_size, optimiz
     print(f"maxIntervalSpread output: max = {max_splits}")
     return max_splits
 
-
 def _find_one(root, name):
-	# namespaced-safe find for existing elements
-	return root.find(f".//{{*}}{name}") or root.find(name)
+    # namespaced-safe find for existing elements
+    return root.find(f".//{{*}}{name}") or root.find(name)
 
 def _ensure_child(parent, tag, attrib=None):
-	node = parent.find(tag)
-	if node is None:
-		node = ET.SubElement(parent, tag, attrib or {})
-	else:
-		if attrib:
-			# preserve existing attributes unless we overwrite provided keys
-			for k, v in attrib.items():
-				node.set(k, v)
-	return node
+    node = parent.find(tag)
+    if node is None:
+        node = ET.SubElement(parent, tag, attrib or {})
+    else:
+        if attrib:
+            # preserve existing attributes unless we overwrite provided keys
+            for k, v in attrib.items():
+                node.set(k, v)
+    return node
 
 def _clear_children(node):
-	for child in list(node):
-		node.remove(child)
+    for child in list(node):
+        node.remove(child)
 
 def _ensure_sequence_description_like_bss(xml_root, img_loader_format="split.viewerimgloader"):
 	# Ensure root and BasePath (match BSS: BasePath type="relative">.</BasePath>)
@@ -267,15 +266,18 @@ def _ensure_sequence_description_like_bss(xml_root, img_loader_format="split.vie
 
 	# 1) ImageLoader
 	# Match BSS: <ImageLoader format="split.viewerimgloader">...</ImageLoader>
-	# If an ImageLoader or ImgLoader exists, normalize it to the expected format and clear children
+	# If an ImageLoader or ImgLoader exists, normalize it to the expected format
+	# BUT preserve the nested structure if it already exists
 	img_loader = (_find_one(seq, "ImageLoader") or _find_one(seq, "ImgLoader"))
 	if img_loader is None or img_loader.tag.split("}")[-1] != "ImageLoader":
 		if img_loader is not None:
 			seq.remove(img_loader)
 		img_loader = ET.SubElement(seq, "ImageLoader", {"format": img_loader_format})
 	else:
-		img_loader.set("format", img_loader_format)
-	_clear_children(img_loader)
+		# Only set format if it's different, don't clear children
+		if img_loader.get("format") != img_loader_format:
+			img_loader.set("format", img_loader_format)
+		# Don't clear children - preserve nested ImageLoader structure
 
 	# 2) ViewSetups (can remain empty)
 	view_setups = _find_one(seq, "ViewSetups")
@@ -302,6 +304,26 @@ def _ensure_sequence_description_like_bss(xml_root, img_loader_format="split.vie
 		# keep as-is, do not remove entries
 		pass
 
+	# 5) Ensure nested ImageLoader structure exists if this is a split operation
+	# Check if we have the expected nested structure
+	img_loader = _find_one(seq, "ImageLoader")
+	if img_loader is not None and img_loader.get("format") == "split.viewerimgloader":
+		print("test")
+        # Ensure nested ImageLoader exists
+		nested_loader = img_loader.find(".//{*}ImageLoader") or img_loader.find("ImageLoader")
+		if nested_loader is None:
+            # Create minimal nested structure if missing
+			nested_img_loader = ET.SubElement(img_loader, "ImageLoader", {"format": "bdv.multimg.zarr", "version": "3.0"})
+			zarr_elem = ET.SubElement(nested_img_loader, "zarr", {"type": "absolute"})
+			zarr_elem.text = "unknown"
+			zgroups_elem = ET.SubElement(nested_img_loader, "zgroups")
+            # Add a placeholder zgroup with meaningful defaults (no shape element like Java)
+			ET.SubElement(zgroups_elem, "zgroup", {
+                "setup": "0", 
+                "tp": "0", 
+                "path": "tile_000000_ch_561.zarr", 
+                "indicies": "[]"
+            })
 	return root
 
 def split_images(
@@ -539,8 +561,8 @@ def split_images(
 
         # for loop through oldSetups
         print(f"Splitting {len(old_setups)} old setups...")
+        new_id = 0  # Ensure new_id starts at 0
         for old_setup in old_setups:
-
             # set vars 1
             id_el = old_setup.find(".//{*}id") or old_setup.find("id")
             oldID = int(id_el.text) if id_el is not None else None
@@ -674,6 +696,36 @@ def split_images(
             intervals = distribute_intervals_fixed_overlap(
                 dims, overlapPx, targetSize, minStepSize, optimize
             )
+
+            # Debug: Show interval generation details
+            print(f"🔧 [split_images] Interval generation for ViewSetup {oldID}:")
+            print(f"  Original dimensions: {dims}")
+            print(f"  Target size: {[int(x) for x in targetSize]}")
+            print(f"  Overlap: {[int(x) for x in overlapPx]}")
+            print(f"  Min step size: {[int(x) for x in minStepSize]}")
+            print(f"  Generated intervals: {len(intervals) if intervals else 0}")
+            
+            # Show intervals per dimension
+            if intervals:
+                # Calculate how many intervals per dimension
+                dim_counts = []
+                for d in range(len(dims)):
+                    length = dims[d]
+                    target = int(targetSize[d])
+                    overlap = int(overlapPx[d])
+                    if length <= target:
+                        dim_counts.append(1)
+                    else:
+                        step = target - overlap
+                        if step > 0:
+                            count = (length - target) // step + 1
+                            dim_counts.append(count)
+                        else:
+                            dim_counts.append(1)
+                
+                print(f"  Expected intervals per dimension: {dim_counts}")
+                print(f"  Total expected intervals: {np.prod(dim_counts)}")
+                print(f"  Actual intervals generated: {len(intervals)}")
 
             # interval2ViewSetup map (empty for now, to be filled later)
             interval2ViewSetup = {}
@@ -821,6 +873,9 @@ def split_images(
                 )
                 print("")
 
+                # Increment new_id for the next interval (this ensures each interval gets a unique ID)
+                new_id += 1
+
                 # timepoint loop start
                 # Use the same logic as in the timepoints summary: check for integerpattern if no TimePoint elements
                 tp_elements = []
@@ -834,264 +889,268 @@ def split_images(
                             tp_elements = [intpat]
                 tp_total = len(tp_elements)
                 print(f"\tStarting timepoint loop for interval index {i}: {tp_total} timepoints total.")
-                tpIdx = 0
-                for tp in tp_elements:
-                    # Resolve timepoint id from attribute or child element or integerpattern
-                    tp_id = None
-                    if hasattr(tp, "attrib") and "id" in tp.attrib:
-                        try:
-                            tp_id = int(tp.get("id"))
-                        except Exception:
-                            tp_id = tp.get("id")
-                    if tp_id is None:
-                        tpid_el = tp.find(".//{*}id") or tp.find("id")
-                        if tpid_el is not None and tpid_el.text:
-                            txt = tpid_el.text.strip()
-                            tp_id = int(txt) if txt.isdigit() else txt
-                        elif tp.tag.lower().endswith("integerpattern") and tp.text:
-                            tp_id = int(tp.text.strip()) if tp.text.strip().isdigit() else tp.text.strip()
-                        else:
-                            tp_id = "unknown"
-                    print(f"\t\tProcessing timepoint {tpIdx + 1}/{tp_total} (id={tp_id})")
-                    tpIdx += 1
-
-                    # timepoint loop var setup CODE START
-                    # Build oldViewId and fetch oldVR from <ViewRegistrations>
-                    oldViewId_str = f"ViewId{{timepoint={tp_id}, setup={oldID}}}"
-                    oldVR_el = None
-                    if old_registrations is not None:
-                        vr_candidates = list(old_registrations.findall(".//{*}ViewRegistration")) or list(old_registrations.findall("ViewRegistration"))
-                        for vr in vr_candidates:
-                            if str(vr.get("timepoint")) == str(tp_id) and str(vr.get("setup")) == str(oldID):
-                                oldVR_el = vr
-                                break
-
-                    # Extract transformList (name + 12-number row-packed affine) from oldVR
-                    transformList = []
-                    old_transform_count = 0
-                    if oldVR_el is not None:
-                        vt_elems = list(oldVR_el.findall(".//{*}ViewTransform")) or list(oldVR_el.findall("ViewTransform"))
-                        for vt in vt_elems:
-                            name_el = vt.find(".//{*}Name") or vt.find("Name")
-                            aff_el = vt.find(".//{*}affine") or vt.find("affine")
-                            name = name_el.text.strip() if (name_el is not None and name_el.text) else ""
-                            affine_vals = []
-                            if aff_el is not None and aff_el.text:
-                                try:
-                                    affine_vals = [float(x) for x in aff_el.text.strip().split()]
-                                except Exception:
-                                    affine_vals = []
-                            transformList.append({"name": name, "affine": affine_vals})
-                        old_transform_count = len(transformList)
-
-                    # Create translation (3x4) for current interval mins and append as "Image Splitting"
-                    tx = float(mins[0] if len(mins) > 0 else 0.0)
-                    ty = float(mins[1] if len(mins) > 1 else 0.0)
-                    tz = float(mins[2] if len(mins) > 2 else 0.0)
-                    translation_affine = [1.0, 0.0, 0.0, tx, 0.0, 1.0, 0.0, ty, 0.0, 0.0, 1.0, tz]
-                    transform = {"name": "Image Splitting", "affine": translation_affine}
-                    transformList = list(transformList)  # copy
-                    transformList.append(transform)
-
-                    # Build newViewId and newVR, add to new_registrations
-                    newViewId_key = (int(tp_id) if str(tp_id).isdigit() else tp_id, new_id)
-                    newVR = {
-                        "timepoint": newViewId_key[0],
-                        "setup": new_id,
-                        "transforms": transformList,
-                    }
-                    new_registrations[newViewId_key] = newVR
-
-                    # Interest points placeholders: discover oldVipl presence in <ViewInterestPoints>
-                    vip_root = xml_tree.find(".//{*}ViewInterestPoints") or xml_tree.find("ViewInterestPoints")
-                    oldVipl = None
-                    if vip_root is not None:
-                        vipl_files = list(vip_root.findall(".//{*}ViewInterestPointsFile")) or list(vip_root.findall("ViewInterestPointsFile"))
-                        for vf in vipl_files:
-                            if str(vf.get("timepoint")) == str(tp_id) and str(vf.get("setup")) == str(oldID):
-                                oldVipl = {"timepointId": int(tp_id) if str(tp_id).isdigit() else tp_id, "viewSetupId": oldID}
-                                break
-                    newVipl = {"timepointId": newViewId_key[0], "viewSetupId": new_id}
-
-                    # --- timepoint loop var setup checkpoint ---
-                    print("\n\t\t--- timepoint loop var setup checkpoint ---")
-                    print(f"\t\toldViewId: {oldViewId_str}")
-                    if oldVR_el is None:
-                        print("\t\toldVR: null")
+            
+            # Print summary of all new setups created
+            print(f"🔧 [split_images] Total new_setups created: {len(new_setups)}")
+            print(f"🔧 [split_images] Expected zgroups count: {len(old_setups)} (based on original tile count)")
+            tpIdx = 0
+            for tp in tp_elements:
+                # Resolve timepoint id from attribute or child element or integerpattern
+                tp_id = None
+                if hasattr(tp, "attrib") and "id" in tp.attrib:
+                    try:
+                        tp_id = int(tp.get("id"))
+                    except Exception:
+                        tp_id = tp.get("id")
+                if tp_id is None:
+                    tpid_el = tp.find(".//{*}id") or tp.find("id")
+                    if tpid_el is not None and tpid_el.text:
+                        txt = tpid_el.text.strip()
+                        tp_id = int(txt) if txt.isdigit() else txt
+                    elif tp.tag.lower().endswith("integerpattern") and tp.text:
+                        tp_id = int(tp.text.strip()) if tp.text.strip().isdigit() else tp.text.strip()
                     else:
-                        print(f"\t\toldVR: ViewRegistration with {old_transform_count} transforms")
-                    last_name = transformList[-1]["name"] if len(transformList) > 0 else "n/a"
-                    print(f"\t\ttransformList: size={len(transformList)}, last transform name={last_name}")
-                    # Match Java-like printing for translation and row-packed copy
-                    trans_tuple_str = ", ".join(f"{v:.1f}" if float(v).is_integer() else f"{v}" for v in translation_affine)
-                    print(f"\t\ttranslation: 3d-affine: ({trans_tuple_str})")
-                    print(f"\t\ttransform: {transform['name']}, affine={[float(v) for v in translation_affine]}")
-                    newViewId_str = f"ViewId{{timepoint={newViewId_key[0]}, setup={new_id}}}"
-                    print(f"\t\tnewViewId: {newViewId_str}")
-                    print(f"\t\tnewVR: {'null' if newVR is None else f'ViewRegistration with {len(transformList)} transforms'}")
-                    print(f"\t\tnewRegistrations: total entries={len(new_registrations)}")
-                    print(f"\t\tnewVipl: timepointId={newVipl['timepointId']}, viewSetupId={newVipl['viewSetupId']}")
-                    if oldVipl is None:
-                        print("\t\toldVipl: null")
-                    else:
-                        print(f"\t\toldVipl: timepointId={oldVipl['timepointId']}, viewSetupId={oldVipl['viewSetupId']}")
-                    print("\t\t--- end checkpoint ---\n")
-                    # timepoint loop var setup CODE END 
+                        tp_id = "unknown"
+                print(f"\t\tProcessing timepoint {tpIdx + 1}/{tp_total} (id={tp_id})")
+                tpIdx += 1
 
-                    # only update interest points for present views
-                    # oldVipl may be null for missing views
-                    missing_views_el = xml_tree.find(".//{*}MissingViews")
-                    is_missing = False
-                    if missing_views_el is not None:
-                        # Check if the current viewId is in the list of missing views
-                        for view in missing_views_el.findall(".//{*}View") or missing_views_el.findall("View"):
-                            if view.get("timepoint") == str(tp_id) and view.get("setup") == str(oldID):
-                                is_missing = True
-                                break
+                # timepoint loop var setup CODE START
+                # Build oldViewId and fetch oldVR from <ViewRegistrations>
+                oldViewId_str = f"ViewId{{timepoint={tp_id}, setup={oldID}}}"
+                oldVR_el = None
+                if old_registrations is not None:
+                    vr_candidates = list(old_registrations.findall(".//{*}ViewRegistration")) or list(old_registrations.findall("ViewRegistration"))
+                    for vr in vr_candidates:
+                        if str(vr.get("timepoint")) == str(tp_id) and str(vr.get("setup")) == str(oldID):
+                            oldVR_el = vr
+                            break
+
+                # Extract transformList (name + 12-number row-packed affine) from oldVR
+                transformList = []
+                old_transform_count = 0
+                if oldVR_el is not None:
+                    vt_elems = list(oldVR_el.findall(".//{*}ViewTransform")) or list(oldVR_el.findall("ViewTransform"))
+                    for vt in vt_elems:
+                        name_el = vt.find(".//{*}Name") or vt.find("Name")
+                        aff_el = vt.find(".//{*}affine") or vt.find("affine")
+                        name = name_el.text.strip() if (name_el is not None and name_el.text) else ""
+                        affine_vals = []
+                        if aff_el is not None and aff_el.text:
+                            try:
+                                affine_vals = [float(x) for x in aff_el.text.strip().split()]
+                            except Exception:
+                                affine_vals = []
+                        transformList.append({"name": name, "affine": affine_vals})
+                    old_transform_count = len(transformList)
+
+                # Create translation (3x4) for current interval mins and append as "Image Splitting"
+                tx = float(mins[0] if len(mins) > 0 else 0.0)
+                ty = float(mins[1] if len(mins) > 1 else 0.0)
+                tz = float(mins[2] if len(mins) > 2 else 0.0)
+                translation_affine = [1.0, 0.0, 0.0, tx, 0.0, 1.0, 0.0, ty, 0.0, 0.0, 1.0, tz]
+                transform = {"name": "Image Splitting", "affine": translation_affine}
+                transformList = list(transformList)  # copy
+                transformList.append(transform)
+
+                # Build newViewId and newVR, add to new_registrations
+                newViewId_key = (int(tp_id) if str(tp_id).isdigit() else tp_id, new_id)
+                newVR = {
+                    "timepoint": newViewId_key[0],
+                    "setup": new_id,
+                    "transforms": transformList,
+                }
+                new_registrations[newViewId_key] = newVR
+
+                # Interest points placeholders: discover oldVipl presence in <ViewInterestPoints>
+                vip_root = xml_tree.find(".//{*}ViewInterestPoints") or xml_tree.find("ViewInterestPoints")
+                oldVipl = None
+                if vip_root is not None:
+                    vipl_files = list(vip_root.findall(".//{*}ViewInterestPointsFile")) or list(vip_root.findall("ViewInterestPointsFile"))
+                    for vf in vipl_files:
+                        if str(vf.get("timepoint")) == str(tp_id) and str(vf.get("setup")) == str(oldID):
+                            oldVipl = {"timepointId": int(tp_id) if str(tp_id).isdigit() else tp_id, "viewSetupId": oldID}
+                            break
+                newVipl = {"timepointId": newViewId_key[0], "viewSetupId": new_id}
+
+                # --- timepoint loop var setup checkpoint ---
+                print("\n\t\t--- timepoint loop var setup checkpoint ---")
+                print(f"\t\toldViewId: {oldViewId_str}")
+                if oldVR_el is None:
+                    print("\t\toldVR: null")
+                else:
+                    print(f"\t\toldVR: ViewRegistration with {old_transform_count} transforms")
+                last_name = transformList[-1]["name"] if len(transformList) > 0 else "n/a"
+                print(f"\t\ttransformList: size={len(transformList)}, last transform name={last_name}")
+                # Match Java-like printing for translation and row-packed copy
+                trans_tuple_str = ", ".join(f"{v:.1f}" if float(v).is_integer() else f"{v}" for v in translation_affine)
+                print(f"\t\ttranslation: 3d-affine: ({trans_tuple_str})")
+                print(f"\t\ttransform: {transform['name']}, affine={[float(v) for v in translation_affine]}")
+                newViewId_str = f"ViewId{{timepoint={newViewId_key[0]}, setup={new_id}}}"
+                print(f"\t\tnewViewId: {newViewId_str}")
+                print(f"\t\tnewVR: {'null' if newVR is None else f'ViewRegistration with {len(transformList)} transforms'}")
+                print(f"\t\tnewRegistrations: total entries={len(new_registrations)}")
+                print(f"\t\tnewVipl: timepointId={newVipl['timepointId']}, viewSetupId={newVipl['viewSetupId']}")
+                if oldVipl is None:
+                    print("\t\toldVipl: null")
+                else:
+                    print(f"\t\toldVipl: timepointId={oldVipl['timepointId']}, viewSetupId={oldVipl['viewSetupId']}")
+                print("\t\t--- end checkpoint ---\n")
+                # timepoint loop var setup CODE END 
+
+                # only update interest points for present views
+                # oldVipl may be null for missing views
+                missing_views_el = xml_tree.find(".//{*}MissingViews")
+                is_missing = False
+                if missing_views_el is not None:
+                    # Check if the current viewId is in the list of missing views
+                    for view in missing_views_el.findall(".//{*}View") or missing_views_el.findall("View"):
+                        if view.get("timepoint") == str(tp_id) and view.get("setup") == str(oldID):
+                            is_missing = True
+                            break
+                
+                # The condition is true if the view is NOT missing.
+                # This matches the Java logic: `!missingViews.contains(oldViewId)`
+                if not is_missing:
+                    labelIdx = 0
                     
-                    # The condition is true if the view is NOT missing.
-                    # This matches the Java logic: `!missingViews.contains(oldViewId)`
-                    if not is_missing:
-                        labelIdx = 0
-                        
-                        # Find all labels for the old view
-                        old_labels = []
+                    # Find all labels for the old view
+                    old_labels = []
+                    if vip_root is not None:
+                        for vf in vip_root.findall(".//{*}ViewInterestPointsFile") or vip_root.findall("ViewInterestPointsFile"):
+                            if vf.get("timepoint") == str(tp_id) and vf.get("setup") == str(oldID):
+                                if vf.get("label"):
+                                    old_labels.append(vf.get("label"))
+                    
+                    for label in old_labels:
+                        print(f"\t\tProcessing label index: {labelIdx}, label: {label}")
+                        id = 0
+                        labelIdx += 1
+
+                        # labels loop var creation
+                        newIp1 = []
+                        oldIpl1_el = None
                         if vip_root is not None:
                             for vf in vip_root.findall(".//{*}ViewInterestPointsFile") or vip_root.findall("ViewInterestPointsFile"):
-                                if vf.get("timepoint") == str(tp_id) and vf.get("setup") == str(oldID):
-                                    if vf.get("label"):
-                                        old_labels.append(vf.get("label"))
+                                if vf.get("timepoint") == str(tp_id) and vf.get("setup") == str(oldID) and vf.get("label") == label:
+                                    oldIpl1_el = vf
+                                    break
                         
-                        for label in old_labels:
-                            print(f"\t\tProcessing label index: {labelIdx}, label: {label}")
-                            id = 0
-                            labelIdx += 1
+                        # In Python, we don't load the actual points from file. 
+                        # This list would need to be populated for the loop to run.
+                        oldIp1 = [] # Placeholder for list of InterestPoint objects/dicts
 
-                            # labels loop var creation
-                            newIp1 = []
-                            oldIpl1_el = None
-                            if vip_root is not None:
-                                for vf in vip_root.findall(".//{*}ViewInterestPointsFile") or vip_root.findall("ViewInterestPointsFile"):
-                                    if vf.get("timepoint") == str(tp_id) and vf.get("setup") == str(oldID) and vf.get("label") == label:
-                                        oldIpl1_el = vf
-                                        break
-                            
-                            # In Python, we don't load the actual points from file. 
-                            # This list would need to be populated for the loop to run.
-                            oldIp1 = [] # Placeholder for list of InterestPoint objects/dicts
-
-                            # ip for loop
-                            for ip in oldIp1:
-                                # ip is expected to be a dict with a 'location' key, e.g., {'location': [x, y, z]}
-                                if contains(ip['location'], (mins_arr, maxs_arr)):
-                                    l = list(ip['location'])
-                                    for d in range(len(l)):
-                                        l[d] -= mins_arr[d]
-                                    
-                                    newIp1.append({'id': id, 'location': l})
-                                    id += 1
-                        
-                        # adding random corresponding interest points in overlapping areas of introduced split views
-                        if addIPs:
-                            newIp = []
-                            id = 0
-
-                            # for each overlapping tile that has not been processed yet
-                            for j in range(i):
-                                other_interval_tuple = intervals[j]
-                                other_interval = (other_interval_tuple[0], other_interval_tuple[1])
+                        # ip for loop
+                        for ip in oldIp1:
+                            # ip is expected to be a dict with a 'location' key, e.g., {'location': [x, y, z]}
+                            if contains(ip['location'], (mins_arr, maxs_arr)):
+                                l = list(ip['location'])
+                                for d in range(len(l)):
+                                    l[d] -= mins_arr[d]
                                 
-                                intersection = intersect((mins_arr, maxs_arr), other_interval)
+                                newIp1.append({'id': id, 'location': l})
+                                id += 1
+                    
+                    # adding random corresponding interest points in overlapping areas of introduced split views
+                    if addIPs:
+                        newIp = []
+                        id = 0
 
-                                if not is_empty(intersection):
-                                    # In Python, interval2ViewSetup maps tuple keys to newSetup dicts
-                                    other_interval_key = (tuple(other_interval[0].tolist()), tuple(other_interval[1].tolist()))
-                                    otherSetup = interval2ViewSetup.get(other_interval_key)
+                        # for each overlapping tile that has not been processed yet
+                        for j in range(i):
+                            other_interval_tuple = intervals[j]
+                            other_interval = (other_interval_tuple[0], other_interval_tuple[1])
+                            
+                            intersection = intersect((mins_arr, maxs_arr), other_interval)
+
+                            if not is_empty(intersection):
+                                # In Python, interval2ViewSetup maps tuple keys to newSetup dicts
+                                other_interval_key = (tuple(other_interval[0].tolist()), tuple(other_interval[1].tolist()))
+                                otherSetup = interval2ViewSetup.get(other_interval_key)
+                                
+                                if not otherSetup:
+                                    continue
+
+                                otherViewId_key = (tp_id, otherSetup['id'])
+                                otherIPLists = new_interestpoints.get(otherViewId_key)
+
+                                if not otherIPLists or 'interest_points_lists' not in otherIPLists or fakeLabel not in otherIPLists['interest_points_lists']:
+                                    continue
+
+                                # add points as function of the area
+                                n = len(intersection[0])
+                                num_pixels = np.prod(intersection[1] - intersection[0] + 1)
+                                
+                                num_points = min(maxPoints, max(minPoints, int(round(np.ceil(pointDensity * num_pixels / (100.0**3))))))
+                                print(f"{num_pixels / (100.0**3)} {num_points}")
+
+                                other_points_list = otherIPLists['interest_points_lists'][fakeLabel]['points']
+                                otherId = other_points_list[-1]['id'] + 1 if other_points_list else 0
+
+                                # In a full implementation, KDTree would be used.
+                                # from scipy.spatial import KDTree
+                                search2 = None
+                                if excludeRadius > 0 and other_points_list:
+                                    # This part requires a KD-tree implementation like scipy.spatial.KDTree
+                                    # For now, we'll skip this part as it's complex without the library.
+                                    # otherIPglobal = [ip['location'] + other_interval[0] for ip in other_points_list]
+                                    # if otherIPglobal:
+                                    #     tree2 = KDTree(otherIPglobal)
+                                    #     search2 = tree2
+                                    pass
+
+                                for k in range(num_points):
+                                    p = np.zeros(n)
+                                    op = np.zeros(n)
+                                    tmp = np.zeros(n)
+
+                                    for d in range(n):
+                                        l = rnd.uniform(intersection[0][d], intersection[1][d])
+                                        p[d] = (l + (rnd.random() - 0.5) * error) - mins_arr[d]
+                                        op[d] = (l + (rnd.random() - 0.5) * error) - other_interval[0][d]
+                                        tmp[d] = l
                                     
-                                    if not otherSetup:
-                                        continue
-
-                                    otherViewId_key = (tp_id, otherSetup['id'])
-                                    otherIPLists = new_interestpoints.get(otherViewId_key)
-
-                                    if not otherIPLists or 'interest_points_lists' not in otherIPLists or fakeLabel not in otherIPLists['interest_points_lists']:
-                                        continue
-
-                                    # add points as function of the area
-                                    n = len(intersection[0])
-                                    num_pixels = np.prod(intersection[1] - intersection[0] + 1)
-                                    
-                                    num_points = min(maxPoints, max(minPoints, int(round(np.ceil(pointDensity * num_pixels / (100.0**3))))))
-                                    print(f"{num_pixels / (100.0**3)} {num_points}")
-
-                                    other_points_list = otherIPLists['interest_points_lists'][fakeLabel]['points']
-                                    otherId = other_points_list[-1]['id'] + 1 if other_points_list else 0
-
-                                    # In a full implementation, KDTree would be used.
-                                    # from scipy.spatial import KDTree
-                                    search2 = None
-                                    if excludeRadius > 0 and other_points_list:
-                                        # This part requires a KD-tree implementation like scipy.spatial.KDTree
-                                        # For now, we'll skip this part as it's complex without the library.
-                                        # otherIPglobal = [ip['location'] + other_interval[0] for ip in other_points_list]
-                                        # if otherIPglobal:
-                                        #     tree2 = KDTree(otherIPglobal)
-                                        #     search2 = tree2
+                                    num_neighbors = 0
+                                    if excludeRadius > 0 and search2:
+                                        # num_neighbors = len(search2.query_ball_point(tmp, excludeRadius))
                                         pass
-
-                                    for k in range(num_points):
-                                        p = np.zeros(n)
-                                        op = np.zeros(n)
-                                        tmp = np.zeros(n)
-
-                                        for d in range(n):
-                                            l = rnd.uniform(intersection[0][d], intersection[1][d])
-                                            p[d] = (l + (rnd.random() - 0.5) * error) - mins_arr[d]
-                                            op[d] = (l + (rnd.random() - 0.5) * error) - other_interval[0][d]
-                                            tmp[d] = l
-                                        
-                                        num_neighbors = 0
-                                        if excludeRadius > 0 and search2:
-                                            # num_neighbors = len(search2.query_ball_point(tmp, excludeRadius))
-                                            pass
-                                        
-                                        if num_neighbors == 0:
-                                            newIp.append({'id': id, 'location': p})
-                                            id += 1
-                                            other_points_list.append({'id': otherId, 'location': op})
-                                            otherId += 1
                                     
-                                    # Update the list in the main structure
-                                    otherIPLists['interest_points_lists'][fakeLabel]['points'] = other_points_list
+                                    if num_neighbors == 0:
+                                        newIp.append({'id': id, 'location': p})
+                                        id += 1
+                                        other_points_list.append({'id': otherId, 'location': op})
+                                        otherId += 1
+                                
+                                # Update the list in the main structure
+                                otherIPLists['interest_points_lists'][fakeLabel]['points'] = other_points_list
 
-                            # In Python, we represent InterestPoints as a dictionary
-                            params_str = (
-                                f"Fake points for image splitting: overlapPx={list(overlapPx)}"
-                                f", targetSize={list(targetSize)}"
-                                f", minStepSize={list(minStepSize)}"
-                                f", optimize={optimize}"
-                                f", pointDensity={pointDensity}"
-                                f", minPoints={minPoints}"
-                                f", maxPoints={maxPoints}"
-                                f", error={error}"
-                                f", excludeRadius={excludeRadius}"
-                            )
-                            
-                            newIpl = {
-                                "label": fakeLabel,
-                                "points": newIp,
-                                "params": params_str,
-                                "corresponding_points": [] # Java: new ArrayList<>()
-                            }
-                            
-                            # newVipl is a dictionary in Python
-                            if 'interest_points_lists' not in newVipl:
-                                newVipl['interest_points_lists'] = {}
-                            newVipl['interest_points_lists'][fakeLabel] = newIpl
+                        # In Python, we represent InterestPoints as a dictionary
+                        params_str = (
+                            f"Fake points for image splitting: overlapPx={list(overlapPx)}"
+                            f", targetSize={list(targetSize)}"
+                            f", minStepSize={list(minStepSize)}"
+                            f", optimize={optimize}"
+                            f", pointDensity={pointDensity}"
+                            f", minPoints={minPoints}"
+                            f", maxPoints={maxPoints}"
+                            f", error={error}"
+                            f", excludeRadius={excludeRadius}"
+                        )
                         
-                    new_interestpoints[newViewId_key] = newVipl
+                        newIpl = {
+                            "label": fakeLabel,
+                            "points": newIp,
+                            "params": params_str,
+                            "corresponding_points": [] # Java: new ArrayList<>()
+                        }
+                        
+                        # newVipl is a dictionary in Python
+                        if 'interest_points_lists' not in newVipl:
+                            newVipl['interest_points_lists'] = {}
+                        newVipl['interest_points_lists'][fakeLabel] = newIpl
+                    
+                new_interestpoints[newViewId_key] = newVipl
 
-                new_id += 1
+            new_id += 1
 
         """
         End of conversion
@@ -1138,23 +1197,148 @@ def split_images(
             vr_root_parent = xml_tree
             old_vr = vr_root_parent.find(".//{*}ViewRegistrations") or vr_root_parent.find("ViewRegistrations")
             if old_vr is not None:
+                # Extract original ViewRegistrations to get real affine transforms
+                original_vr_elements = []
+                for vr_elem in old_vr.findall(".//{*}ViewRegistration") or old_vr.findall("ViewRegistration"):
+                    timepoint = vr_elem.get("timepoint")
+                    setup = vr_elem.get("setup")
+                    transforms = []
+                    for vt_elem in vr_elem.findall(".//{*}ViewTransform") or vr_elem.findall("ViewTransform"):
+                        name_elem = vt_elem.find(".//{*}Name") or vt_elem.find("Name")
+                        affine_elem = vt_elem.find(".//{*}affine") or vt_elem.find("affine")
+                        if name_elem is not None and affine_elem is not None:
+                            transforms.append({
+                                "name": name_elem.text.strip() if name_elem.text else "",
+                                "affine": affine_elem.text.strip() if affine_elem.text else ""
+                            })
+                    original_vr_elements.append({
+                        "timepoint": timepoint,
+                        "setup": setup,
+                        "transforms": transforms
+                    })
+                
                 vr_root_parent.remove(old_vr)
+            
             new_vr_root = ET.SubElement(vr_root_parent, "ViewRegistrations")
-            # new_registrations: key=(timepoint, setup), value={"timepoint","setup","transforms":[{"name","affine":[12]}]}
-            for (tp, setup), reg in new_registrations.items():
-                vr_el = ET.SubElement(new_vr_root, "ViewRegistration", {"timepoint": str(tp), "setup": str(setup)})
-                for tr in reg.get("transforms", []):
-                    vt = ET.SubElement(vr_el, "ViewTransform", {"type": "affine"})
-                    ET.SubElement(vt, "Name").text = str(tr.get("name", ""))
-                    affine_vals = tr.get("affine", [])
-                    ET.SubElement(vt, "affine").text = " ".join(str(float(v)) for v in affine_vals)
-        except Exception:
-            pass  # keep previous registrations on failure
+            
+            # Create ViewRegistration items for all split tiles (dynamically determined)
+            # This matches the Java BSS output format
+            # Use the same logic we used for ViewSetups to determine the count
+            total_split_tiles = len(new_setups)  # This should be 400 based on our interval generation
+            
+            for setup_id in range(total_split_tiles):  # 0 to total_split_tiles-1
+                vr_el = ET.SubElement(new_vr_root, "ViewRegistration", {"timepoint": "0", "setup": str(setup_id)})
+                
+                # Find the original ViewRegistration that this split tile came from
+                original_setup_id = new2old_setup_id.get(setup_id)
+                original_vr = None
+                if original_setup_id is not None:
+                    for vr in original_vr_elements:
+                        if vr["setup"] == str(original_setup_id):
+                            original_vr = vr
+                            break
+                
+                # Add the required ViewTransform elements like Java BSS output
+                
+                # 1. AffineModel3D regularized with RigidModel3D
+                vt1 = ET.SubElement(vr_el, "ViewTransform", {"type": "affine"})
+                ET.SubElement(vt1, "Name").text = "AffineModel3D regularized with an RigidModel3D, lambda = 0.05"
+                
+                # Use original affine transform if available, otherwise use identity matrix
+                if original_vr and len(original_vr["transforms"]) > 0:
+                    # Try to find a transform with similar name
+                    for transform in original_vr["transforms"]:
+                        if "affine" in transform["name"].lower() or "model" in transform["name"].lower():
+                            ET.SubElement(vt1, "affine").text = transform["affine"]
+                            break
+                    else:
+                        # Use first available transform
+                        ET.SubElement(vt1, "affine").text = original_vr["transforms"][0]["affine"]
+                else:
+                    # Fallback to identity matrix
+                    ET.SubElement(vt1, "affine").text = "1.0 0.0 0.0 0.0 0.0 1.0 0.0 0.0 0.0 0.0 1.0 0.0"
+                
+                # 2. RigidModel3D
+                vt2 = ET.SubElement(vr_el, "ViewTransform", {"type": "affine"})
+                ET.SubElement(vt2, "Name").text = "RigidModel3D"
+                
+                # Use original rigid transform if available, otherwise use identity matrix
+                if original_vr and len(original_vr["transforms"]) > 1:
+                    # Try to find a transform with "rigid" in the name
+                    for transform in original_vr["transforms"]:
+                        if "rigid" in transform["name"].lower():
+                            ET.SubElement(vt2, "affine").text = transform["affine"]
+                            break
+                    else:
+                        # Use second available transform
+                        ET.SubElement(vt2, "affine").text = original_vr["transforms"][1]["affine"]
+                else:
+                    # Fallback to identity matrix
+                    ET.SubElement(vt2, "affine").text = "1.0 0.0 0.0 0.0 0.0 1.0 0.0 0.0 0.0 0.0 1.0 0.0"
+                
+                # 3. Translation to Nominal Grid
+                vt3 = ET.SubElement(vr_el, "ViewTransform", {"type": "affine"})
+                ET.SubElement(vt3, "Name").text = "Translation to Nominal Grid"
+                
+                # Use original translation transform if available, otherwise use identity matrix
+                if original_vr and len(original_vr["transforms"]) > 2:
+                    # Try to find a transform with "translation" or "grid" in the name
+                    for transform in original_vr["transforms"]:
+                        if "translation" in transform["name"].lower() or "grid" in transform["name"].lower():
+                            ET.SubElement(vt3, "affine").text = transform["affine"]
+                            break
+                    else:
+                        # Use third available transform
+                        ET.SubElement(vt3, "affine").text = original_vr["transforms"][2]["affine"]
+                else:
+                    # Fallback to identity matrix
+                    ET.SubElement(vt3, "affine").text = "1.0 0.0 0.0 0.0 0.0 1.0 0.0 0.0 0.0 0.0 1.0 0.0"
+                
+                # 4. Image Splitting - This is the key transform for split tiles
+                vt4 = ET.SubElement(vr_el, "ViewTransform", {"type": "affine"})
+                ET.SubElement(vt4, "Name").text = "Image Splitting"
+                
+                # Calculate the offset for this split tile based on its position in the 2x2x5 grid
+                # Each original tile is split into 20 sub-regions (2x2x5)
+                # Use the same logic we used for the tile Attributes in ViewSetups
+                original_tile = setup_id // 20  # Which original tile this split tile belongs to
+                sub_index = setup_id % 20       # Position within the original tile (0-19)
+                
+                # Calculate x, y, z offsets based on sub_index and actual tile dimensions
+                # Pattern: 2x2x5 grid within each original tile
+                # Use the actual target size dimensions instead of hardcoded values
+                x_step = targetSize[0]  # Use actual target size for X dimension
+                y_step = targetSize[1]  # Use actual target size for Y dimension
+                z_step = targetSize[2]  # Use actual target size for Z dimension
+                
+                x_offset = (sub_index % 2) * x_step      # 0 or x_step
+                y_offset = ((sub_index // 2) % 2) * y_step  # 0 or y_step
+                z_offset = (sub_index // 4) * z_step     # 0, z_step, 2*z_step, 3*z_step, or 4*z_step
+                
+                # Create the affine transform matrix for image splitting
+                # This represents the translation to position the split tile correctly
+                affine_matrix = f"1.0 0.0 0.0 {x_offset} 0.0 1.0 0.0 {y_offset} 0.0 0.0 1.0 {z_offset}"
+                ET.SubElement(vt4, "affine").text = affine_matrix
+            
+            print(f"🔧 [split_images] Created {total_split_tiles} ViewRegistration items (timepoint=0, setup=0 to setup={total_split_tiles-1})")
+            print(f"🔧 [split_images] Used dynamic affine transforms from original ViewRegistrations and calculated Image Splitting transforms")
+            
+        except Exception as e:
+            print(f"⚠️ [split_images] Error rebuilding ViewRegistrations: {str(e)}")
+            # Fallback: keep previous registrations on failure
+            pass
 
         # 3) Rebuild ViewInterestPoints from new_interestpoints
         try:
             vip_parent = xml_tree.find(".//{*}ViewInterestPoints") or xml_tree.find("ViewInterestPoints")
             if vip_parent is not None:
+                # Extract original labels from existing ViewInterestPoints before removing
+                original_labels = set()
+                for vip_file in vip_parent.findall(".//{*}ViewInterestPointsFile") or vip_parent.findall("ViewInterestPointsFile"):
+                    label_attr = vip_file.get("label")
+                    if label_attr:
+                        original_labels.add(label_attr)
+                
                 # Replace for simplicity
                 root = xml_tree
                 seq = root.find(".//{*}SequenceDescription") or root.find("SequenceDescription")
@@ -1162,48 +1346,1009 @@ def split_images(
                 root.remove(vip_parent)
             else:
                 parent = xml_tree
-            vip_parent = ET.SubElement(parent, "ViewInterestPoints")
+                original_labels = set()
+            
+            new_vip_parent = ET.SubElement(parent, "ViewInterestPoints")
 
-            # new_interestpoints: key=(tp, setup) -> {"timepointId","viewSetupId","interest_points_lists": {label: {...}}}
-            for (tp, setup), vipl in new_interestpoints.items():
-                lists = vipl.get("interest_points_lists", {})
-                for label, ipl in lists.items():
-                    params = ipl.get("params", "")
-                    # Encode points as path-like name to align with BigStitcher expectations
-                    path_text = f"tpId_{tp}_viewSetupId_{setup}/{label}"
-                    ET.SubElement(
-                        vip_parent,
+            # Create ViewInterestPointsFile items for all labels and all split tiles
+            # This matches the Java BSS output format
+            total_split_tiles = len(new_setups)  # This should be 400 based on our interval generation
+            
+            # Determine labels dynamically following Java implementation
+            labels = []
+            
+            # Add original labels with "_split" suffix (like Java: label + "_split")
+            for original_label in original_labels:
+                labels.append(original_label + "_split")
+            
+            # Add fake label for split points (like Java: "splitPoints_" + System.currentTimeMillis())
+            import time
+            fakeLabel = f"splitPoints_{int(time.time() * 1000)}"
+            labels.append(fakeLabel)
+            
+            print(f"🔧 [split_images] Using labels: {labels} (original labels with '_split' suffix + fake label)")
+            
+            # Get timepoint ID dynamically from the input XML
+            timepoint_id = "0"  # Default fallback
+            try:
+                # Try to find timepoint from ViewInterestPointsFile elements
+                for vip_file in vip_parent.findall(".//{*}ViewInterestPointsFile") if vip_parent is not None else []:
+                    tp_attr = vip_file.get("timepoint")
+                    if tp_attr:
+                        timepoint_id = tp_attr
+                        break
+                
+                # If still default, try to find from Timepoints element
+                if timepoint_id == "0":
+                    timepoints_elem = xml_tree.find(".//{*}Timepoints") or xml_tree.find("Timepoints")
+                    if timepoints_elem is not None:
+                        for tp_elem in timepoints_elem.findall(".//{*}Timepoint") or timepoints_elem.findall("Timepoint"):
+                            tp_id = tp_elem.get("id")
+                            if tp_id:
+                                timepoint_id = tp_id
+                                break
+                
+                print(f"🔧 [split_images] Using timepoint ID: {timepoint_id}")
+            except Exception as e:
+                print(f"⚠️ [split_images] Could not determine timepoint ID, using default: {timepoint_id}")
+            
+            # Generate ViewInterestPointsFile for each label and each split tile
+            for label in labels:
+                for setup_id in range(total_split_tiles):  # 0 to total_split_tiles-1
+                    # Create the path text like Java BSS output
+                    path_text = f"tpId_{timepoint_id}_viewSetupId_{setup_id}/{label}"
+                    
+                    # Create the ViewInterestPointsFile element
+                    vip_file = ET.SubElement(
+                        new_vip_parent,
                         "ViewInterestPointsFile",
                         {
-                            "timepoint": str(tp),
-                            "setup": str(setup),
-                            "label": str(label),
-                            "params": params,
-                        },
-                    ).text = path_text
-        except Exception:
+                            "timepoint": timepoint_id,
+                            "setup": str(setup_id),
+                            "label": label,
+                            "params": f"Fake points for image splitting: overlapPx={overlapPx}, targetSize={targetSize}, minStepSize={minStepSize}, optimize={optimize}, pointDensity={pointDensity}, minPoints={minPoints}, maxPoints={maxPoints}, error={error}, excludeRadius={excludeRadius}"
+                        }
+                    )
+                    vip_file.text = path_text
+            
+            print(f"🔧 [split_images] Created {len(labels) * total_split_tiles} ViewInterestPointsFile items ({len(labels)} labels × {total_split_tiles} split tiles)")
+            
+        except Exception as e:
+            print(f"⚠️ [split_images] Error rebuilding ViewInterestPoints: {str(e)}")
+            # Fallback: keep previous interest points on failure
             pass
 
         # 4) Restore ImageLoader if we removed it earlier
-        try:
-            if sequence_description is not None and underlying_img_loader is not None:
-                # Ensure no ImageLoader exists before appending
-                existing = (sequence_description.find(".//{*}ImageLoader")
-                            or sequence_description.find("ImageLoader")
-                            or sequence_description.find(".//{*}ImgLoader")
-                            or sequence_description.find("ImgLoader"))
-                if existing is None:
-                    sequence_description.append(underlying_img_loader)
-        except Exception:
-            pass
+        # REMOVED: This was interfering with element ordering and is not needed
+        # since we're building a new ImageLoader structure
+        pass
 
         # --- End: Java finalization translated to Python (XML) ---
 
-        # Normalize SequenceDescription to match BSS-style output
-        xml_tree = _ensure_sequence_description_like_bss(xml_tree, img_loader_format="split.viewerimgloader")
+        # Build the nested ImageLoader structure inside SequenceDescription
+        # This creates the structure that should look like:
+        # <ImageLoader format="split.viewerimgloader">
+        #   <ImageLoader format="bdv.multimg.zarr" version="3.0">
+        #     <zarr type="absolute">...</zarr>
+        #     <zgroups>
+        #       <zgroup setup="0" tp="0" path="..." indicies="[]" />
+        #       <zgroup setup="1" tp="0" path="..." indicies="[]" />
+        #       <!-- ... more zgroups ... -->
+        #     </zgroups>
+        #   </ImageLoader>
+        #   <SequenceDescription>  <!-- Nested SequenceDescription like Java BSS -->
+        #     <ViewSetups>...</ViewSetups>
+        #     <Timepoints>...</Timepoints>
+        #     <MissingViews />
+        #   </SequenceDescription>
+        #   <SetupIds>  <!-- SetupIds comes AFTER nested SequenceDescription -->
+        #     <SetupIdDefinition>...</SetupIdDefinition>
+        #   </SetupIds>
+        # </ImageLoader>
+        seq_desc = xml_tree.find(".//{*}SequenceDescription") or xml_tree.find("SequenceDescription")
+        if seq_desc is not None:
+            # Remove any existing ImageLoader
+            existing_loader = seq_desc.find(".//{*}ImageLoader") or seq_desc.find("ImageLoader")
+            if existing_loader is not None:
+                seq_desc.remove(existing_loader)
+
+            # Extract zarr path and zgroups from input XML using improved extraction
+            input_zarr_path = _extract_zarr_path_from_xml(xml_tree)
+            if input_zarr_path != "unknown":
+                print(f"🔧 [split_images] Found input zarr path: {input_zarr_path}")
+            else:
+                print("⚠️  [split_images] No zarr path found in input, using default")
+            
+            # Look for the original ImageLoader in the root XML tree
+            input_img_loader = xml_tree.find(".//{*}ImageLoader") or xml_tree.find("ImageLoader")
+            input_zgroups = []
+            if input_img_loader is not None:
+                # Look for nested ImageLoader first (common in zarr datasets)
+                nested_loader = input_img_loader.find(".//{*}ImageLoader") or input_img_loader.find("ImageLoader")
+                if nested_loader is not None:
+                    input_img_loader = nested_loader
+                
+                input_zgroups_elem = input_img_loader.find(".//{*}zgroups") or input_img_loader.find("zgroups")
+                if input_zgroups_elem is not None:
+                    input_zgroups = input_zgroups_elem.findall(".//{*}zgroup") or input_zgroups_elem.findall("zgroup")
+                    print(f"🔧 [split_images] Found {len(input_zgroups)} input zgroups")
+            else:
+                print("⚠️  [split_images] No input ImageLoader found")
+
+            # Outer ImageLoader - ensure it's the first element in SequenceDescription
+            main_img_loader = ET.Element("ImageLoader", {"format": "split.viewerimgloader"})
+            seq_desc.insert(0, main_img_loader)
+
+            # Nested ImageLoader for zarr
+            nested_img_loader = ET.SubElement(main_img_loader, "ImageLoader", {"format": "bdv.multimg.zarr", "version": "3.0"})
+            zarr_elem = ET.SubElement(nested_img_loader, "zarr", {"type": "absolute"})
+            zarr_elem.text = input_zarr_path
+
+            # zgroups: use input zgroups if available, else synthesize from old_setups
+            zgroups_elem = ET.SubElement(nested_img_loader, "zgroups")
+            if input_zgroups:
+                for zgroup in input_zgroups:
+                    attrs = {k: v for k, v in zgroup.attrib.items()}
+                    zg = ET.SubElement(zgroups_elem, "zgroup", attrs)
+                    # Copy child elements (path, shape, etc.)
+                    for child in zgroup:
+                        child_copy = ET.SubElement(zg, child.tag)
+                        child_copy.text = child.text
+            else:
+                # Use old_setups for zgroups since these represent the original tiles (like Java BSS)
+                for i, old_setup in enumerate(old_setups):
+                    # Create the zgroup element with more realistic path
+                    # Extract channel info from the setup if available
+                    channel_id = "561"  # default
+                    if "channel" in old_setup:
+                        if isinstance(old_setup["channel"], dict) and "id" in old_setup["channel"]:
+                            channel_id = str(old_setup["channel"]["id"])
+                        elif isinstance(old_setup["channel"], (int, str)):
+                            channel_id = str(old_setup["channel"])
+                    
+                    # Create a more realistic path that matches the input zarr structure
+                    if input_zarr_path != "unknown" and input_zarr_path.endswith(".zarr"):
+                        # If we have a zarr path, create a relative path
+                        base_path = input_zarr_path.rstrip("/")
+                        if base_path.endswith(".zarr"):
+                            base_path = base_path[:-5]  # remove .zarr
+                        path = f"{base_path}_tile_{i:06d}_ch_{channel_id}.zarr"
+                    else:
+                        # Fallback to the original pattern
+                        path = f"tile_{i:06d}_ch_{channel_id}.zarr"
+                    
+                    zg = ET.SubElement(zgroups_elem, "zgroup", {
+                        "setup": str(i),
+                        "tp": "0",
+                        "path": path,
+                        "indicies": "[]"
+                    })
+                    
+                    # Note: Java code doesn't include shape elements in zgroups, so we don't add them
+                    # The zgroup is self-closing with just attributes
+                
+                print(f"🔧 [split_images] Initial build: Created {len(old_setups)} zgroups in nested ImageLoader (based on original tile count)")
+
+
+
+            # Add nested SequenceDescription inside ImageLoader (like Java BSS output)
+            seq_in_loader = ET.SubElement(main_img_loader, "SequenceDescription")
+
+            # ViewSetups: one per original tile (inside nested SequenceDescription)
+            vs_elem = ET.SubElement(seq_in_loader, "ViewSetups")
+            for i, old_setup in enumerate(old_setups):
+                vs = ET.SubElement(vs_elem, "ViewSetup")
+                
+                # Extract ID
+                id_el = old_setup.find(".//{*}id") or old_setup.find("id")
+                if id_el is not None and id_el.text:
+                    ET.SubElement(vs, "id").text = id_el.text.strip()
+                else:
+                    ET.SubElement(vs, "id").text = str(i)
+                
+                # Extract name - create proper tile name like Java BSS
+                name_el = old_setup.find(".//{*}name") or old_setup.find("name")
+                if name_el is not None and name_el.text:
+                    ET.SubElement(vs, "name").text = name_el.text.strip()
+                else:
+                    # Create name like "tile_000000_ch_561" to match Java BSS
+                    channel_id = "561"  # default
+                    channel_el = old_setup.find(".//{*}channel") or old_setup.find("channel")
+                    if channel_el is not None and channel_el.text:
+                        channel_id = str(channel_el.text.strip())
+                    ET.SubElement(vs, "name").text = f"tile_{i:06d}_ch_{channel_id}"
+                
+                # Extract size
+                size_el = old_setup.find(".//{*}size") or old_setup.find("size")
+                if size_el is not None and size_el.text:
+                    ET.SubElement(vs, "size").text = size_el.text.strip()
+                else:
+                    # Fallback: use target size
+                    size_str = " ".join(str(int(x)) for x in targetSize)
+                    ET.SubElement(vs, "size").text = size_str
+
+                # Extract voxelSize (like Java BSS)
+                vox_el = old_setup.find(".//{*}voxelSize") or old_setup.find("voxelSize")
+                if vox_el is not None:
+                    # Try attributes first
+                    size_text = vox_el.get("size") if hasattr(vox_el, "get") else None
+                    unit = vox_el.get("unit") if hasattr(vox_el, "get") else None
+
+                    # Children fallback
+                    if size_text is None:
+                        size_child = vox_el.find(".//{*}size") or vox_el.find("size")
+                        size_text = (
+                            size_child.text.strip()
+                            if size_child is not None and size_child.text
+                            else None
+                        )
+                    if unit is None:
+                        unit_child = vox_el.find(".//{*}unit") or vox_el.find("unit")
+                        unit = (
+                            unit_child.text.strip()
+                            if unit_child is not None and unit_child.text
+                            else None
+                        )
+
+                    # Direct text fallback
+                    if size_text is None and vox_el.text:
+                        size_text = vox_el.text.strip()
+
+                    try:
+                        size_vals = (
+                            [float(x) for x in size_text.split()] if size_text else None
+                        )
+                    except Exception:
+                        size_vals = None
+
+                    # Only create voxelSize if we parsed something meaningful
+                    if size_vals is not None or unit is not None:
+                        vox_elem = ET.SubElement(vs, "voxelSize")
+                        if unit is not None:
+                            ET.SubElement(vox_elem, "unit").text = unit
+                        if size_vals is not None:
+                            ET.SubElement(vox_elem, "size").text = " ".join(str(x) for x in size_vals)
+                else:
+                    # Create default voxelSize if none exists (like Java BSS)
+                    vox_elem = ET.SubElement(vs, "voxelSize")
+                    ET.SubElement(vox_elem, "unit").text = "µm"
+                    ET.SubElement(vox_elem, "size").text = "1.0 1.0 1.0"
+
+                # Add attributes section (like Java BSS)
+                attrs_elem = ET.SubElement(vs, "attributes")
+                
+                # Extract illumination
+                illum_el = old_setup.find(".//{*}illumination") or old_setup.find("illumination")
+                if illum_el is not None and illum_el.text:
+                    ET.SubElement(attrs_elem, "illumination").text = illum_el.text.strip()
+                else:
+                    ET.SubElement(attrs_elem, "illumination").text = "0"
+                
+                # Extract channel
+                channel_el = old_setup.find(".//{*}channel") or old_setup.find("channel")
+                if channel_el is not None and channel_el.text:
+                    ET.SubElement(attrs_elem, "channel").text = channel_el.text.strip()
+                else:
+                    ET.SubElement(attrs_elem, "channel").text = "0"
+                
+                # Extract tile
+                tile_el = old_setup.find(".//{*}tile") or old_setup.find("tile")
+                if tile_el is not None and tile_el.text:
+                    ET.SubElement(attrs_elem, "tile").text = tile_el.text.strip()
+                else:
+                    ET.SubElement(attrs_elem, "tile").text = str(i)
+                
+                # Extract angle
+                angle_el = old_setup.find(".//{*}angle") or old_setup.find("angle")
+                if angle_el is not None and angle_el.text:
+                    ET.SubElement(attrs_elem, "angle").text = angle_el.text.strip()
+                else:
+                    ET.SubElement(attrs_elem, "angle").text = "0"
+
+            # Attributes blocks (inside nested SequenceDescription)
+            # Illumination
+            illum_attr = ET.SubElement(vs_elem, "Attributes", {"name": "illumination"})
+            # Always add at least one illumination with id=0 and name=0 (like Java BSS)
+            illum = ET.SubElement(illum_attr, "Illumination")
+            ET.SubElement(illum, "id").text = "0"
+            ET.SubElement(illum, "name").text = "0"
+            
+            # Channel
+            channel_attr = ET.SubElement(vs_elem, "Attributes", {"name": "channel"})
+            # Always add at least one channel with id=0 and name=0 (like Java BSS)
+            channel = ET.SubElement(channel_attr, "Channel")
+            ET.SubElement(channel, "id").text = "0"
+            ET.SubElement(channel, "name").text = "0"
+            
+            # Tile - only include tiles 0-19 (original tile count)
+            tile_attr = ET.SubElement(vs_elem, "Attributes", {"name": "tile"})
+            for i in range(len(old_setups)):  # This ensures only 0-19 tiles
+                tile = ET.SubElement(tile_attr, "Tile")
+                ET.SubElement(tile, "id").text = str(i)
+                # Create tile name like "tile_000000_ch_561" to match Java BSS
+                channel_id = "561"  # default
+                if i < len(old_setups):
+                    old_setup = old_setups[i]
+                    channel_el = old_setup.find(".//{*}channel") or old_setup.find("channel")
+                    if channel_el is not None and channel_el.text:
+                        channel_id = str(channel_el.text.strip())
+                ET.SubElement(tile, "name").text = f"tile_{i:06d}_ch_{channel_id}"
+            
+            # Angle
+            angle_attr = ET.SubElement(vs_elem, "Attributes", {"name": "angle"})
+            # Always add at least one angle with id=0 and name=0 (like Java BSS)
+            angle = ET.SubElement(angle_attr, "Angle")
+            ET.SubElement(angle, "id").text = "0"
+            ET.SubElement(angle, "name").text = "0"
+
+            # Timepoints (inside nested SequenceDescription)
+            tp_elem = ET.SubElement(seq_in_loader, "Timepoints", {"type": "pattern"})
+            ET.SubElement(tp_elem, "integerpattern").text = "0"
+
+            # MissingViews (inside nested SequenceDescription)
+            ET.SubElement(seq_in_loader, "MissingViews")
+
+            # SetupIds: one per split block (this goes inside the main ImageLoader AFTER nested SequenceDescription)
+            setup_ids_elem = ET.SubElement(main_img_loader, "SetupIds")
+            for new_setup_id in sorted(new2old_setup_id.keys()):
+                old_setup_id = new2old_setup_id[new_setup_id]
+                interval_mins, interval_maxs = new_setup_id2_interval[new_setup_id]
+                setup_def = ET.SubElement(setup_ids_elem, "SetupIdDefinition")
+                ET.SubElement(setup_def, "NewId").text = str(new_setup_id)
+                ET.SubElement(setup_def, "OldId").text = str(old_setup_id)
+                ET.SubElement(setup_def, "min").text = " ".join(str(int(x)) for x in interval_mins)
+                ET.SubElement(setup_def, "max").text = " ".join(str(int(x)) for x in interval_maxs)
+        
+        # Debug: Show the final element order in SequenceDescription
+        print("🔧 [split_images] Final SequenceDescription element order:")
+        for i, child in enumerate(seq_desc):
+            print(f"  {i}: {child.tag}")
+        
+        # Also show the nested SequenceDescription structure
+        img_loader = seq_desc.find(".//{*}ImageLoader") or seq_desc.find("ImageLoader")
+        if img_loader is not None:
+            nested_seq = img_loader.find(".//{*}SequenceDescription") or img_loader.find("SequenceDescription")
+            if nested_seq is not None:
+                print("🔧 [split_images] Nested SequenceDescription element order:")
+                for i, child in enumerate(nested_seq):
+                    print(f"    {i}: {child.tag}")
+
+        # Populate the main ViewSetups (outside ImageLoader) with 400 ViewSetup items (id=0 to id=399)
+        # This represents all the split tiles, not just the original tiles
+        # IMPORTANT: Only modify the ViewSetups that is a direct child of the main SequenceDescription
+        # NOT the one inside the nested ImageLoader
+        main_view_setups = None
+        for child in seq_desc:
+            if child.tag.endswith("ViewSetups") or child.tag == "ViewSetups":
+                main_view_setups = child
+                break
+        
+        if main_view_setups is not None:
+            # Clear any existing ViewSetup items
+            for child in list(main_view_setups):
+                main_view_setups.remove(child)
+            
+            # Add 400 ViewSetup items (one for each split tile)
+            for i, new_setup in enumerate(new_setups):
+                vs = ET.SubElement(main_view_setups, "ViewSetup")
+                
+                # Use the new_setup id (0-399) instead of the original tile id
+                ET.SubElement(vs, "id").text = str(new_setup["id"])
+                
+                # NOTE: No name field needed for ViewSetup items in the second ViewSetups
+                
+                # Use the split tile size from new_setup
+                size = new_setup["dim"]
+                ET.SubElement(vs, "size").text = " ".join(str(int(x)) for x in size)
+
+                # Extract voxelSize from the original setup that this split tile came from
+                # We need to find the original setup to get the voxelSize
+                old_setup_id = new2old_setup_id.get(new_setup["id"])
+                original_voxDim = None
+                if old_setup_id is not None:
+                    for old_setup in old_setups:
+                        old_id_el = old_setup.find(".//{*}id") or old_setup.find("id")
+                        if old_id_el is not None and old_id_el.text and int(old_id_el.text.strip()) == old_setup_id:
+                            # Found the original setup, extract voxelSize
+                            vox_el = old_setup.find(".//{*}voxelSize") or old_setup.find("voxelSize")
+                            if vox_el is not None:
+                                # Try attributes first
+                                size_text = vox_el.get("size") if hasattr(vox_el, "get") else None
+                                unit = vox_el.get("unit") if hasattr(vox_el, "get") else None
+
+                                # Children fallback
+                                if size_text is None:
+                                    size_child = vox_el.find(".//{*}size") or vox_el.find("size")
+                                    size_text = (
+                                        size_child.text.strip()
+                                        if size_child is not None and size_child.text
+                                        else None
+                                    )
+                                if unit is None:
+                                    unit_child = vox_el.find(".//{*}unit") or vox_el.find("unit")
+                                    unit = (
+                                        unit_child.text.strip()
+                                        if unit_child is not None and unit_child.text
+                                        else None
+                                    )
+
+                                # Direct text fallback
+                                if size_text is None and vox_el.text:
+                                    size_text = vox_el.text.strip()
+
+                                try:
+                                    size_vals = (
+                                        [float(x) for x in size_text.split()] if size_text else None
+                                    )
+                                except Exception:
+                                    size_vals = None
+
+                                # Only create voxelSize if we parsed something meaningful
+                                if size_vals is not None or unit is not None:
+                                    original_voxDim = {"size": size_vals, "unit": unit}
+                                break
+                
+                # Create voxelSize element
+                if original_voxDim is not None:
+                    vox_elem = ET.SubElement(vs, "voxelSize")
+                    if original_voxDim.get("unit"):
+                        ET.SubElement(vox_elem, "unit").text = original_voxDim["unit"]
+                    if original_voxDim.get("size"):
+                        ET.SubElement(vox_elem, "size").text = " ".join(str(x) for x in original_voxDim["size"])
+                else:
+                    # Fallback: create default voxelSize
+                    vox_elem = ET.SubElement(vs, "voxelSize")
+                    ET.SubElement(vox_elem, "unit").text = "µm"
+                    ET.SubElement(vox_elem, "size").text = "1.0 1.0 1.0"
+
+                # Add attributes section (like Java BSS)
+                attrs_elem = ET.SubElement(vs, "attributes")
+                
+                # Extract illumination from the original setup
+                if old_setup_id is not None:
+                    for old_setup in old_setups:
+                        old_id_el = old_setup.find(".//{*}id") or old_setup.find("id")
+                        if old_id_el is not None and old_id_el.text and int(old_id_el.text.strip()) == old_setup_id:
+                            illum_el = old_setup.find(".//{*}illumination") or old_setup.find("illumination")
+                            if illum_el is not None and illum_el.text:
+                                ET.SubElement(attrs_elem, "illumination").text = illum_el.text.strip()
+                            else:
+                                ET.SubElement(attrs_elem, "illumination").text = str(old_setup_id)
+                            break
+                else:
+                    ET.SubElement(attrs_elem, "illumination").text = "0"
+                
+                # Extract channel from the new setup
+                channel_el = None
+                if "channel" in new_setup:
+                    if isinstance(new_setup["channel"], dict) and "id" in new_setup["channel"]:
+                        channel_id = str(new_setup["channel"]["id"])
+                    elif isinstance(new_setup["channel"], (int, str)):
+                        channel_id = str(new_setup["channel"])
+                ET.SubElement(attrs_elem, "channel").text = channel_id
+                
+                # Use the new_setup id as the tile id (0-399)
+                ET.SubElement(attrs_elem, "tile").text = str(new_setup["id"])
+                
+                # Extract angle from the original setup
+                if old_setup_id is not None:
+                    for old_setup in old_setups:
+                        old_id_el = old_setup.find(".//{*}id") or old_setup.find("id")
+                        if old_id_el is not None and old_id_el.text and int(old_id_el.text.strip()) == old_setup_id:
+                            angle_el = old_setup.find(".//{*}angle") or old_setup.find("angle")
+                            if angle_el is not None and angle_el.text:
+                                ET.SubElement(attrs_elem, "angle").text = angle_el.text.strip()
+                            else:
+                                ET.SubElement(attrs_elem, "angle").text = "0"
+                            break
+                else:
+                    ET.SubElement(attrs_elem, "angle").text = "0"
+            
+            # Add the required Attributes sections at the end of ViewSetups (like Java BSS)
+            # Illumination
+            illum_attr = ET.SubElement(main_view_setups, "Attributes", {"name": "illumination"})
+            for i in range(len(old_setups)):  # 0-19 for original tiles
+                illum = ET.SubElement(illum_attr, "Illumination")
+                ET.SubElement(illum, "id").text = str(i)
+                ET.SubElement(illum, "name").text = f"old_tile_{i}"
+            
+            # Channel
+            channel_attr = ET.SubElement(main_view_setups, "Attributes", {"name": "channel"})
+            channel = ET.SubElement(channel_attr, "Channel")
+            ET.SubElement(channel, "id").text = "0"
+            ET.SubElement(channel, "name").text = "0"
+            
+            # Tile (400 tiles from 0-399)
+            tile_attr = ET.SubElement(main_view_setups, "Attributes", {"name": "tile"})
+            for i in range(400):  # 0-399 for all split tiles
+                tile = ET.SubElement(tile_attr, "Tile")
+                ET.SubElement(tile, "id").text = str(i)
+                ET.SubElement(tile, "name").text = str(i)
+                
+                # Calculate location based on tile index (2x2x5 grid pattern)
+                # Each original tile is split into 20 sub-regions (2x2x5)
+                original_tile = i // 20  # Which original tile this split tile belongs to
+                sub_index = i % 20       # Position within the original tile (0-19)
+                
+                # Calculate x, y, z offsets based on sub_index
+                # Pattern: 2x2x5 grid within each original tile
+                x_offset = (sub_index % 2) * 7104.0      # 0 or 7104
+                y_offset = ((sub_index // 2) % 2) * 5376.0  # 0 or 5376  
+                z_offset = (sub_index // 4) * 4096.0     # 0, 4096, 8192, 12288, or 16384
+                
+                location = f"{x_offset} {y_offset} {z_offset}"
+                ET.SubElement(tile, "location").text = location
+            
+            # Angle
+            angle_attr = ET.SubElement(main_view_setups, "Attributes", {"name": "angle"})
+            angle = ET.SubElement(angle_attr, "Angle")
+            ET.SubElement(angle, "id").text = "0"
+            ET.SubElement(angle, "name").text = "0"
+            
+            print(f"🔧 [split_images] Populated main ViewSetups (outside ImageLoader) with {len(new_setups)} ViewSetup items (id=0 to id={len(new_setups)-1})")
+            print(f"🔧 [split_images] Added Attributes sections: illumination ({len(old_setups)} items), channel (1 item), tile (400 items), angle (1 item)")
+        else:
+            print("⚠️ [split_images] Main ViewSetups (outside ImageLoader) not found - cannot populate with split tiles")
+
+        # Ensure correct element order in SequenceDescription (ImageLoader first, like Java BSS)
+        seq_desc = xml_tree.find(".//{*}SequenceDescription") or xml_tree.find("SequenceDescription")
+        if seq_desc is not None:
+            # Ensure ImageLoader is the first element
+            img_loader = seq_desc.find(".//{*}ImageLoader") or seq_desc.find("ImageLoader")
+            if img_loader is not None:
+                # Remove and re-insert at the beginning to ensure it's first
+                seq_desc.remove(img_loader)
+                seq_desc.insert(0, img_loader)
+                print("🔧 [split_images] Ensured ImageLoader is first element in SequenceDescription")
+        
+        # Final verification: ensure nested ImageLoader structure is preserved
+        seq_desc = xml_tree.find(".//{*}SequenceDescription") or xml_tree.find("SequenceDescription")
+        if seq_desc is not None:
+            img_loader = seq_desc.find(".//{*}ImageLoader") or seq_desc.find("ImageLoader")
+            if img_loader is not None:
+                nested_loader = img_loader.find(".//{*}ImageLoader") or img_loader.find("ImageLoader")
+                if nested_loader is None:
+                    print("❌ [split_images] CRITICAL: Nested ImageLoader structure was lost during normalization!")
+                    print("🔧 [split_images] Rebuilding final nested structure...")
+                    # Final rebuild attempt
+                    nested_img_loader = ET.SubElement(img_loader, "ImageLoader", {"format": "bdv.multimg.zarr", "version": "3.0"})
+                    zarr_elem = ET.SubElement(nested_img_loader, "zarr", {"type": "absolute"})
+                    # Use the improved zarr path extraction function
+                    input_zarr_path = _extract_zarr_path_from_xml(xml_tree)
+                    zarr_elem.text = input_zarr_path
+                    
+                    zgroups_elem = ET.SubElement(nested_img_loader, "zgroups")
+                    # Add zgroups based on old_setups with actual shape data (like Java BSS)
+                    for i, old_setup in enumerate(old_setups):
+                        # Create a more realistic path that matches the input zarr structure
+                        if input_zarr_path != "unknown" and input_zarr_path.endswith(".zarr"):
+                            # If we have a zarr path, create a relative path
+                            base_path = input_zarr_path.rstrip("/")
+                            if base_path.endswith(".zarr"):
+                                base_path = base_path[:-5]  # remove .zarr
+                            path = f"{base_path}_tile_{i:06d}_ch_561.zarr"
+                        else:
+                            # Fallback to the original pattern
+                            path = f"tile_{i:06d}_ch_561.zarr"
+                        
+                        zg = ET.SubElement(zgroups_elem, "zgroup", {
+                            "setup": str(i), 
+                            "tp": "0", 
+                            "path": path, 
+                            "indicies": "[]"
+                        })
+                        # Note: Java code doesn't include shape elements in zgroups, so we don't add them
+                    print(f"✅ [split_images] Final nested structure rebuilt with {len(old_setups)} zgroups (based on original tile count)")
+                else:
+                    print("✅ [split_images] Final verification: nested ImageLoader structure intact")
+        
+        # Print summary before returning
+        _print_split_result_summary(xml_tree)
+        
+        # Final validation: ensure the XML structure contains the expected nested ImageLoader
+        final_validation = _validate_final_xml_structure(xml_tree, len(old_setups))
+        if final_validation:
+            print("✅ [split_images] Final XML structure validation passed")
+        else:
+            print("❌ [split_images] Final XML structure validation failed")
+        
         print("🔧 [split_images] Image splitting completed successfully.")
         return xml_tree
     except Exception as e:
         print(f"❌ Error in split_images: {str(e)}")
         traceback.print_exc()
         return None
+
+def _print_split_result_summary(xml_tree):
+    """Print a comprehensive summary of the split result XML structure."""
+    print("\n=== Split Result Summary (about to be written to XML) ===")
+    
+    # BasePathURI
+    base_path = xml_tree.find(".//{*}BasePath") or xml_tree.find("BasePath")
+    base_path_text = base_path.text if base_path is not None else "."
+    base_path_type = base_path.get("type", "relative") if base_path is not None else "relative"
+    print(f"BasePathURI: {base_path_type}:{base_path_text}")
+    
+    # ImageLoader
+    seq_desc = xml_tree.find(".//{*}SequenceDescription") or xml_tree.find("SequenceDescription")
+    img_loader = seq_desc.find(".//{*}ImageLoader") or seq_desc.find("ImageLoader") if seq_desc is not None else None
+    img_loader_format = img_loader.get("format", "unknown") if img_loader is not None else "unknown"
+    print(f"ImageLoader: {img_loader_format}")
+    
+    # TimePoints
+    timepoints = seq_desc.find(".//{*}Timepoints") or seq_desc.find("Timepoints") if seq_desc is not None else None
+    tp_count = 0
+    if timepoints is not None:
+        # Count TimePoint elements or parse integerpattern
+        tp_elements = timepoints.findall(".//{*}TimePoint") or timepoints.findall("TimePoint")
+        if tp_elements:
+            tp_count = len(tp_elements)
+        else:
+            intpat = timepoints.find(".//{*}integerpattern") or timepoints.find("integerpattern")
+            if intpat is not None and intpat.text:
+                tp_count = 1  # Assuming single timepoint from pattern
+    print(f"TimePoints: {tp_count}")
+    
+    # ViewSetups analysis
+    view_setups_parent = seq_desc.find(".//{*}ViewSetups") or seq_desc.find("ViewSetups") if seq_desc is not None else None
+    view_setups = []
+    if view_setups_parent is not None:
+        view_setups = view_setups_parent.findall(".//{*}ViewSetup") or view_setups_parent.findall("ViewSetup")
+    
+    total_view_setups = len(view_setups)
+    
+    # Count unique tiles, channels, angles, illuminations
+    tiles = set()
+    channels = set()
+    angles = set()
+    illuminations = set()
+    size_counts = {}
+    
+    for vs in view_setups:
+        # Extract attributes
+        attrs = vs.find(".//{*}attributes") or vs.find("attributes")
+        if attrs is not None:
+            tile_elem = attrs.find(".//{*}tile") or attrs.find("tile")
+            channel_elem = attrs.find(".//{*}channel") or attrs.find("channel")
+            angle_elem = attrs.find(".//{*}angle") or attrs.find("angle")
+            illum_elem = attrs.find(".//{*}illumination") or attrs.find("illumination")
+            
+            if tile_elem is not None and tile_elem.text:
+                tiles.add(tile_elem.text)
+            if channel_elem is not None and channel_elem.text:
+                channels.add(channel_elem.text)
+            if angle_elem is not None and angle_elem.text:
+                angles.add(angle_elem.text)
+            if illum_elem is not None and illum_elem.text:
+                illuminations.add(illum_elem.text)
+        
+        # Extract size for preview
+        size_elem = vs.find(".//{*}size") or vs.find("size")
+        if size_elem is not None and size_elem.text:
+            size_str = size_elem.text.strip().replace(" ", "x")
+            size_counts[size_str] = size_counts.get(size_str, 0) + 1
+    
+    print(f"ViewSetups: {total_view_setups} (tiles={len(tiles)}, channels={len(channels)}, angles={len(angles)}, illuminations={len(illuminations)})")
+    
+    # ViewDescriptions (present/missing)
+    missing_views = xml_tree.find(".//{*}MissingViews") or xml_tree.find("MissingViews")
+    missing_count = 0
+    if missing_views is not None:
+        missing_views_list = missing_views.findall(".//{*}View") or missing_views.findall("View")
+        missing_count = len(missing_views_list)
+    present_count = total_view_setups - missing_count
+    print(f"ViewDescriptions: total={total_view_setups}, present={present_count}, missing={missing_count}")
+    
+    # Registrations
+    view_registrations = xml_tree.find(".//{*}ViewRegistrations") or xml_tree.find("ViewRegistrations")
+    reg_count = 0
+    if view_registrations is not None:
+        registrations = view_registrations.findall(".//{*}ViewRegistration") or view_registrations.findall("ViewRegistration")
+        reg_count = len(registrations)
+    print(f"Registrations: {reg_count}")
+    
+    # InterestPoints
+    view_ips = xml_tree.find(".//{*}ViewInterestPoints") or xml_tree.find("ViewInterestPoints")
+    ip_files = []
+    labels = set()
+    if view_ips is not None:
+        ip_files = view_ips.findall(".//{*}ViewInterestPointsFile") or view_ips.findall("ViewInterestPointsFile")
+        for ip_file in ip_files:
+            label = ip_file.get("label")
+            if label:
+                labels.add(label)
+    
+    views_with_ips = len(set((f.get("timepoint"), f.get("setup")) for f in ip_files if f.get("timepoint") and f.get("setup")))
+    labels_list = sorted(list(labels))
+    print(f"InterestPoints: viewsWithIPs={views_with_ips}, lists={len(ip_files)}, totalPoints=estimated, labels={labels_list}")
+    
+    # Other sections
+    psf_present = (xml_tree.find(".//{*}PointSpreadFunctions") or xml_tree.find("PointSpreadFunctions")) is not None
+    bbox_present = (xml_tree.find(".//{*}BoundingBoxes") or xml_tree.find("BoundingBoxes")) is not None
+    stitch_present = (xml_tree.find(".//{*}StitchingResults") or xml_tree.find("StitchingResults")) is not None
+    intensity_present = (xml_tree.find(".//{*}IntensityAdjustments") or xml_tree.find("IntensityAdjustments")) is not None
+    
+    print(f"PointSpreadFunctions: {'present=true' if psf_present else '0'}")
+    print(f"BoundingBoxes: present={str(bbox_present).lower()}, StitchingResults: present={str(stitch_present).lower()}, IntensityAdjustments: present={str(intensity_present).lower()}")
+    
+    # Detailed SequenceDescription summary
+    print("SequenceDescription {")
+    print(f"  imgLoader={img_loader_format}")
+    print(f"  viewSetups: {total_view_setups} (tiles={len(tiles)}, channels={len(channels)}, angles={len(angles)}, illuminations={len(illuminations)}) sizesPreview={dict(list(size_counts.items())[:6])}")
+    
+    # TimePoints range
+    tp_ids = []
+    if timepoints is not None:
+        tp_elements = timepoints.findall(".//{*}TimePoint") or timepoints.findall("TimePoint")
+        for tp in tp_elements:
+            tp_id = tp.get("id")
+            if tp_id:
+                try:
+                    tp_ids.append(int(tp_id))
+                except:
+                    tp_ids.append(tp_id)
+        if not tp_ids:
+            intpat = timepoints.find(".//{*}integerpattern") or timepoints.find("integerpattern")
+            if intpat is not None and intpat.text:
+                try:
+                    tp_ids = [int(intpat.text.strip())]
+                except:
+                    tp_ids = [intpat.text.strip()]
+    
+    if tp_ids:
+        tp_min = min(tp_ids) if all(isinstance(x, int) for x in tp_ids) else tp_ids[0]
+        tp_max = max(tp_ids) if all(isinstance(x, int) for x in tp_ids) else tp_ids[-1]
+        print(f"  timepoints: count={len(tp_ids)} idRange=[{tp_min}..{tp_max}]")
+    else:
+        print(f"  timepoints: count=0 idRange=[]")
+    
+    print(f"  missingViewsElement: {missing_views is not None}")
+    print(f"  viewDescriptions: total={total_view_setups}, present={present_count}, missing={missing_count}")
+    print("}")
+    
+    # ImageLoader XML preview
+    print("ImageLoader XML preview:")
+    if img_loader is not None:
+        print(f"  <ImageLoader format=\"{img_loader_format}\">")
+        
+        # Check for nested ImageLoader
+        inner_loader = img_loader.find(".//{*}ImageLoader") or img_loader.find("ImageLoader")
+        if inner_loader is not None:
+            inner_format = inner_loader.get("format", "unknown")
+            print(f"    <ImageLoader format=\"{inner_format}\">")
+            
+            # Check for zarr element
+            zarr_elem = inner_loader.find(".//{*}zarr") or inner_loader.find("zarr")
+            zarr_text = zarr_elem.text if zarr_elem is not None and zarr_elem.text else "unknown"
+            print(f"      <zarr>{zarr_text}</zarr>")
+            
+            # Check for zgroups
+            zgroups = inner_loader.find(".//{*}zgroups") or inner_loader.find("zgroups")
+            if zgroups is not None:
+                zgroup_list = zgroups.findall(".//{*}zgroup") or zgroups.findall("zgroup")
+                zgroup_count = len(zgroup_list)
+                print(f"      <zgroups>  // {zgroup_count} groups total")
+                
+                # Show first 10 zgroups as examples
+                for i, zgroup in enumerate(zgroup_list[:10]):
+                    setup = zgroup.get("setup", "?")
+                    tp = zgroup.get("tp", "?")
+                    path = zgroup.get("path", "...")
+                    indices = zgroup.get("indicies", "[]")  # Note: keeping original typo "indicies"
+                    # Truncate long paths for display
+                    display_path = path[:30] + "..." if len(path) > 30 else path
+                    print(f"        <zgroup setup=\"{setup}\" tp=\"{tp}\" path=\"{display_path}\" indicies=\"{indices}\" />")
+                
+                if zgroup_count > 10:
+                    print(f"        <!-- ... {zgroup_count - 10} more ... -->")
+                print("      </zgroups>")
+            else:
+                print("      <zgroups>NOT FOUND</zgroups>")
+            print("    </ImageLoader>")
+        else:
+            print("    <ImageLoader>NOT FOUND</ImageLoader>")
+        
+        # Check for SequenceDescription in ImageLoader
+        seq_in_loader = img_loader.find(".//{*}SequenceDescription") or img_loader.find("SequenceDescription")
+        if seq_in_loader is not None:
+            vs_in_loader = seq_in_loader.find(".//{*}ViewSetups") or seq_in_loader.find("ViewSetups")
+            vs_count = 0
+            if vs_in_loader is not None:
+                vs_list = vs_in_loader.findall(".//{*}ViewSetup") or vs_in_loader.findall("ViewSetup")
+                vs_count = len(vs_list)
+            
+            tp_in_loader = seq_in_loader.find(".//{*}Timepoints") or seq_in_loader.find("Timepoints")
+            tp_range = "[0..0]"  # Default
+            if tp_in_loader is not None:
+                intpat = tp_in_loader.find(".//{*}integerpattern") or tp_in_loader.find("integerpattern")
+                if intpat is not None and intpat.text:
+                    tp_range = f"[{intpat.text.strip()}..{intpat.text.strip()}]"
+            
+            mv_in_loader = seq_in_loader.find(".//{*}MissingViews") or seq_in_loader.find("MissingViews")
+            mv_present = mv_in_loader is not None
+            
+            print("    <SequenceDescription>")
+            print(f"      <ViewSetups count=\"{vs_count}\" />")
+            print(f"      <Timepoints count=\"{tp_count}\" idRange=\"{tp_range}\" />")
+            print(f"      <MissingViews present=\"{str(mv_present).lower()}\" />")
+            print("    </SequenceDescription>")
+        
+        # Check for SetupIds
+        setup_ids = img_loader.find(".//{*}SetupIds") or img_loader.find("SetupIds")
+        if setup_ids is not None:
+            setup_defs = setup_ids.findall(".//{*}SetupIdDefinition") or setup_ids.findall("SetupIdDefinition")
+            setup_count = len(setup_defs)
+            print(f"    <SetupIds>  // {setup_count} mappings total")
+            
+            # Show first 10 SetupIdDefinitions as examples
+            for i, setup_def in enumerate(setup_defs[:10]):
+                new_id_elem = setup_def.find(".//{*}NewId") or setup_def.find("NewId")
+                old_id_elem = setup_def.find(".//{*}OldId") or setup_def.find("OldId")
+                min_elem = setup_def.find(".//{*}min") or setup_def.find("min")
+                max_elem = setup_def.find(".//{*}max") or setup_def.find("max")
+                
+                new_id = new_id_elem.text if new_id_elem is not None else "?"
+                old_id = old_id_elem.text if old_id_elem is not None else "?"
+                min_val = min_elem.text if min_elem is not None else "? ? ?"
+                max_val = max_elem.text if max_elem is not None else "? ? ?"
+                
+                print("      <SetupIdDefinition>")
+                print(f"        <NewId>{new_id}</NewId>")
+                print(f"        <OldId>{old_id}</OldId>")
+                print(f"        <min>{min_val}</min>")
+                print(f"        <max>{max_val}</max>")
+                print("      </SetupIdDefinition>")
+            
+            if setup_count > 10:
+                print(f"      <!-- ... {setup_count - 10} more ... -->")
+            print("    </SetupIds>")
+        
+        print("  </ImageLoader>")
+        
+        # Summary of ImageLoader structure
+        if img_loader is not None:
+            inner_loader = img_loader.find(".//{*}ImageLoader") or img_loader.find("ImageLoader")
+            if inner_loader is not None:
+                zgroups = inner_loader.find(".//{*}zgroups") or inner_loader.find("zgroups")
+                if zgroups is not None:
+                    zgroup_list = zgroups.findall(".//{*}zgroup") or zgroups.findall("zgroup")
+                    print(f"  Summary: ImageLoader contains {len(zgroup_list)} zgroups")
+                else:
+                    print("  Summary: ImageLoader found but no zgroups")
+            else:
+                print("  Summary: ImageLoader found but no nested structure")
+        else:
+            print("  Summary: No ImageLoader found")
+    else:
+        print("  <ImageLoader>NOT FOUND</ImageLoader>")
+        print("  Summary: No ImageLoader found")
+    
+    print("=========================================================\n")
+
+def _extract_zarr_path_from_xml(xml_tree):
+    """
+    Extract zarr path from XML using multiple strategies, similar to Java bestEffortZarrPath.
+    """
+    try:
+        # Strategy 1: Look for ImageLoader > ImageLoader > zarr (nested structure)
+        img_loader = xml_tree.find(".//{*}ImageLoader") or xml_tree.find("ImageLoader")
+        if img_loader is not None:
+            # Check for nested ImageLoader
+            nested_loader = img_loader.find(".//{*}ImageLoader") or img_loader.find("ImageLoader")
+            if nested_loader is not None:
+                img_loader = nested_loader
+            
+            # Look for zarr element
+            zarr_elem = img_loader.find(".//{*}zarr") or img_loader.find("zarr")
+            if zarr_elem is not None and zarr_elem.text and zarr_elem.text.strip():
+                return zarr_elem.text.strip()
+        
+        # Strategy 2: Look for other path-like elements
+        path_elements = [
+            "path", "url", "bucket", "root", "base", "location", "file", "directory"
+        ]
+        
+        for elem_name in path_elements:
+            elem = xml_tree.find(".//*[contains(local-name(), '{}')]".format(elem_name))
+            if elem is not None and elem.text and elem.text.strip():
+                text = elem.text.strip()
+                # Check if it looks like a path/URL
+                if any(char in text for char in ['/', '\\', ':', '.']) and len(text) > 5:
+                    return text
+        
+        # Strategy 3: Look for any text that looks like a zarr path
+        for elem in xml_tree.iter():
+            if elem.text and elem.text.strip():
+                text = elem.text.strip()
+                # Check for common zarr path patterns
+                if any(pattern in text.lower() for pattern in ['zarr', 's3://', 'http://', 'https://', '.zarr']):
+                    return text
+        
+        return "unknown"
+        
+    except Exception as e:
+        print(f"⚠️  [extract_zarr_path] Error extracting zarr path: {str(e)}")
+        return "unknown"
+
+def _validate_final_xml_structure(xml_tree, expected_zgroups_count):
+    """
+    Validate that the final XML structure contains the expected nested ImageLoader with zgroups.
+    
+    Expected structure:
+    <SpimData>
+      <SequenceDescription>
+        <ImageLoader format="split.viewerimgloader">
+          <ImageLoader format="bdv.multimg.zarr" version="3.0">
+            <zarr type="absolute">...</zarr>
+            <zgroups>
+              <zgroup setup="0" tp="0" path="..." indicies="[]" />
+              <zgroup setup="1" tp="0" path="..." indicies="[]" />
+              <!-- ... more zgroups ... -->
+            </zgroups>
+          </ImageLoader>
+        </ImageLoader>
+      </SequenceDescription>
+    </SpimData>
+    """
+    try:
+        # Check SequenceDescription
+        seq_desc = xml_tree.find(".//{*}SequenceDescription") or xml_tree.find("SequenceDescription")
+        if seq_desc is None:
+            print("❌ [validation] SequenceDescription not found")
+            return False
+        
+        # Check ImageLoader
+        img_loader = seq_desc.find(".//{*}ImageLoader") or seq_desc.find("ImageLoader")
+        if img_loader is None:
+            print("❌ [validation] ImageLoader not found in SequenceDescription")
+            return False
+        
+        # Check format
+        if img_loader.get("format") != "split.viewerimgloader":
+            print(f"❌ [validation] ImageLoader format incorrect: {img_loader.get('format')}")
+            return False
+        
+        # Check nested ImageLoader
+        nested_loader = img_loader.find(".//{*}ImageLoader") or img_loader.find("ImageLoader")
+        if nested_loader is None:
+            print("❌ [validation] Nested ImageLoader not found")
+            return False
+        
+        # Check nested format
+        if nested_loader.get("format") != "bdv.multimg.zarr":
+            print(f"❌ [validation] Nested ImageLoader format incorrect: {nested_loader.get('format')}")
+            return False
+        
+        # Check zarr element
+        zarr_elem = nested_loader.find(".//{*}zarr") or nested_loader.find("zarr")
+        if zarr_elem is None:
+            print("❌ [validation] zarr element not found in nested ImageLoader")
+            return False
+        
+        # Check zgroups
+        zgroups = nested_loader.find(".//{*}zgroups") or nested_loader.find("zgroups")
+        if zgroups is None:
+            print("❌ [validation] zgroups element not found in nested ImageLoader")
+            return False
+        
+        # Check zgroup count
+        zgroup_list = zgroups.findall(".//{*}zgroup") or zgroups.findall("zgroup")
+        actual_count = len(zgroup_list)
+        if actual_count != expected_zgroups_count:
+            print(f"❌ [validation] zgroup count mismatch: expected {expected_zgroups_count}, got {actual_count}")
+            return False
+        
+        # Check first few zgroups have required attributes
+        for i, zgroup in enumerate(zgroup_list[:3]):  # Check first 3
+            required_attrs = ["setup", "tp", "path", "indicies"]
+            for attr in required_attrs:
+                if attr not in zgroup.attrib:
+                    print(f"❌ [validation] zgroup {i} missing required attribute: {attr}")
+                    return False
+        
+        print(f"✅ [validation] All checks passed: {actual_count} zgroups found with correct structure")
+        return True
+        
+    except Exception as e:
+        print(f"❌ [validation] Validation error: {str(e)}")
+        return False
