@@ -1,6 +1,5 @@
 """
-Run with: `python3 -m Rhapso.pipelines.image_split.image_split_pipeline`
-or: `python3 Rhapso/pipelines/image_split/image_split_pipeline.py`
+Run as module: `python3 -m Rhapso.pipelines.image_split.image_split_pipeline`
 """
 print("Begin image split pipeline.")
 
@@ -8,10 +7,16 @@ print("Begin image split pipeline.")
 from Rhapso.image_split.split_datasets import main
 
 # Configuration Variables
+
+# Local Input/Output Paths
+XML_INPUT = "/mnt/c/Users/marti/Documents/allen/data/exaSPIM_686951 EXAMPLE/ip_affine_alignment/bigstitcher_affine.xml"
+XML_OUTPUT = "/mnt/c/Users/marti/Documents/allen/data/exaSPIM_686951 EXAMPLE/results/bigstitcher_affine_split.xml"
+N5_OUTPUT = "/mnt/c/Users/marti/Documents/allen/data/exaSPIM_686951 EXAMPLE/results/interestpoints.n5"
+
 # AWS S3 Input/Output Paths
-XML_INPUT = "s3://martin-test-bucket/split_images_output/bigstitcher_affine.xml"
-XML_OUTPUT = "s3://martin-test-bucket/split_images_output/output.xml"
-N5_OUTPUT = "s3://martin-test-bucket/split_images_output/interestpoints.n5"
+# XML_INPUT = "s3://martin-test-bucket/split_images_output/bigstitcher_affine.xml"
+# XML_OUTPUT = "s3://martin-test-bucket/split_images_output/output.xml"
+# N5_OUTPUT = "s3://martin-test-bucket/split_images_output/interestpoints.n5"
 
 # Image Splitting Parameters
 TARGET_IMAGE_SIZE_STRING = "7000,7000,4000"
