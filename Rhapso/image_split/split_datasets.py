@@ -1,14 +1,52 @@
 """
-Image splitting dataset processor for Rhapso.
+Run with command:
 python3 -m Rhapso.image_split.SplitDatasets
 """
 
 import sys
 import numpy as np
 from xml.etree import ElementTree as ET
+import zarr
+import os
+import s3fs
+import boto3
+from io import BytesIO
 
 from Rhapso.image_split.split_views import collect_image_sizes, find_min_step_size, next_multiple
 from Rhapso.image_split.splitting_tools import split_images
+
+
+# ============================================================================
+# Configuration Variables
+# ============================================================================
+# These configuration variables control the image splitting process
+# Modify these values to customize the splitting behavior
+
+# Local Input/Output Paths
+#XML_INPUT = "/mnt/c/Users/marti/Documents/allen/data/exaSPIM_686951 EXAMPLE/ip_affine_alignment/bigstitcher_affine.xml"
+#XML_OUTPUT = "/mnt/c/Users/marti/Documents/allen/data/exaSPIM_686951 EXAMPLE/results/bigstitcher_affine_split-RHAPSO.xml"
+#N5_OUTPUT = "/mnt/c/Users/marti/Documents/allen/data/exaSPIM_686951 EXAMPLE/results/coolNewFolder/interestpoints.n5"
+
+# AWS S3 Input/Output Paths
+XML_INPUT = "s3://martin-test-bucket/split_images_output/bigstitcher_affine.xml"
+XML_OUTPUT = "s3://martin-test-bucket/split_images_output/output.xml"
+N5_OUTPUT = "s3://martin-test-bucket/split_images_output/interestpoints.n5"
+
+# Image Splitting Parameters
+TARGET_IMAGE_SIZE_STRING = "7000,7000,4000"
+TARGET_OVERLAP_STRING = "128,128,128"
+
+# Fake Interest Points Configuration
+FAKE_INTEREST_POINTS = True
+FIP_EXCLUSION_RADIUS = 200
+ASSIGN_ILLUMINATIONS = True
+
+# Default Values
+DISABLE_OPTIMIZATION = False
+FIP_DENSITY = 100.0
+FIP_MIN_NUM_POINTS = 20
+FIP_MAX_NUM_POINTS = 500
+FIP_ERROR = 0.5
 
 
 # ============================================================================
@@ -111,12 +149,26 @@ def format_xml_output(tree, output_path):
 # ============================================================================
 
 def load_xml_data(xml_input):
-    """Load and parse XML input file."""
+    """Load and parse XML input file from local path or S3."""
     print(f"Loading XML: {xml_input}")
     
     def load_operation():
-        tree = ET.parse(xml_input)
-        return tree.getroot()
+        if xml_input.startswith('s3://'):
+            # Handle S3 path
+            s3 = boto3.client('s3')
+            # Parse S3 URL to get bucket and key
+            s3_parts = xml_input.replace('s3://', '').split('/', 1)
+            bucket_name = s3_parts[0]
+            key = s3_parts[1] if len(s3_parts) > 1 else ''
+            
+            response = s3.get_object(Bucket=bucket_name, Key=key)
+            xml_string = response['Body'].read().decode('utf-8')
+            tree = ET.parse(BytesIO(xml_string.encode('utf-8')))
+            return tree.getroot()
+        else:
+            # Handle local path
+            tree = ET.parse(xml_input)
+            return tree.getroot()
     
     return safe_xml_operation(load_operation, "Unexpected error loading XML")
 
@@ -234,12 +286,30 @@ def perform_image_splitting(data_global, adjusted_overlap, adjusted_size, min_st
 
 
 def save_xml_output(new_data, xml_output):
-    """Save the processed data to XML output file."""
+    """Save the processed data to XML output file (local or S3)."""
     try:
         new_tree = ET.ElementTree(new_data)
         print(f"Saving new XML to: {xml_output}")
-        format_xml_output(new_tree, xml_output)
-        print("Done.")
+        
+        if xml_output.startswith('s3://'):
+            # Handle S3 output
+            s3 = boto3.client('s3')
+            # Parse S3 URL to get bucket and key
+            s3_parts = xml_output.replace('s3://', '').split('/', 1)
+            bucket_name = s3_parts[0]
+            key = s3_parts[1] if len(s3_parts) > 1 else ''
+            
+            # Convert XML to bytes and upload to S3
+            xml_bytes = BytesIO()
+            new_tree.write(xml_bytes, encoding='utf-8', xml_declaration=True)
+            xml_bytes.seek(0)
+            s3.upload_fileobj(xml_bytes, bucket_name, key)
+            print("XML saved to S3 successfully")
+        else:
+            # Handle local output
+            format_xml_output(new_tree, xml_output)
+            print("XML saved to local file successfully")
+            
     except PermissionError as e:
         print(f"Error: Permission denied when saving output file. {e}", file=sys.stderr)
         sys.exit(1)
@@ -251,6 +321,105 @@ def save_xml_output(new_data, xml_output):
         sys.exit(1)
 
 
+def create_n5_files_for_fake_interest_points(xml_data, n5_output_path):
+    """Create N5 files for fake interest points created during image splitting."""
+    try:
+        # Validate n5_output_path
+        if not n5_output_path or not n5_output_path.strip():
+            raise ValueError("n5_output_path is empty or not provided")
+        
+        print("Saving interest points multi-threaded ...")
+        
+        # Find all ViewInterestPointsFile elements to get all labels and setups
+        vip_files = xml_data.findall('.//ViewInterestPointsFile') or xml_data.findall('.//{*}ViewInterestPointsFile')
+        
+        if not vip_files:
+            print("No ViewInterestPointsFile elements found in XML")
+            return
+        
+        # Determine if this is an S3 path or local path
+        is_s3 = n5_output_path.startswith('s3://')
+        
+        if is_s3:
+            # Handle S3 path - use zarr with s3fs
+            s3_fs = s3fs.S3FileSystem()
+            store = s3fs.S3Map(root=n5_output_path, s3=s3_fs, check=False)
+            root = zarr.group(store=store, overwrite=False)
+        else:
+            # Handle local path - use zarr N5Store
+            # Ensure the directory exists
+            os.makedirs(os.path.dirname(n5_output_path), exist_ok=True)
+            store = zarr.N5Store(n5_output_path)
+            root = zarr.group(store=store, overwrite=False)
+        
+        # Use a different attribute name to avoid N5 reserved keyword warning
+        root.attrs['n5_version'] = '4.0.0'
+        
+        for vip_file in vip_files:
+            timepoint_attr = vip_file.get('timepoint', '0')
+            setup_attr = vip_file.get('setup', '0')
+            label_attr = vip_file.get('label', 'beads')
+            
+            # Create N5 path for this label
+            n5_dataset_path = f"tpId_{timepoint_attr}_viewSetupId_{setup_attr}/{label_attr}/interestpoints"
+            
+            # Create empty N5 directories for fake interest points
+            if n5_dataset_path not in root:
+                try:
+                    dataset = root.create_group(n5_dataset_path)
+                except zarr.errors.ContainsGroupError:
+                    # If group already exists, get it
+                    dataset = root[n5_dataset_path]
+                
+                # Set attributes
+                dataset.attrs["pointcloud"] = "1.0.0"
+                dataset.attrs["type"] = "list"
+                dataset.attrs["list version"] = "1.0.0"
+                
+                # Create sub-datasets
+                id_dataset = f"{n5_dataset_path}/id"
+                loc_dataset = f"{n5_dataset_path}/loc"
+                intensities_dataset = f"{n5_dataset_path}/intensities"
+                
+                # Create empty datasets for fake interest points
+                if id_dataset not in root:
+                    root.create_dataset(
+                        id_dataset,
+                        shape=(0,), 
+                        dtype='u8',  
+                        chunks=(1,),  
+                        compressor=zarr.GZip()
+                    )
+                
+                if loc_dataset not in root:
+                    root.create_dataset(
+                        loc_dataset,
+                        shape=(0,),  
+                        dtype='f8',  
+                        chunks=(1,), 
+                        compressor=zarr.GZip()
+                    )
+                
+                if intensities_dataset not in root:
+                    root.create_dataset(
+                        intensities_dataset,
+                        shape=(0,), 
+                        dtype='f4', 
+                        chunks=(1,),  
+                        compressor=zarr.GZip()
+                    )
+                
+                # Log the creation of fake interest point directories
+                saved_path = f"file:{n5_output_path}/{n5_dataset_path}"
+                print(f"Saved: {saved_path}")
+        
+        print("Fake interest points N5 files created successfully")
+        
+    except Exception as e:
+        print(f"Warning: Could not create N5 files for fake interest points: {e}")
+        print("Continuing without N5 file creation...")
+
+
 # ============================================================================
 # Main Function
 # ============================================================================
@@ -259,22 +428,6 @@ def main():
     """Main entry point for image splitting process."""
     print("beginning image splitting...")
     
-    # Configuration - these would be replaced with proper argument parsing
-    xml_input = "/mnt/c/Users/marti/Documents/allen/data/exaSPIM_686951 EXAMPLE/ip_affine_alignment/bigstitcher_affine.xml"
-    xml_output = "/mnt/c/Users/marti/Documents/allen/data/exaSPIM_686951 EXAMPLE/results/bigstitcher_affine_split-RHAPSO.xml"
-    target_image_size_string = "7000,7000,4000"
-    target_overlap_string = "128,128,128"
-    fake_interest_points = True
-    fip_exclusion_radius = 200
-    assign_illuminations = True
-    
-    # Default values
-    disable_optimization = False
-    fip_density = 100.0
-    fip_min_num_points = 20
-    fip_max_num_points = 500
-    fip_error = 0.5
-    
     # Register namespace for BigStitcher XML
     try:
         ET.register_namespace('', 'SpimData.xsd')
@@ -282,13 +435,13 @@ def main():
         print(f"Warning: Could not register namespace: {e}", file=sys.stderr)
 
     # Step 1: Load XML data
-    data_global = load_xml_data(xml_input)
+    data_global = load_xml_data(XML_INPUT)
     if data_global is None:
         return
 
     # Step 2: Parse target parameters
     target_image_size, target_overlap = process_target_parameters(
-        target_image_size_string, target_overlap_string
+        TARGET_IMAGE_SIZE_STRING, TARGET_OVERLAP_STRING
     )
 
     # Step 3: Analyze dataset
@@ -305,13 +458,17 @@ def main():
     # Step 6: Perform image splitting
     new_data = perform_image_splitting(
         data_global, adjusted_overlap, adjusted_size, min_step_size,
-        assign_illuminations, disable_optimization, fake_interest_points,
-        fip_density, fip_min_num_points, fip_max_num_points, fip_error,
-        fip_exclusion_radius
+        ASSIGN_ILLUMINATIONS, DISABLE_OPTIMIZATION, FAKE_INTEREST_POINTS,
+        FIP_DENSITY, FIP_MIN_NUM_POINTS, FIP_MAX_NUM_POINTS, FIP_ERROR,
+        FIP_EXCLUSION_RADIUS
     )
 
     # Step 7: Save output
-    save_xml_output(new_data, xml_output)
+    save_xml_output(new_data, XML_OUTPUT)
+    
+    # Step 8: Create N5 files for fake interest points if enabled
+    if FAKE_INTEREST_POINTS:
+        create_n5_files_for_fake_interest_points(new_data, N5_OUTPUT)
 
     print("Split-Images run finished")
 
