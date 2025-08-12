@@ -13,47 +13,8 @@ class ModelAndTileSetup():
         self.label_map = label_map
         self.pairs = []
         self.tiles = {}
-
-    def create_tiles(self):
-        """
-        Initializes tile data structures with models, point matches, and connected view metadata.
-        """
-        view_id_list = list(self.view_id_set)
-        for view_id in view_id_list:
-            view_id_key = f"timepoint: {view_id[0]}, setup: {view_id[1]}"
-            matches = [
-                {
-                    'p1': match['detection_p1'], 
-                    'p2': match['corresponding_detection_p2'],
-                    'strength': 1.0,  
-                    'weight': 1.0    
-                }
-                for match in self.corresponding_interest_points.get(view_id_key, [])
-            ]
-            self.tiles[view_id_key] = {
-                'model': self.model,
-                'matches' : matches,
-                'connected_tiles': self.connected_views[view_id_key],
-                'cost': 0.0,
-                'distance': 0.0
-            }
     
-    def create_default_interpolated_affine_model_3d(self):
-        """
-        Returns a default 3D affine transformation model with identity rotation and zero translation.
-        """
-        return {
-            "m00": 1.0, "m01": 0.0, "m02": 0.0, "m03": 0.0,
-            "m10": 0.0, "m11": 1.0, "m12": 0.0, "m13": 0.0,
-            "m20": 0.0, "m21": 0.0, "m22": 1.0, "m23": 0.0,
-            "i00": 1.0, "i01": 0.0, "i02": 0.0, "i03": -0.0,
-            "i10": 0.0, "i11": 1.0, "i12": 0.0, "i13": -0.0,
-            "i20": 0.0, "i21": 0.0, "i22": 1.0, "i23": -0.0,
-            "cost": 1.7976931348623157e+308,  
-            "isInvertible": True
-        }
-    
-    def create_default_rigid_model_3d(self):
+    def create_default_model_3d(self):
         """
         Returns a default 3D rigid transformation model with identity rotation and zero translation.
         """
@@ -68,31 +29,14 @@ class ModelAndTileSetup():
             "isInvertible": True
         }
 
-    def create_default_affine_model_3d(self):
-        """
-        Returns a default 3D affine model with identity matrix and initialized inverse and cost.
-        """
-        return {
-            "m00": 1.0, "m01": 0.0, "m02": 0.0, "m03": 0.0,
-            "m10": 0.0, "m11": 1.0, "m12": 0.0, "m13": 0.0,
-            "m20": 0.0, "m21": 0.0, "m22": 1.0, "m23": 0.0,
-            "i00": 1.0, "i01": 0.0, "i02": 0.0, "i03": 0.0,
-            "i10": 0.0, "i11": 1.0, "i12": 0.0, "i13": 0.0,
-            "i20": 0.0, "i21": 0.0, "i22": 1.0, "i23": 0.0,
-            "cost": 1.7976931348623157e+308, 
-            "isInvertible": True
-        }
-    
     def create_models(self):
         """
         Initializes default transformation models and parameters for affine and rigid alignment.
         """
         self.model = {
-            'a' : self.create_default_affine_model_3d(),
-            'affine' : self.create_default_interpolated_affine_model_3d(),
-            'afs' : [1.0 if i in [0, 4, 8] else 0.0 for i in range(13)],
-            'b' : self.create_default_rigid_model_3d(),
-            'bfs' : [1.0 if i in [0, 4, 8] else 0.0 for i in range(13)],
+            'a' : self.create_default_model_3d(),
+            'b' : self.create_default_model_3d(),
+            'regularized': None,
             'cost' : 1.7976931348623157e+308,
             'l1' : 0.900000,
             'lambda' : 0.100000
@@ -120,11 +64,12 @@ class ModelAndTileSetup():
                 key_i = f"timepoint: {view_id_list[i][0]}, setup: {view_id_list[i][1]}"
                 key_j = f"timepoint: {view_id_list[j][0]}, setup: {view_id_list[j][1]}"
 
-                if key_i == 'timepoint: 18, setup: 1' and key_j == 'timepoint: 18, setup: 0':
+                if key_i == 'timepoint: 0, setup: 0' and key_j == 'timepoint: 0, setup: 1':
                     print("start")
 
                 mA = self.view_transform_matrices.get(key_i, None)
                 mB = self.view_transform_matrices.get(key_j, None)   
+                
                 if mA is None or mB is None: continue
 
                 # Get corresponding interest points for view_id A
@@ -145,11 +90,13 @@ class ModelAndTileSetup():
 
                         interest_point_a = {
                             'l': copy.deepcopy(ip_a),  
-                            'w': copy.deepcopy(ip_a)
+                            'w': copy.deepcopy(ip_a),
+                            'index': p['detection_id']
                         }
                         interest_point_b = {
                             'l': copy.deepcopy(ip_b),
-                            'w': copy.deepcopy(ip_b)
+                            'w': copy.deepcopy(ip_b),
+                            'index': p['corresponding_detection_id']
                         }
 
                         transformed_l_a = self.apply_transform(interest_point_a['l'], mA)
@@ -162,10 +109,24 @@ class ModelAndTileSetup():
                         interest_point_b['l'] = transformed_l_b
                         interest_point_b['w'] = transformed_w_b
 
-                        inliers.append((interest_point_a, interest_point_b))
+                        interest_point_a['weight'] = 1
+                        interest_point_a['strength'] = 1
+                        interest_point_b['weight'] = 1
+                        interest_point_b['strength'] = 1
+
+                        inliers.append({
+                            'p1': interest_point_a,
+                            'p2': interest_point_b,
+                            'weight': 1,
+                            'strength': 1
+                        })
                     
                 if inliers:
-                    self.pairs.append(((key_i, key_j), inliers))
+                    self.pairs.append({
+                        'view': (key_i, key_j),
+                        'inliers': inliers,
+                        'flipped': None 
+                    })
     
     def run(self):
         """
@@ -173,6 +134,5 @@ class ModelAndTileSetup():
         """
         self.setup_point_matches_from_interest_points()
         self.create_models()
-        self.create_tiles()
 
-        return self.tiles, self.model, self.pairs
+        return self.model, self.pairs
