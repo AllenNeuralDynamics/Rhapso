@@ -1,6 +1,22 @@
 """
-Run with command:
-python3 -m Rhapso.image_split.SplitDatasets
+Image splitting dataset processor for Rhapso.
+
+This module provides functionality to split large images into smaller tiles
+while maintaining metadata and creating fake interest points for alignment.
+
+The main function accepts configuration parameters for input/output paths,
+image splitting parameters, and fake interest point settings.
+
+Example usage:
+    from Rhapso.image_split.split_datasets import main
+    
+    main(
+        xml_input="path/to/input.xml",
+        xml_output="path/to/output.xml",
+        target_image_size_string="7000,7000,4000",
+        target_overlap_string="128,128,128",
+        fake_interest_points=True
+    )
 """
 
 import sys
@@ -14,39 +30,6 @@ from io import BytesIO
 
 from Rhapso.image_split.split_views import collect_image_sizes, find_min_step_size, next_multiple
 from Rhapso.image_split.splitting_tools import split_images
-
-
-# ============================================================================
-# Configuration Variables
-# ============================================================================
-# These configuration variables control the image splitting process
-# Modify these values to customize the splitting behavior
-
-# Local Input/Output Paths
-#XML_INPUT = "/mnt/c/Users/marti/Documents/allen/data/exaSPIM_686951 EXAMPLE/ip_affine_alignment/bigstitcher_affine.xml"
-#XML_OUTPUT = "/mnt/c/Users/marti/Documents/allen/data/exaSPIM_686951 EXAMPLE/results/bigstitcher_affine_split-RHAPSO.xml"
-#N5_OUTPUT = "/mnt/c/Users/marti/Documents/allen/data/exaSPIM_686951 EXAMPLE/results/coolNewFolder/interestpoints.n5"
-
-# AWS S3 Input/Output Paths
-XML_INPUT = "s3://martin-test-bucket/split_images_output/bigstitcher_affine.xml"
-XML_OUTPUT = "s3://martin-test-bucket/split_images_output/output.xml"
-N5_OUTPUT = "s3://martin-test-bucket/split_images_output/interestpoints.n5"
-
-# Image Splitting Parameters
-TARGET_IMAGE_SIZE_STRING = "7000,7000,4000"
-TARGET_OVERLAP_STRING = "128,128,128"
-
-# Fake Interest Points Configuration
-FAKE_INTEREST_POINTS = True
-FIP_EXCLUSION_RADIUS = 200
-ASSIGN_ILLUMINATIONS = True
-
-# Default Values
-DISABLE_OPTIMIZATION = False
-FIP_DENSITY = 100.0
-FIP_MIN_NUM_POINTS = 20
-FIP_MAX_NUM_POINTS = 500
-FIP_ERROR = 0.5
 
 
 # ============================================================================
@@ -424,9 +407,36 @@ def create_n5_files_for_fake_interest_points(xml_data, n5_output_path):
 # Main Function
 # ============================================================================
 
-def main():
+def main(
+    xml_input,
+    xml_output=None,
+    n5_output=None,
+    target_image_size_string=None,
+    target_overlap_string=None,
+    fake_interest_points=False,
+    fip_exclusion_radius=20.0,
+    assign_illuminations=False,
+    disable_optimization=False,
+    fip_density=100.0,
+    fip_min_num_points=20,
+    fip_max_num_points=500,
+    fip_error=0.5
+):
     """Main entry point for image splitting process."""
     print("beginning image splitting...")
+    
+    # Validate required parameters
+    if not xml_input:
+        raise ValueError("xml_input is required and cannot be empty")
+    if not target_image_size_string:
+        raise ValueError("target_image_size_string is required and cannot be empty")
+    if not target_overlap_string:
+        raise ValueError("target_overlap_string is required and cannot be empty")
+    
+    # If xml_output is not provided, default to overwriting input XML
+    if xml_output is None:
+        xml_output = xml_input
+        print(f"Warning: xml_output not provided, will overwrite input XML: {xml_input}")
     
     # Register namespace for BigStitcher XML
     try:
@@ -435,13 +445,13 @@ def main():
         print(f"Warning: Could not register namespace: {e}", file=sys.stderr)
 
     # Step 1: Load XML data
-    data_global = load_xml_data(XML_INPUT)
+    data_global = load_xml_data(xml_input)
     if data_global is None:
         return
 
     # Step 2: Parse target parameters
     target_image_size, target_overlap = process_target_parameters(
-        TARGET_IMAGE_SIZE_STRING, TARGET_OVERLAP_STRING
+        target_image_size_string, target_overlap_string
     )
 
     # Step 3: Analyze dataset
@@ -458,20 +468,28 @@ def main():
     # Step 6: Perform image splitting
     new_data = perform_image_splitting(
         data_global, adjusted_overlap, adjusted_size, min_step_size,
-        ASSIGN_ILLUMINATIONS, DISABLE_OPTIMIZATION, FAKE_INTEREST_POINTS,
-        FIP_DENSITY, FIP_MIN_NUM_POINTS, FIP_MAX_NUM_POINTS, FIP_ERROR,
-        FIP_EXCLUSION_RADIUS
+        assign_illuminations, disable_optimization, fake_interest_points,
+        fip_density, fip_min_num_points, fip_max_num_points, fip_error,
+        fip_exclusion_radius
     )
 
     # Step 7: Save output
-    save_xml_output(new_data, XML_OUTPUT)
+    save_xml_output(new_data, xml_output)
     
     # Step 8: Create N5 files for fake interest points if enabled
-    if FAKE_INTEREST_POINTS:
-        create_n5_files_for_fake_interest_points(new_data, N5_OUTPUT)
+    if fake_interest_points and n5_output:
+        create_n5_files_for_fake_interest_points(new_data, n5_output)
+    elif fake_interest_points and not n5_output:
+        print("Warning: fake_interest_points is True but n5_output is not provided. Skipping N5 file creation.")
 
     print("Split-Images run finished")
 
 
 if __name__ == '__main__':
-    main()
+    # Example usage when run directly
+    # This shows how to call the main function with parameters
+    print("Example: This module is designed to be imported and called with parameters.")
+    print("Use the image_split_pipeline.py script or import this module directly.")
+    print("Example usage:")
+    print("  from Rhapso.image_split.split_datasets import main")
+    print("  main(xml_input='path/to/input.xml', target_image_size_string='7000,7000,4000', target_overlap_string='128,128,128')")
