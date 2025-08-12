@@ -2,12 +2,22 @@
     "version": "0.2.0",
     "configurations": [
         {
-            "name": "Python: Module",
+            "name": "SPLIT",
             "type": "debugpy",
             "request": "launch",
-            "module": "Rhapso.pipelines.matching.matching_pipeline",
+            "module": "Rhapso.image_split.split_datasets",
             "cwd": "${workspaceFolder}",
-            "python": "${command:python.interpreterPath}",
+            "python": "venv/bin/python",
+            "args": [],
+            "justMyCode": true
+        },
+        {
+            "name": "Python: N5Reader Script",
+            "type": "debugpy",
+            "request": "launch",
+            "program": "${workspaceFolder}/Rhapso/data_prep/n5_reader.py",
+            "cwd": "${workspaceFolder}",
+            "python": "venv/bin/python",
             "args": [],
             "justMyCode": true
         }
