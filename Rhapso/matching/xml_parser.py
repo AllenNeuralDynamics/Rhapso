@@ -82,7 +82,10 @@ class XMLParser:
                 series = fm.get("series")
                 channel = fm.get("channel")
                 file_path = fm.find("file").text if fm.find("file") is not None else None
-                full_path = self.xml_input_path.replace("dataset.xml", "") + file_path
+                if "detection.xml" in self.xml_input_path:
+                    full_path = self.xml_input_path.replace("dataset-detection.xml", "") + file_path
+                else:
+                     full_path = self.xml_input_path.replace("dataset.xml", "") + file_path
                 image_loader_data.append(
                     {
                         "view_setup": view_setup,

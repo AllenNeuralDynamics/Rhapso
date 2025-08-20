@@ -11,16 +11,16 @@ from Rhapso.matching.save_matches import SaveMatches
 # n5_output_path = 's3://martin-test-bucket/matching_output/'
 
 # Local
-# xml_input_path = "/Users/seanfite/Desktop/IP_TIFF_XML/dataset.xml"
-# xml_input_path = "/Users/ai/Desktop/s3test/TEST2/aind-open-data/exaSPIM_686951_2025-02-25_09-45-02_alignment_2025-06-12_19-58-52/interest_point_detection/bigstitcher_ip.xml"
+# xml_input_path = "/Users/ai/Desktop/IP_TIFF_XML_rhapso_8_12/dataset-detection.xml"
+# xml_input_path = "/Users/seanfite/Desktop/ip_rigid_alignment/bigstitcher_rigid.xml"
 # xml_input_path = "/Users/seanfite/Desktop/interest_point_detection/bigstitcher_ip.xml"
-# n5_output_path = '/Users/ai/Desktop/s3test/TEST2/aind-open-data/exaSPIM_686951_2025-02-25_09-45-02_alignment_2025-06-12_19-58-52/interest_point_detection/'
+# n5_output_path = '/Users/ai/Desktop/IP_TIFF_XML_rhapso_8_12/'
 
-# # BS_S3
+# # BS_S3 via local save down
 s3_uri="s3://aind-open-data/exaSPIM_730223_2025-04-25_14-44-58_alignment_2025-05-13_23-58-19/interest_point_detection/"
-local_dir="/Users/ai/Desktop/s3test/TEST4/"
+local_dir="/Users/ai/Desktop/s3test/6/"
 xml_input_path = ""
-n5_output_path =""
+n5_output_path = "" ##These paths get taken after s3 is downloaded. Can be input manually as well.
 
 # xml_input_path = "/Users/ai/Desktop/s3test/TEST4/aind-open-data/exaSPIM_730223_2025-04-25_14-44-58_alignment_2025-05-13_23-58-19/interest_point_detection/bigstitcher_ip.xml"
 # n5_output_path = "/Users/ai/Desktop/s3test/TEST4/aind-open-data/exaSPIM_730223_2025-04-25_14-44-58_alignment_2025-05-13_23-58-19/interest_point_detection/interestpoints.n5"
@@ -108,8 +108,8 @@ def download_n5_from_s3_to_local( s3_uri, local_dir):
                                         json.dump(attributes_data, f, indent=2)
 
 
-# BIGSTITCHER S3 TO LOCAL- Collect local paths
-# --------------------------
+# # BIGSTITCHER S3 TO LOCAL- Collect local paths
+# # --------------------------
 download_n5_from_s3_to_local(s3_uri, local_dir)
 
 s3_path = s3_uri.replace("s3://", "")
