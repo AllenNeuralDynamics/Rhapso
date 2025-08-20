@@ -1,16 +1,15 @@
-import pandas as pd
 import xml.etree.ElementTree as ET
 
 # This component recieves an XML file containing Tiff or Zarr image metadata and converts
-# it into several Dataframes
+# it into several Dictionaries
 
-class XMLToDataFrame:
+class XMLToDictionary:
     def __init__(self, xml_file):
         self.xml_content = xml_file
 
     def parse_image_loader_zarr(self, root):
         """
-        Parses image loader configuration from a Zarr file's XML structure and constructs a DataFrame containing the 
+        Parses image loader configuration from a Zarr file's XML structure and constructs a Dictionary containing the 
         metadata for each image group.
         """
         image_loader_data = []
@@ -30,11 +29,11 @@ class XMLToDataFrame:
                 }
             )
 
-        return pd.DataFrame(image_loader_data)
+        return image_loader_data
 
     def parse_image_loader_tiff(self, root):
         """
-        Parses image loader configuration from a TIFF file's XML structure and constructs a DataFrame containing 
+        Parses image loader configuration from a TIFF file's XML structure and constructs a Dictionary containing 
         metadata for each image group.
         """
         image_loader_data = []
@@ -71,8 +70,8 @@ class XMLToDataFrame:
                 }
             )
 
-        # Convert the list to a DataFrame and return
-        return pd.DataFrame(image_loader_data)
+        # Convert the list to a Dictionary and return
+        return image_loader_data
     
     def parse_image_loader_split_zarr(self):
         pass
@@ -91,7 +90,7 @@ class XMLToDataFrame:
 
     def parse_view_setups(self, root):
         """
-        Parses the view setups from an XML structure and constructs a DataFrame containing metadata for each view setup.
+        Parses the view setups from an XML structure and constructs a Dictionary containing metadata for each view setup.
         """
         viewsetups_data = []
 
@@ -113,11 +112,11 @@ class XMLToDataFrame:
                     **attributes,
                 }
             )
-        return pd.DataFrame(viewsetups_data)
+        return viewsetups_data
 
     def parse_view_registrations(self, root):
         """
-        Parses view registrations from an XML structure and constructs a DataFrame containing registration metadata 
+        Parses view registrations from an XML structure and constructs a Dictionary containing registration metadata 
         for each view.
         """
         viewregistrations_data = []
@@ -138,11 +137,11 @@ class XMLToDataFrame:
                         "affine": affine_text,
                     }
                 )
-        return pd.DataFrame(viewregistrations_data)
+        return viewregistrations_data
 
     def parse_view_interest_points(self, root):
         """
-        Parses interest points data from an XML structure and constructs a DataFrame containing metadata and paths 
+        Parses interest points data from an XML structure and constructs a Dictionary containing metadata and paths 
         for each set of interest points.
         """
         view_interest_points_data = []
@@ -166,7 +165,7 @@ class XMLToDataFrame:
                     "path": path,
                 }
             )
-        return pd.DataFrame(view_interest_points_data)
+        return view_interest_points_data
 
     def check_labels(self, root):
         """
@@ -201,14 +200,14 @@ class XMLToDataFrame:
         Executes the entry point of the script.
         """
         root = ET.fromstring(self.xml_content)
-        image_loader_df = self.route_image_loader(root)
-        view_setups_df = self.parse_view_setups(root)
-        view_registrations_df = self.parse_view_registrations(root)
-        view_interest_points_df = self.parse_view_interest_points(root)
-
+        image_loader = self.route_image_loader(root)
+        view_setups = self.parse_view_setups(root)
+        view_registrations = self.parse_view_registrations(root)
+        view_interest_points = self.parse_view_interest_points(root)
+        
         return {
-            "image_loader": image_loader_df,
-            "view_setups": view_setups_df,
-            "view_registrations": view_registrations_df,
-            "view_interest_points": view_interest_points_df,
+            "image_loader": image_loader,
+            "view_setups": view_setups,
+            "view_registrations": view_registrations,
+            "view_interest_points": view_interest_points,
         }

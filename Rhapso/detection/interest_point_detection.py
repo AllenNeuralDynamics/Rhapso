@@ -1,4 +1,4 @@
-from Rhapso.data_prep.xml_to_dataframe import XMLToDataFrame
+from Rhapso.data_prep.xml_to_dictionary import XMLToDictionary
 from Rhapso.detection.view_transform_models import ViewTransformModels
 from Rhapso.detection.overlap_detection import OverlapDetection
 from Rhapso.data_prep.metadata_builder import MetadataBuilder
@@ -47,7 +47,7 @@ class InterestPointDetection:
                 xml_file = file.read()
 
         # Load XML data into dataframes         
-        processor = XMLToDataFrame(xml_file)
+        processor = XMLToDictionary(xml_file)
         dataframes = processor.run()
         print("XML loaded")
 

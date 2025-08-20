@@ -1,4 +1,4 @@
-from Rhapso.data_prep.xml_to_dataframe import XMLToDataFrame
+from Rhapso.data_prep.xml_to_dictionary import XMLToDictionary
 from Rhapso.solver.global_optimization import GlobalOptimization
 from Rhapso.solver.view_transforms import ViewTransformModels
 from Rhapso.solver.data_prep import DataPrep
@@ -49,7 +49,7 @@ class Solver:
             xml_file = fetch_local_xml(self.xml_file_path)
 
         # Load XML data into dataframes         
-        processor = XMLToDataFrame(xml_file)
+        processor = XMLToDictionary(xml_file)
         dataframes = processor.run()
         print("XML loaded")
 

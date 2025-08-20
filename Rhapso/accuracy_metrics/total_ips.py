@@ -6,7 +6,7 @@ import s3fs
 import zarr
 
 from Rhapso.accuracy_metrics.save_metrics import JSONFileHandler
-from Rhapso.data_prep.xml_to_dataframe import XMLToDataFrame
+from Rhapso.data_prep.xml_to_dictionary import XMLToDictionary
 
 
 class DetectionOutput:
@@ -30,7 +30,7 @@ class DetectionOutput:
 
     def load_dataframe(self):
         xml_file = self.fetch_local_xml(self.xml_file_path)
-        processor = XMLToDataFrame(xml_file)
+        processor = XMLToDictionary(xml_file)
         dataframes = processor.run()
         df = pd.DataFrame(dataframes["image_loader"])
         return df[["view_setup", "timepoint"]].to_numpy()
