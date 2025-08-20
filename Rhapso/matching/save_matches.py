@@ -70,7 +70,7 @@ class SaveMatches:
             if "interestpoints.n5" not in self.n5_output_path:
                 full_path = f"{self.n5_output_path}interestpoints.n5/tpId_{tpA}_viewSetupId_{vsA}/{labelA}/correspondences/"
             else:
-                full_path = f"{self.n5_output_path}tpId_{tpA}_viewSetupId_{vsA}/{labelA}/correspondences/"
+                full_path = f"{self.n5_output_path}/tpId_{tpA}_viewSetupId_{vsA}/{labelA}/correspondences/"
 
             if full_path.startswith("s3://"):
                 # S3 path
