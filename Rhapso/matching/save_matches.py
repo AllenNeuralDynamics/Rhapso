@@ -26,10 +26,11 @@ class SaveMatches:
 
         idMap = {}
         view_keys = set()
+        label = matched_views[0][2]
         for viewA, matches in grouped_by_viewA.items():
             tpA = int(viewA.split("tpId=")[1].split(",")[0])
             vsA = int(viewA.split("setupId=")[1].split(")")[0])
-            keyA = f"{tpA},{vsA},label"
+            keyA = f"{tpA},{vsA},{label}"
             view_keys.add(keyA)
 
             for _, _, viewB in matches:
@@ -37,7 +38,7 @@ class SaveMatches:
                 vsB = int(viewB.split("setupId=")[1].split(")")[0])
 
                 if tpB == tpA:
-                    keyB = f"{tpB},{vsB},label"
+                    keyB = f"{tpB},{vsB},{label}"
                     view_keys.add(keyB)
 
         idMap = {key: i for i, key in enumerate(sorted(view_keys))}
@@ -47,7 +48,7 @@ class SaveMatches:
             for idxA, idxB, viewB in matches:
                 tpB = int(viewB.split("tpId=")[1].split(",")[0])
                 vsB = int(viewB.split("setupId=")[1].split(")")[0])
-                key = f"{tpB},{vsB},label"
+                key = f"{tpB},{vsB},{label}"
                 view_id = idMap[key]
                 grouped_with_ids[viewA].append((idxA, idxB, view_id))
 
@@ -66,7 +67,10 @@ class SaveMatches:
                 continue
 
             # Output path
-            full_path = f"{self.n5_output_path}/interestpoints.n5/tpId_{tpA}_viewSetupId_{vsA}/{labelA}/correspondences"
+            if "interestpoints.n5" not in self.n5_output_path:
+                full_path = f"{self.n5_output_path}interestpoints.n5/tpId_{tpA}_viewSetupId_{vsA}/{labelA}/correspondences/"
+            else:
+                full_path = f"{self.n5_output_path}/tpId_{tpA}_viewSetupId_{vsA}/{labelA}/correspondences/"
 
             if full_path.startswith("s3://"):
                 # S3 path
@@ -76,17 +80,15 @@ class SaveMatches:
                 store = s3fs.S3Map(root=root_path, s3=self.s3_filesystem, check=False) 
                 # root = zarr.group(store=store, overwrite=False)
                 try:
-                    root = zarr.open_group(store=store, mode='r+')
+                    root = zarr.open_group(store=store, mode='w')
                 except (KeyError, ValueError):
                     # Group doesn't exist, create it
                     root = zarr.open_group(store=store, mode='w')
             else:
                 # Write to Zarr N5
+                
                 store = zarr.N5Store(full_path)
-                root = zarr.group(store=store, overwrite=True)
-
-            group_path = f"tpId_{tpA}_viewSetupId_{vsA}/{labelA}/correspondences"
-            target_group = root.require_group(group_path)  # will create if doesn't exist
+                target_group = zarr.group(store=store, overwrite="true")
 
             # Optional: delete existing 'data' array
             if "data" in target_group:
@@ -103,7 +105,7 @@ class SaveMatches:
                 name="data",  # just the dataset name, not a full path
                 data=corr_list,
                 dtype='u8',
-                chunks=(min(300000, len(corr_list)), 3),
+                chunks=(min(300000, len(corr_list)), 1),
                 compressor=zarr.GZip()
             )
 
