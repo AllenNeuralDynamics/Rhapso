@@ -12,8 +12,8 @@ import boto3
 
 strategy = 'python'
 run_type = 'dask'
-dsxy = 2
-dsz = 2
+dsxy = 4
+dsz = 4
 min_intensity = 0
 max_intensity = 255
 
@@ -33,34 +33,19 @@ max_intensity = 255
 # output_bucket_name = 'interest-point-detection'
 
 # Tiff - local
-# sigma = 1.8                                                     # tuning for find_peaks
-# threshold = 0.001                                               # tuning for find_peaks
-# combine_distance = 0.5                                          # tuning for kd tree
-# mem_per_worker_bytes = 0
-# offset = 0
-# file_type = 'tiff'
-# file_source = 'local'
-# xml_file_path = '/Users/seanfite/Desktop/IP_TIFF_XML/dataset.xml'
-# image_file_path =  '/Users/seanfite/Desktop/IP_TIFF_XML/' 
-# output_file_path = '/Users/seanfite/Desktop/IP_TIFF_XML/interestpoints.n5/'
-# xml_bucket_name = None
-# image_bucket_name = None
-# output_bucket_name = None
-
-# TIFF - S3
 sigma = 1.8                                                     # tuning for find_peaks
 threshold = 0.001                                               # tuning for find_peaks
 combine_distance = 0.5                                          # tuning for kd tree
 mem_per_worker_bytes = 0
 offset = 0
 file_type = 'tiff'
-file_source = 's3'
-xml_file_path = 'IP_TIFF_XML/dataset.xml'
-image_file_path =  's3://rhapso-tif-sample/IP_TIFF_XML/' 
-output_file_path = 'output'
-xml_bucket_name = 'rhapso-tif-sample'
-image_bucket_name = 'rhapso-tif-sample'
-output_bucket_name = 'rhapso-matching-test'
+file_source = 'local'
+xml_file_path = '/Users/seanfite/Desktop/IP_TIFF_XML/dataset.xml'
+image_file_path =  '/Users/seanfite/Desktop/IP_TIFF_XML/' 
+output_file_path = '/Users/seanfite/Desktop/IP_TIFF_XML/output'
+xml_bucket_name = None
+image_bucket_name = None
+output_bucket_name = None
 
 # Get XML file
 if file_source == 's3':
@@ -82,29 +67,13 @@ view_transform_matrices = create_models.run()
 print("Transforms models have been created")
 
 # Use view transform matrices to find areas of overlap
-overlap_detection = OverlapDetection(
-    view_transform_matrices,
-    dataframes,
-    dsxy,
-    dsz,
-    image_file_path,
-    file_type
-)
+overlap_detection = OverlapDetection(view_transform_matrices, dataframes, dsxy, dsz, image_file_path, file_type)
 overlapping_area = overlap_detection.run()
 print("Overlap detection is done")
 
 # Create metadata with pathways to image chunks
-metadata_loader = MetadataBuilder(
-    dataframes,
-    overlapping_area,
-    image_file_path,
-    file_type,
-    dsz,
-    dsxy,
-    mem_per_worker_bytes,
-    sigma,
-    run_type
-)
+metadata_loader = MetadataBuilder(dataframes, overlapping_area, image_file_path, file_type, dsz, dsxy, 
+                                  mem_per_worker_bytes, sigma, run_type)
 image_chunk_metadata = metadata_loader.run()
 print("Metadata has loaded")
 
@@ -138,20 +107,8 @@ points_validation = PointsValidation(consolidated_data)
 points_validation.run()
 
 # Save interest points
-save_interest_points = SaveInterestPoints(
-    dataframes, 
-    consolidated_data, 
-    xml_file_path, 
-    xml_bucket_name, 
-    output_bucket_name, 
-    output_file_path, 
-    dsxy, 
-    dsz, 
-    min_intensity, 
-    max_intensity, 
-    sigma, 
-    threshold, 
-    file_source)
+save_interest_points = SaveInterestPoints(dataframes, consolidated_data, xml_file_path, xml_bucket_name, output_bucket_name, 
+                                          output_file_path, dsxy, dsz, min_intensity, max_intensity, sigma, threshold, file_source)
 save_interest_points.run()
 print("Interest points saved")
 

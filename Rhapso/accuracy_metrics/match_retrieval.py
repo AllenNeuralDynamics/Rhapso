@@ -3,7 +3,7 @@ import zarr
 import s3fs
 import numpy as np
 import pandas as pd
-from Rhapso.data_prep.xml_to_dataframe import XMLToDataFrame
+from Rhapso.data_prep.xml_to_dictionary import XMLToDictionary
 
 
 class MatchProcessor:
@@ -42,7 +42,7 @@ class MatchProcessor:
         elif self.file_source == "local":
             xml_file = self.fetch_local_xml(self.xml_file_path)
 
-        processor = XMLToDataFrame(xml_file)
+        processor = XMLToDictionary(xml_file)
         dataframes = processor.run()
 
         df = pd.DataFrame(dataframes["image_loader"])
