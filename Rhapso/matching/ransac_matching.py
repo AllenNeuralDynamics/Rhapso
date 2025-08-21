@@ -164,7 +164,12 @@ class RansacMatching:
         if det == 0:
             raise ValueError("Ill-defined data points (det=0)")
 
-        A_inv = np.linalg.inv(A)
+        try:
+            A_inv = np.linalg.inv(A)
+        except np.linalg.LinAlgError:
+            # If A is not invertible, use the pseudo-inverse
+            A_inv = np.linalg.pinv(A)
+
         M = A_inv @ B  # 3x3 transformation matrix
 
         t = qc - M @ pc  # translation

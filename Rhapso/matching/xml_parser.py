@@ -99,7 +99,7 @@ class XMLParser:
         """Parse XML file or string and create complete dataset object"""
         try:
             # Check if the input is a string containing XML content
-            if xml_content.strip().startswith('<?xml') or self.xml_file.strip().startswith('<'):
+            if xml_content.strip().startswith('<?xml') or xml_content.strip().startswith('<') or self.xml_file.strip().startswith('<'):
                 # Parse XML from string content
                 root = ET.fromstring(xml_content)
             else:
