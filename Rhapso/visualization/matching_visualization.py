@@ -123,6 +123,9 @@ def plot_matches(matches, tp_id, setup_id):
     plt.show()
 
 def plot_matches_3d(matches, tp_id, setup_id):
+    if not matches:
+        return
+    
     points_a = np.array([a for a, _, _ in matches])
 
     print(f"Rhapso Rigid Matches\ntp={tp_id}, setup={setup_id}\nTotal matches: {len(matches)}")
@@ -153,14 +156,17 @@ def plot_matches_3d(matches, tp_id, setup_id):
 
 # base_path = Path("/Users/seanfite/Desktop/IP_TIFF_XML-Rhapso-Affine/interestpoints.n5")
 # base_path = "s3://aind-open-data/exaSPIM_686951_2025-02-25_09-45-02_alignment_2025-06-12_19-58-52/interest_point_detection"
-cords_prefix = "/Users/seanfite/Desktop/interest_point_detection/interestpoints.n5"
-# corr_prefix = "s3://rhapso-matching-test/output/interestpoints.n5"
-corr_prefix = "/Users/seanfite/Desktop/ip_rigid_alignment/interestpoints.n5"
+# cords_prefix = "/Users/seanfite/Desktop/interest_point_detection/interestpoints.n5"
+corr_prefix = "s3://rhapso-matching-test/output/interestpoints.n5"
+corr_prefix = "s3://rhapso-matching-test/output/interestpoints.n"
 for tp_id in [0]:
     for setup_id in range(20):
+        if setup_id == 0:
+            continue
+        
         prefix = f"tpId_{tp_id}_viewSetupId_{setup_id}"
         corr_path = f"{corr_prefix}/tpId_{tp_id}_viewSetupId_{setup_id}/beads/correspondences"
-        cords_path = f"{cords_prefix}/tpId_{tp_id}_viewSetupId_{setup_id}/beads/interestpoints"
-        matches = get_match_coordinates(cords_path, corr_path, cords_prefix, prefix)
+        cords_path = f"{corr_prefix}/tpId_{tp_id}_viewSetupId_{setup_id}/beads/interestpoints"
+        matches = get_match_coordinates(cords_path, corr_path, corr_prefix, prefix)
         print(f"View tp={tp_id}, setup={setup_id} -> {len(matches)} matches")
         plot_matches_3d(matches, tp_id, setup_id)

@@ -1,5 +1,9 @@
 import numpy as np
 
+"""
+Utility class to print out metrics of points detected
+"""
+
 class PointsValidation:
     def __init__(self, consolidated_data):
         self.consolidated_data = consolidated_data
@@ -15,6 +19,12 @@ class PointsValidation:
 
             # Sort points by index
             sorted_points = sorted(points, key=lambda x: x[0][2])  # x[1] is the (z,x,y) index to sort by
+
+            if len(sorted_points) == 0:
+                print(f"\nView ID: {view_id} | Num points: 0")
+                print("\n--- Detection Stats ---")
+                print("No points found for this view.\n")
+                continue
             
             # Print points per view
             print(f"\nView ID: {view_id} | Num points: {len(sorted_points)}")

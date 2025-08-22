@@ -1,16 +1,22 @@
 from collections import OrderedDict
-from scipy.spatial import KDTree
+from scipy.spatial import cKDTree
 import numpy as np
 from collections import defaultdict, OrderedDict
 
-# This class groups interest points by view_id and if overlapping only, uses kd tree algorithm to remove duplicate points,
-# otherwise checks for max spots
+"""
+Filter interest points per bound and remove duplicates
+"""
 
 class AdvancedRefinement:
-    def __init__(self, interest_points, combine_distance):
+    def __init__(self, interest_points, combine_distance, dataframes, overlapping_area, max_interval_size, max_spots):
         self.interest_points = interest_points
         self.consolidated_data = {}
         self.combine_distance = combine_distance
+        self.image_loader_df = dataframes['image_loader']
+        self.overlapping_area = overlapping_area
+        self.max_interval_size = max_interval_size
+        self.max_spots = max_spots
+
         self.overlapping_only = True
         self.sorted_view_ids = None
         self.result = interest_points  
@@ -18,88 +24,162 @@ class AdvancedRefinement:
         self._max_spots = 0
         self.max_spots_per_overlap = False
         self.to_process = interest_points
-        self.max_interval_size = 0
         self.interest_points_per_view_id = {}
         self.intensities_per_view_id = {}
         self.intervals_per_view_id = {}
-    
-    def kd_tree(self):
-        """
-        Constructs a KD-Tree for each view's points and retains points that are distanced from the nearest 
-        two neighbours by at least `combine_distance`.
-        """
-        filtered_data = {}
 
-        for view_id, points in self.consolidated_data.items():
-            if not points:
-                continue
+    def kd_tree(self, ips_lists_by_view, ints_lists_by_view):
+        radius = float(self.combine_distance)
+        out = OrderedDict()
 
-            pts = np.array([p[0] for p in points], dtype=np.float32)
-            intensities = np.array([p[1] for p in points], dtype=np.float32)
+        for view_id in sorted(ips_lists_by_view.keys()):
+            ips_lists = ips_lists_by_view[view_id]
+            ints_lists = ints_lists_by_view[view_id]
 
-            # Safety check for NaNs or infs
-            if not np.all(np.isfinite(pts)):
-                print(f"[Warning] Skipping view {view_id} due to non-finite coordinates.")
-                continue
+            my_ips: list = []
+            my_ints: list = []
 
-            tree = KDTree(pts)
-            visited = np.zeros(len(pts), dtype=bool)
-            kept_indices = []
+            for l, ips in enumerate(ips_lists):
+                intens = ints_lists[l]
 
-            for i in range(len(pts)):
-                if visited[i]:
+                # First list: accept all 
+                if not my_ips:
+                    my_ips.extend(ips)
+                    my_ints.extend(intens)
                     continue
 
-                indices = tree.query_ball_point(pts[i], self.combine_distance)
-                visited[indices] = True
+                # Build KDTree from the CURRENT accepted points for this view
+                base = np.asarray(my_ips, dtype=np.float32)
+                tree = cKDTree(base)
 
-                best_idx = indices[np.argmax(intensities[indices])]
-                kept_indices.append(best_idx)
+                # Batch query all new points against the tree
+                cand = np.asarray(ips, dtype=np.float32)
+                
+                if cand.size == 0:
+                    continue
+                
+                dists, _ = tree.query(cand, k=1)  
 
-            filtered_data[view_id] = [points[i] for i in kept_indices]
+                # Keep only points farther than combineDistance
+                mask = dists > radius
+                if np.any(mask):
+                    # Extend accepted sets
+                    for p, val in zip(cand[mask], np.asarray(intens)[mask]):
+                        my_ips.append(p.tolist())   
+                        my_ints.append(float(val))
 
-        self.consolidated_data = filtered_data
+            # Store consolidated (point, intensity) pairs per view
+            out[view_id] = list(zip(my_ips, my_ints))
 
-    def consolidate_interest_points(self):
-        """
-        Aggregates and sorts interest points from multiple entries into a consolidated dictionary, 
-        organized by view_id.
-        """
-        temp_data = defaultdict(list)
+        self.consolidated_data = out
+    
+    def size(self, interval):
+        lb, ub = interval[0], interval[1]
+        prod = 1
+        for l, u in zip(lb, ub):
+            prod *= (int(u) - int(l) + 1)
+        return prod
+    
+    def contains(self, containing, contained):
+        lc, uc = containing[0], containing[1]
+        li, ui = contained[0],  contained[1]
+        return all(lc[d] <= li[d] and uc[d] >= ui[d] for d in range(3))
+    
+    def filter_lists(self, ips, intensities, my_max_spots):
+        if intensities is None or len(ips) == 0 or my_max_spots <= 0:
+            return ips, intensities
 
+        intens_arr = np.asarray(intensities)
+        n = min(len(ips), intens_arr.shape[0])
+        if n == 0:
+            return ips, intensities
+
+        # indices of top-N by descending intensity
+        top_idx = np.argsort(intens_arr[:n])[::-1][:my_max_spots]
+
+        # slice ips preserving original type
+        if isinstance(ips, np.ndarray):
+            ips_filtered = ips[top_idx]
+        else:
+            ips_filtered = [ips[i] for i in top_idx]
+
+        intens_filtered = intens_arr[top_idx]
+        if isinstance(intensities, list):
+            intens_filtered = intens_filtered.tolist()
+
+        return ips_filtered, intens_filtered
+        
+    def filter(self):
+        ips_lists_by_view = defaultdict(list)
+        ints_lists_by_view = defaultdict(list)
+        intervals_by_view = defaultdict(list)
+
+        # Prep lists of interest points
         for entry in self.interest_points:
-            view_id = entry["view_id"]
-            points = entry["interest_points"]
-            intensities = entry["intensities"]
-            temp_data[view_id].extend(zip(points, intensities))
+            vid = entry["view_id"]
+            ips = entry["interest_points"]      
+            intens = entry["intensities"] 
+            interval = entry["interval_key"]     
+            ips_lists_by_view[vid].append(ips)
+            ints_lists_by_view[vid].append(intens)
+            intervals_by_view[vid].append(interval)
 
-        self.consolidated_data = OrderedDict(sorted(temp_data.items()))
+        for i, row_i in self.image_loader_df.iterrows():
+            view_id = f"timepoint: {row_i['timepoint']}, setup: {row_i['view_setup']}"
 
-    def filter_points(self, interest_points, intensities, max_spots):
-        """
-        Filters and returns the top `max_spots` interest points based on their intensities.
-        """
-        combined_list = []
-        for i in range(len(interest_points)):
-            combined_list.append((intensities[i], interest_points[i]))
-            print((intensities[i], interest_points[i]))
+            ips_list = ips_lists_by_view[view_id]
+            intensities_list = ints_lists_by_view[view_id]
+            interval_list = intervals_by_view[view_id]
 
-        combined_list.sort(reverse=True)
-        intensities.clear()
-        interest_points.clear()
+            if not interval_list or not ips_list:
+                continue
 
-        # Add back the top max_spots elements
-        for i in range(max_spots):
-            intensity, ip = combined_list[i]
-            intensities.append(intensity)
-            interest_points.append((ip))
+            interval_data = []
 
-        return interest_points, intensities
+            to_process = [
+                {'view_id': vid, **d}
+                for vid, lst in self.overlapping_area.items()
+                for d in lst
+            ]
+            
+            for row in to_process:
+                vid = row['view_id']
+                lb = row['lower_bound']
+                ub = row['upper_bound']
+                if vid == view_id:
+                    to_process_interval = (lb, ub)
+                    ips_block = []
+                    intensities_block = []
+
+                    for i in range(len(ips_list)): 
+                        block_interval = interval_list[i]
+                        
+                        if self.contains(to_process_interval, block_interval):
+                            ips_block.extend(ips_list[i])
+                            intensities_block.extend(intensities_list[i])
+                    
+                    interval_data.append((to_process_interval, ips_block, intensities_block))
+            
+            ips_lists_by_view[view_id] = []
+            ints_lists_by_view[view_id] = []
+
+            for interval, ips, intensities in interval_data:
+                size = self.size(interval)
+                my_max_spots = int(round(self.max_spots * (size / self.max_interval_size)))
+                
+                if my_max_spots > 0 and my_max_spots < len(ips):
+                    ips, intensities = self.filter_lists(ips, intensities, my_max_spots)
+
+                ips_lists_by_view[view_id].append(ips)
+                ints_lists_by_view[view_id].append(intensities)
+        
+        return ips_lists_by_view, ints_lists_by_view
 
     def run(self):
         """
         Executes the entry point of the script.
         """
-        self.consolidate_interest_points()
-        self.kd_tree()
+        ips_lists_by_view, ints_lits_by_view = self.filter()
+        self.kd_tree(ips_lists_by_view, ints_lits_by_view)
+        
         return self.consolidated_data

@@ -3,8 +3,7 @@ from collections import defaultdict
 import s3fs
 
 """
-Functions for saving data to N5 format, specifically designed for interest points and correspondences.
-Uses zarr instead of z5py for better compatibility.
+Utility class for saving (matched) corresponding interest points to N5 format
 """
 
 class SaveMatches:
@@ -67,41 +66,30 @@ class SaveMatches:
                 continue
 
             # Output path
-            if "interestpoints.n5" not in self.n5_output_path:
-                full_path = f"{self.n5_output_path}interestpoints.n5/tpId_{tpA}_viewSetupId_{vsA}/{labelA}/correspondences/"
-            else:
-                full_path = f"{self.n5_output_path}/tpId_{tpA}_viewSetupId_{vsA}/{labelA}/correspondences/"
+            full_path = f"{self.n5_output_path}interestpoints.n5/tpId_{tpA}_viewSetupId_{vsA}/{labelA}/correspondences/"
 
             if full_path.startswith("s3://"):
-                # S3 path
-                s3_path = self.n5_output_path.replace("s3://", "")
-                root_path = s3_path + "/interestpoints.n5"
+                path = full_path.replace("s3://", "")
                 self.s3_filesystem = s3fs.S3FileSystem()
-                store = s3fs.S3Map(root=root_path, s3=self.s3_filesystem, check=False) 
-                # root = zarr.group(store=store, overwrite=False)
-                try:
-                    root = zarr.open_group(store=store, mode='w')
-                except (KeyError, ValueError):
-                    # Group doesn't exist, create it
-                    root = zarr.open_group(store=store, mode='w')
+                store = s3fs.S3Map(root=path, s3=self.s3_filesystem, check=False) 
+                root = zarr.open_group(store=store, mode='a')
             else:
                 # Write to Zarr N5
-                
                 store = zarr.N5Store(full_path)
-                target_group = zarr.group(store=store, overwrite="true")
+                root = zarr.group(store=store, overwrite="true")
 
-            # Optional: delete existing 'data' array
-            if "data" in target_group:
-                del target_group["data"]
+            # Delete existing 'data' array
+            if "data" in root:
+                del root["data"]
 
             # Set group-level attributes
-            target_group.attrs.update({
+            root.attrs.update({
                 "correspondences": "1.0.0",
                 "idMap": idMap
             })
 
             # Create dataset inside the group
-            target_group.create_dataset(
+            root.create_dataset(
                 name="data",  # just the dataset name, not a full path
                 data=corr_list,
                 dtype='u8',
@@ -109,7 +97,30 @@ class SaveMatches:
                 compressor=zarr.GZip()
             )
 
+    def clear_correspondence(self):
+        if self.n5_output_path.startswith("s3://"):
+            root_path = self.n5_output_path.replace("s3://", "") + "interestpoints.n5"
+            s3 = s3fs.S3FileSystem()
+            store = s3fs.S3Map(root=root_path, s3=s3, check=False)
+        else:
+            root_path = self.n5_output_path + "interestpoints.n5"
+            store = zarr.N5Store(root_path)
+
+        root = zarr.open_group(store=store, mode="a")
+
+        views = list(self.data_global['viewsInterestPoints'].keys())  
+        for tp, vs in views:
+            corr_path = f"tpId_{tp}_viewSetupId_{vs}/beads/correspondences"
+            try:
+                if corr_path in root:
+                    del root[corr_path]                
+                elif f"{corr_path}/data" in root:
+                    del root[f"{corr_path}/data"]       
+            except Exception as e:
+                print(f"⚠️ Could not delete {corr_path}: {e}")
+
     def run(self):
+        self.clear_correspondence()
         # Gather all unique (timepoint, setup, label) from the dataset
         views_interest_points = self.data_global['viewsInterestPoints']
         matched_views = []

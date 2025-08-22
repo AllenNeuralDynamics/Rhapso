@@ -339,7 +339,10 @@ class GlobalOptimization:
     
     def apply(self):     
         for tile in self.tiles:
-            model = tile['model']['regularized']
+            if self.run_type == 'affine':
+                model = tile['model']['regularized']
+            elif self.run_type == 'rigid':
+                model = tile['model']['b']
             
             for match in tile['matches']:
                 match['p1']['w'][:] = match['p1']['l']
@@ -375,6 +378,9 @@ class GlobalOptimization:
         self.apply()
 
         while proceed:
+
+            if not self.tiles:
+                return
             
             for tile in self.tiles:
                 if tile['view'] in self.fixed_views:

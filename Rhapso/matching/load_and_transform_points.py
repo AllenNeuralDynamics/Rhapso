@@ -3,11 +3,16 @@ import numpy as np
 import os
 import s3fs
 
+"""
+Utility class to load interest points from n5 and transform them into global space
+"""
+
 class LoadAndTransformPoints:
-    def __init__(self, data_global, xml_input_path):
+    def __init__(self, data_global, xml_input_path, n5_output_path):
         """Initialize data loader with base path"""
         self.data_global = data_global
         self.xml_input_path = xml_input_path
+        self.n5_output_path = n5_output_path
     
     def transform_interest_points(self, points, transformation_matrix):
         """Transform interest points using the given transformation matrix"""
@@ -85,13 +90,10 @@ class LoadAndTransformPoints:
     def load_interest_points_from_path(self, base_path, loc_path):
         """Load data from any N5 dataset path"""
         try:      
-            if self.xml_input_path.startswith("s3://"):
+            if self.n5_output_path.startswith("s3://"):
+                path = base_path.rstrip("/")
                 s3 = s3fs.S3FileSystem(anon=False)
-                xml_stripped = self.xml_input_path.replace("s3://", "")
-                parts = xml_stripped.split("/", 1)
-                bucket_prefix = parts[1].rsplit("/", 1)[0]  
-                base_path = f"{parts[0]}/{bucket_prefix}/interestpoints.n5"
-                store = s3fs.S3Map(root=base_path, s3=s3, check=False)
+                store = s3fs.S3Map(root=path, s3=s3, check=False)
                 root = zarr.open(store, mode="r")
                 group = root[loc_path]
                 data = group[:]
@@ -109,18 +111,18 @@ class LoadAndTransformPoints:
             print(f"Error details: {e}")
             raise e
     
-    def get_transformed_points(self, view_id, view_data, view_registrations, xml_base_path):
+    def get_transformed_points(self, view_id, view_data, view_registrations, n5_prefix):
         """Retrieve and transform interest points for a given view."""
         view_info = view_data[view_id]
         loc_path = f"{view_info['path']}/{view_info['label']}/interestpoints/loc"
-        full_path = xml_base_path + "/interestpoints.n5"
+        full_path = n5_prefix + "/interestpoints.n5"
         raw_points = self.load_interest_points_from_path(full_path, loc_path)
         transform = self.get_transformation_matrix(view_id, view_registrations)
         transformed_points = self.transform_interest_points(raw_points, transform)
         
         return transformed_points
     
-    def load_and_transform_points(self, pair, view_data, view_registrations, xml_base_path):
+    def load_and_transform_points(self, pair, view_data, view_registrations, n5_prefix):
         """Process a single matching task"""
         viewA, viewB = pair
         try:
@@ -136,8 +138,8 @@ class LoadAndTransformPoints:
             else:
                 viewB_str = str(viewB)
             
-            pointsA = self.get_transformed_points(viewA, view_data, view_registrations, xml_base_path)
-            pointsB = self.get_transformed_points(viewB, view_data, view_registrations, xml_base_path)
+            pointsA = self.get_transformed_points(viewA, view_data, view_registrations, n5_prefix)
+            pointsB = self.get_transformed_points(viewB, view_data, view_registrations, n5_prefix)
 
             return pointsA, pointsB, viewA_str, viewB_str
             
@@ -178,20 +180,21 @@ class LoadAndTransformPoints:
         }
     
     def run(self):
-        # Use data_global for all subsequent operations
         view_ids_global = self.data_global['viewsInterestPoints']
         view_registrations = self.data_global['viewRegistrations']
 
         # Set up view groups using complete dataset info
         setup = self.setup_groups(self.data_global)
 
-        # Initialize data loader
-        xml_dir = os.path.dirname(self.xml_input_path) if not self.xml_input_path.startswith('s3://') else ""
+        if self.n5_output_path.startswith("s3://"):
+            n5_prefix = os.path.dirname(self.n5_output_path.replace("s3://", "", 1))
+        else:
+            n5_prefix = os.path.dirname(self.n5_output_path)
 
         # Iterate through each pair of views to perform matching
         process_pairs = []
-        for idx, pair in enumerate(setup['pairs'], 1):
-            viewA, viewB = pair  # Unpack the current pair of view IDs
+        for _, pair in enumerate(setup['pairs'], 1):
+            viewA, viewB = pair  
 
             # Unpack for clarity
             if isinstance(viewA, tuple) and len(viewA) == 2:
@@ -206,7 +209,7 @@ class LoadAndTransformPoints:
                 viewB_str = str(viewB)
             
             # Run the matching task for the current pair and get results
-            pointsA, pointsB, viewA_str, viewB_str = self.load_and_transform_points(pair, view_ids_global, view_registrations, xml_dir)
+            pointsA, pointsB, viewA_str, viewB_str = self.load_and_transform_points(pair, view_ids_global, view_registrations, n5_prefix)
             process_pairs.append((pointsA, pointsB, viewA_str, viewB_str))
 
         return process_pairs, view_registrations

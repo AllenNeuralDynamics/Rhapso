@@ -1,8 +1,13 @@
 import numpy as np
 
+"""
+Utility class to roughly align p1 with p2 to speed up global optimization rounds
+"""
+
 class PreAlignTiles:
-    def __init__(self):
-        self.min_matches = 3
+    def __init__(self, min_matches, run_type):
+        self.min_matches = min_matches
+        self.run_type = run_type
         
     def rigid_fit_model(self, rigid_model, matches):
         """
@@ -232,8 +237,11 @@ class PreAlignTiles:
 
         return point
     
-    def apply_transform_to_tile(self, tile):     
-        model = tile['model']['regularized']  
+    def apply_transform_to_tile(self, tile):  
+        if self.run_type == "affine":
+            model = tile['model']['regularized'] 
+        elif self.run_type == "rigid":
+            model = tile['model']['b'] 
         
         for match in tile['matches']:
             match['p1']['w'][:] = match['p1']['l']
@@ -242,6 +250,9 @@ class PreAlignTiles:
     def pre_align(self, tiles):
         unaligned_tiles = []
         aligned_tiles = []
+
+        if not tiles:
+            return unaligned_tiles, aligned_tiles
         
         if len(tiles['fixed_tiles']) == 0:
             aligned_tiles.append(tiles['tiles'][0])

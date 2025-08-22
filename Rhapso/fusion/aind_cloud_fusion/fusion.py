@@ -18,7 +18,6 @@ import fusion.aind_cloud_fusion.geometry as geometry
 import fusion.aind_cloud_fusion.input_output as input_output
 import fusion.aind_cloud_fusion.fusion_utils as utils
 
-
 def initialize_fusion(
     dataset: input_output.Dataset,
     output_params: input_output.OutputParameters

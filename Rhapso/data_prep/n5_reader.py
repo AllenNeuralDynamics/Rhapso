@@ -96,15 +96,15 @@ def read_correspondences(dataset_path):
     # print("hi")
 
 # Big Stitcher Output
-# base_path = "/Users/seanfite/Desktop/interest_point_detection/interestpoints.n5"
-base_path = "/Users/seanfite/Desktop/ip_rigid_alignment/interestpoints.n5"
-# base_path = "/Users/seanfite/Desktop/ip_affine_alignment/interestpoints.n5"
-# base_path = "s3://rhapso-matching-test/output/interestpoints.n5"
-for tp_id in [0]:
-    for setup_id in range(20):  
-        path = f"{base_path}/tpId_{tp_id}_viewSetupId_{setup_id}/beads/correspondences"
-        print(f"Reading: {path}")
-        read_correspondences(path)
+# # base_path = "/Users/seanfite/Desktop/interest_point_detection/interestpoints.n5"
+# base_path = "/Users/seanfite/Desktop/ip_rigid_alignment/interestpoints.n5"
+# # base_path = "/Users/seanfite/Desktop/ip_affine_alignment/interestpoints.n5"
+# # base_path = "s3://rhapso-matching-test/output/interestpoints.n5"
+# for tp_id in [0]:
+#     for setup_id in range(20):  
+#         path = f"{base_path}/tpId_{tp_id}_viewSetupId_{setup_id}/beads/correspondences"
+#         print(f"Reading: {path}")
+#         read_correspondences(path)
 
 def read_interest_points(full_path):
     if full_path.startswith("s3://"):
@@ -149,46 +149,40 @@ def read_interest_points(full_path):
             print(f"Skipping: {dataset_rel_path} (not found)")
             return
         
-        zarray = root[dataset_rel_path]
+        zarray = root[dataset_rel_path + "/loc"]
         data = zarray[:]
 
     print("\n--- Detection Stats (Raw Rhapso Output) ---")
     print(f"Total Points: {len(data)}")
 
-    for dim, name in zip(range(3), ['X', 'Y', 'Z']):
-        values = data[:, dim]
-        print(f"{name} Range: {values.min():.2f} – {values.max():.2f} | Spread (std): {values.std():.2f}")
+    # for dim, name in zip(range(3), ['X', 'Y', 'Z']):
+    #     values = data[:, dim]
+    #     print(f"{name} Range: {values.min():.2f} – {values.max():.2f} | Spread (std): {values.std():.2f}")
 
-    volume = np.ptp(data[:, 0]) * np.ptp(data[:, 1]) * np.ptp(data[:, 2])
-    density = len(data) / (volume / 1e9) if volume > 0 else 0
-    print(f"Estimated Density: {density:.2f} points per 1000³ volume")
-    print("-----------------------")
+    # volume = np.ptp(data[:, 0]) * np.ptp(data[:, 1]) * np.ptp(data[:, 2])
+    # density = len(data) / (volume / 1e9) if volume > 0 else 0
+    # print(f"Estimated Density: {density:.2f} points per 1000³ volume")
+    # print("-----------------------")
 
-    # --- 3D Plot ---
-    max_points = 1000000000000
-    sample = data if len(data) <= max_points else data[np.random.choice(len(data), max_points, replace=False)]
+    # # --- 3D Plot ---
+    # max_points = 1000000000000
+    # sample = data if len(data) <= max_points else data[np.random.choice(len(data), max_points, replace=False)]
 
-    fig = plt.figure(figsize=(10, 8))
-    ax = fig.add_subplot(111, projection='3d')
-    ax.scatter(sample[:, 0], sample[:, 1], sample[:, 2], c='blue', alpha=0.5, s=1)
-    ax.set_xlabel('X')
-    ax.set_ylabel('Y')
-    ax.set_zlabel('Z')
-    ax.set_title(f"Interest Points in 3D (showing {len(sample)} points)")
-    plt.tight_layout()
-    plt.show()
+    # fig = plt.figure(figsize=(10, 8))
+    # ax = fig.add_subplot(111, projection='3d')
+    # ax.scatter(sample[:, 0], sample[:, 1], sample[:, 2], c='blue', alpha=0.5, s=1)
+    # ax.set_xlabel('X')
+    # ax.set_ylabel('Y')
+    # ax.set_zlabel('Z')
+    # ax.set_title(f"Interest Points in 3D (showing {len(sample)} points)")
+    # plt.tight_layout()
+    # plt.show()
 
 # base_path = "s3://rhapso-matching-test/output/interestpoints.n5"
 # base_path = "/Users/seanfite/Desktop/IP_TIFF_XML/interestpoints.n5"
-# base_path = "/Users/seanfite/Desktop/ip_rigid_alignment/interestpoints.n5"
-# for tp_id in [0]:
-#     counter = 0
-#     for setup_id in range(10): 
-        
-#         counter += 1
-#         if counter == 1:
-#             continue
-    
-#         path = f"{base_path}/tpId_{tp_id}_viewSetupId_{setup_id}/beads/correspondences"
-#         print(f"For view: {setup_id}")
-#         read_interest_points(path)
+base_path = "/Users/seanfite/Desktop/interestpoints.n5"
+for tp_id in [0]:
+    for setup_id in range(20): 
+        path = f"{base_path}/tpId_{tp_id}_viewSetupId_{setup_id}/beads/interestpoints"
+        print(f"For view: {setup_id}")
+        read_interest_points(path)
