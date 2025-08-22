@@ -1,6 +1,9 @@
 import xml.etree.ElementTree as ET
 import boto3
-import os
+
+"""
+Utility class to parse XML content
+"""
 
 class XMLParser:
     def __init__(self, xml_input_path, input_type):
@@ -50,7 +53,7 @@ class XMLParser:
                 timepoint = il.get("timepoint")
                 file_path = il.find("path").text if il.find("path") is not None else None
 
-                full_path = f"s3://{s3bucket}{zarr_base}{file_path}"
+                full_path = f"s3://{s3bucket}/{zarr_base}/{file_path}"
                 image_loader_data.append(
                     {
                         "view_setup": view_setup,
@@ -82,7 +85,7 @@ class XMLParser:
                 series = fm.get("series")
                 channel = fm.get("channel")
                 file_path = fm.find("file").text if fm.find("file") is not None else None
-                full_path = self.xml_input_path.replace("dataset.xml", "") + file_path
+                full_path = self.xml_input_path.replace("dataset-detection.xml", "") + file_path
                 image_loader_data.append(
                     {
                         "view_setup": view_setup,
@@ -99,7 +102,7 @@ class XMLParser:
         """Parse XML file or string and create complete dataset object"""
         try:
             # Check if the input is a string containing XML content
-            if xml_content.strip().startswith('<?xml') or xml_content.strip().startswith('<') or self.xml_file.strip().startswith('<'):
+            if xml_content.strip().startswith('<?xml') or self.xml_file.strip().startswith('<'):
                 # Parse XML from string content
                 root = ET.fromstring(xml_content)
             else:
@@ -243,22 +246,16 @@ class XMLParser:
             response = s3_client.get_object(Bucket=bucket_name, Key=file_key)
             xml_content = response["Body"].read().decode("utf-8")
             
-            # Create S3 path for interest points folder
-            xml_dir = os.path.dirname(file_key)
-            interest_points_folder = f"s3://{bucket_name}/{xml_dir}/interestpoints.n5"
         else:
             print(f"Detected local path: {self.xml_input_path}")
             xml_content = self.fetch_local_xml(self.xml_input_path)
             if xml_content is None:
                 return None, None
-            # Create local path for interest points folder
-            xml_dir = os.path.dirname(self.xml_input_path)
-            interest_points_folder = os.path.join(xml_dir, 'interestpoints.n5')
         
-        return xml_content, interest_points_folder
+        return xml_content
     
     def run(self):
-        xml_content, interest_points_folder = self.get_xml_content()
+        xml_content = self.get_xml_content()
         data_global = self.parse(xml_content)
-        return data_global, interest_points_folder
+        return data_global
 

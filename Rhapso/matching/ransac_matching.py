@@ -10,7 +10,9 @@ import dask.array as da
 import s3fs
 import copy
 
-"""Handles all matching operations including model creation and geometric matching"""
+"""
+Utility class to find interest point match candidates and filter with ransac 
+"""
 
 class CustomBioImage(BioImage):
     def standard_metadata(self):
@@ -242,29 +244,6 @@ class RansacMatching:
 
         return best_inliers, best_model
 
-    # def descriptor_distance(self, desc_a, desc_b):
-    #     subsets_a = desc_a["subsets"]  # (20, 3, D)
-    #     subsets_b = desc_b["subsets"]  # (20, 3, D)
-
-    #     # Broadcast all pairwise subset differences
-    #     diffs = subsets_a[:, None, :, :] - subsets_b[None, :, :, :]  # (20, 20, 3, D)
-    #     sq_diffs = np.sum(diffs ** 2, axis=-1)                       # (20, 20, 3)
-    #     similarities = np.mean(sq_diffs, axis=-1)                    # (20, 20)
-
-    #     return np.min(similarities)
-
-    # def create_candidates(self, desc_a, desc_b):
-    #     subsets_a = desc_a["subsets"]  
-    #     subsets_b = desc_b["subsets"]
-    #     matches_list = []
-
-    #     for subset_a in subsets_a:
-    #         for subset_b in subsets_b:
-    #             match = [(pa, pb) for pa, pb in zip(subset_a, subset_b)]
-    #             matches_list.append(match)
-
-    #     return matches_list
-
     def create_candidates(self, desc_a, desc_b):
         match_list = []
         
@@ -304,7 +283,10 @@ class RansacMatching:
         return best_similarity
     
     def create_simple_point_descriptors(self, tree, points_array, idx, num_required_neighbors, matcher):
-        k = num_required_neighbors + 1  # +1 to skip self
+        k = num_required_neighbors + 1 
+        if len(points_array) < k:
+            return []
+        
         _, indices = tree.query(points_array, k=k)
 
         descriptors = []
@@ -446,7 +428,7 @@ class RansacMatching:
                     shape = dask_array.shape
         
                 return shape[::-1]  
-            
+         
     def invert_transformation_matrix(self, view_2):
         """
         Compose and invert all ViewTransforms for the given view key (timepoint, setup).
@@ -482,29 +464,6 @@ class RansacMatching:
 
         # Return the inverse
         return np.linalg.inv(final_matrix)
-
-    # def invert_transformation_matrix(self, view_2):
-    #     stripped = view_2.strip("()")
-    #     parts = stripped.split(", ")
-    #     tp_id = int(parts[0].split("=")[1])
-    #     setup_id = int(parts[1].split("=")[1])
-        
-    #     if (tp_id, setup_id) in self.view_registrations:
-    #         affine = self.view_registrations[(tp_id, setup_id)][0]['affine']
-
-    #     values = [float(x) for x in affine.strip().split()]
-    #     if len(values) != 12:
-    #         raise ValueError(f"Expected 12 values, got {len(values)}")
-
-    #     # Reshape and negate translation
-    #     matrix = np.array(values).reshape(3, 4)
-    #     matrix[:, 3] *= -1  # negate translation part
-
-    #     # Promote to 4x4 for use in homogeneous coordinates
-    #     transform = np.eye(4)
-    #     transform[:3, :] = matrix
-
-    #     return transform
 
     def filter_for_overlapping_points(self, points_a, points_b, view_a, view_b):
         points_a = list(enumerate(points_a))  

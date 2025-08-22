@@ -1,16 +1,20 @@
 from scipy.ndimage import gaussian_filter 
 from skimage.feature import peak_local_max
 from scipy.ndimage import map_coordinates
+from scipy.ndimage import median_filter
 import numpy as np
 
-# This component implements the difference of gaussian algorithm on image chunks
+"""
+Utility class to compute difference of gaussian on a 3D image chunk, collecting interest points and intensities
+"""
 
 class DifferenceOfGaussian:
-    def __init__(self, min_intensity, max_intensity, sigma, threshold):
+    def __init__(self, min_intensity, max_intensity, sigma, threshold, median_filter):
         self.min_intensity = min_intensity
         self.max_intensity = max_intensity
         self.sigma = sigma
         self.threshold = threshold
+        self.median_filter = median_filter
     
     def apply_offset(self, peaks, offset_z):
         """
@@ -41,9 +45,9 @@ class DifferenceOfGaussian:
         shift_x = calc_shift(dsxy)
 
         upsampled = np.empty_like(points)
-        upsampled[:, 0] = points[:, 0] * dsz + shift_z  
+        upsampled[:, 2] = points[:, 2] * dsz + shift_z  
         upsampled[:, 1] = points[:, 1] * dsxy + shift_y  
-        upsampled[:, 2] = points[:, 2] * dsxy + shift_x  
+        upsampled[:, 0] = points[:, 0] * dsxy + shift_x  
 
         return upsampled
     
@@ -56,8 +60,7 @@ class DifferenceOfGaussian:
 
         peaks = np.asarray(peaks, dtype=np.float32).copy()
         bounds_xyz = np.array(lower_bounds, dtype=np.float32)
-        bounds_zyx = bounds_xyz[::-1]
-        peaks += bounds_zyx
+        peaks += bounds_xyz
 
         return peaks
     
@@ -78,12 +81,14 @@ class DifferenceOfGaussian:
         Refines the position of detected peaks using quadratic localization.
         """
         if len(peaks) == 0:
-            return []
+            return np.empty((0, 3), dtype=np.float32)
         
         max_moves= 10
         tolerance= 0.01
 
-        peaks = np.asarray(peaks)
+        # peaks = np.asarray([p["coords"] for p in peaks], dtype=int)
+        peaks = peaks.astype(np.int64, copy=False)
+
         padded = np.pad(image, 1, mode='reflect')
         refined = []
         
@@ -173,7 +178,9 @@ class DifferenceOfGaussian:
                     refined_pos = current.astype(float) + offset - 1  # subtract padding
                     refined.append(refined_pos)
         
-        return np.array(refined, dtype=np.float32)
+        # return = np.array(refined, dtype=np.float32)
+        refined = np.asarray(refined, dtype=np.float32).reshape(-1, 3)
+        return refined
     
     def find_peaks(self, dog, min_initial_peak_value):
         """
@@ -281,25 +288,41 @@ class DifferenceOfGaussian:
         dog = (blurred_image_2 - blurred_image_1) * k_min_1_inv
 
         # get all peaks
-        peaks = self.find_peaks(dog, min_initial_peak_value)   
+        peaks = self.find_peaks(dog, min_initial_peak_value)
 
         # localize peaks
         final_peak_values = self.refine_peaks(peaks, dog)
          
         return final_peak_values
+    
+    def background_subtract_xy(self, image_chunk):
+        img = image_chunk.astype(np.float32, copy=False)
+
+        # Median only in XY
+        k = 2 * self.median_filter + 1
+        bg = median_filter(img, size=(1, k, k), mode='reflect')
+        out = img - bg
+        
+        return out
 
     def run(self, image_chunk, dsxy, dsz, offset, lb):
         """
         Executes the entry point of the script.
         """
+        # image_chunk = self.background_subtract_xy(image_chunk)
         peaks = self.compute_difference_of_gaussian(image_chunk)
-        intensities = map_coordinates(image_chunk, peaks.T, order=1, mode='reflect')
-        
-        final_peaks = self.apply_lower_bounds(peaks, lb)
-        final_peaks = self.upsample_coordinates(final_peaks, dsxy, dsz)
-        final_peaks = self.apply_offset(final_peaks, offset)
+
+        if peaks.size == 0:
+            intensities = np.empty((0,), dtype=image_chunk.dtype)
+            final_peaks = peaks
+
+        else:
+            intensities = map_coordinates(image_chunk, peaks.T, order=1, mode='reflect')
+            final_peaks = self.apply_lower_bounds(peaks, lb)
+            final_peaks = self.upsample_coordinates(final_peaks, dsxy, dsz)
+            final_peaks = self.apply_offset(final_peaks, offset)
 
         return {
-            'interest_points': final_peaks[:, [2, 1, 0]],
+            'interest_points': final_peaks,
             'intensities': intensities
         }

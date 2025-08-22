@@ -1,7 +1,9 @@
 import numpy as np
 import copy
 
-# This class sets up the default models, tiles, and view pair matches
+"""
+Utility class to initialize models, tiles and view pair matches
+"""
 
 class ModelAndTileSetup():
     def __init__(self, connected_views, corresponding_interest_points, interest_points, view_transform_matrices, view_id_set, label_map):

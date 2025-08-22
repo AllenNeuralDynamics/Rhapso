@@ -1,8 +1,9 @@
 import pandas as pd
 import numpy as np
 
-# This component creates transform matrices for each viewID from ViewRegistrations-ViewTransform.
-# If there is more than one matrix, matrix multiplication is implemented and only one matrix is returned
+"""
+Utility class to parse and combine view registrations matrices
+"""
 
 class ViewTransformModels:
     def __init__(self, df):

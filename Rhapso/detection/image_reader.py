@@ -5,7 +5,9 @@ import bioio_tifffile
 import dask.array as da
 import s3fs
 
-# This class loads image data using predefined metadata of pathways
+"""
+Utility class to load and downsample Zarr and TIFF OME data
+"""
 
 class CustomBioImage(BioImage):
     def standard_metadata(self):
@@ -20,25 +22,42 @@ class CustomBioImage(BioImage):
 class ImageReader:
     def __init__(self, file_type):
         self.file_type = file_type
-    
-    def downsample(self, data, factor_dx, factor_dy, factor_dz, axes):
-        """
-        Downsamples a 3D array by block-wise mean pooling along specified axes.
-        """
-        for axis in axes:
-            if axis == 0: 
-                while factor_dz > 1:
-                    data = da.coarsen(np.mean, data, {0:2}, trim_excess=True)
-                    factor_dz //= 2  
-            if axis == 1: 
-                while factor_dx > 1:
-                    data = da.coarsen(np.mean, data, {1:2}, trim_excess=True)
-                    factor_dx //= 2
-            if axis == 2:
-                while factor_dy > 1:
-                    data = da.coarsen(np.mean, data, {2:2}, trim_excess=True)
-                    factor_dy //= 2
-        return data 
+
+    def downsample(self, arr, axis):
+        s0 = [slice(None)] * arr.ndim
+        s1 = [slice(None)] * arr.ndim
+        s0[axis] = slice(0, None, 2)
+        s1[axis] = slice(1, None, 2)
+
+        a0 = arr[tuple(s0)]
+        a1 = arr[tuple(s1)]
+
+        len1 = a1.shape[axis]
+        s0c = [slice(None)] * a0.ndim
+        s0c[axis] = slice(0, len1)
+        a0 = a0[tuple(s0c)]
+
+        return (a0 + a1) * 0.5
+
+    def interface_downsampling(self, data, dsxy, dsz):
+        f = dsxy
+        while f > 1:
+            data = self.downsample(data, axis=0)  
+            f //= 2
+        
+        # Process Y dimension
+        f = dsxy
+        while f > 1:
+            data = self.downsample(data, axis=1)  
+            f //= 2
+        
+        # Process Z dimension
+        f = dsz
+        while f > 1:
+            data = self.downsample(data, axis=2)  
+            f //= 2
+        
+        return data
 
     def fetch_image_data(self, record, dsxy, dsz):
         """
@@ -61,20 +80,25 @@ class ImageReader:
             zarr_array = zarr.open(store, mode='r')
             dask_array = da.from_zarr(zarr_array)[0, 0, :, :, :]
 
+        dask_array = dask_array.astype(np.float32)
+        dask_array = dask_array.transpose()
+
         # Downsample Dask array
-        downsampled_stack = self.downsample(dask_array, dsxy, dsxy, dsz, axes=[0, 1, 2])
+        downsampled_stack = self.interface_downsampling(dask_array, dsxy, dsz)
+
+        # interval_key = ((0, 0, 0), (250, 250, 120), (250, 250, 120))
 
         # Get lower and upper bounds
         lb = list(interval_key[0])
         ub = list(interval_key[1])
 
         # Load image chunk into mem
-        downsampled_image_chunk = downsampled_stack[lb[2]:ub[2], lb[1]:ub[1], lb[0]:ub[0]].compute()
+        downsampled_image_chunk = downsampled_stack[lb[0]:ub[0]+1, lb[1]:ub[1]+1, lb[2]:ub[2]+1].compute()
     
         interval_key = (
             tuple(lb),
             tuple(ub),
-            tuple((ub[0] - lb[0], ub[1] - lb[1], ub[2] - lb[2]))  
+            tuple((ub[0] - lb[0]+1, ub[1] - lb[1]+1, ub[2] - lb[2]+1))  
         )
 
         return view_id, interval_key, downsampled_image_chunk, offset, lb

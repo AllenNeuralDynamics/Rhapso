@@ -121,9 +121,8 @@ def read_rhapso_output(full_path):
     plt.tight_layout()
     plt.show()
 
-# base_path = "/Users/seanfite/Desktop/IP_TIFF_XML-BigStitcher-Affine/interestpoints.n5"
 # base_path = "s3://rhapso-matching-test/output/interestpoints.n5"
-base_path = "/Users/seanfite/Desktop/BigStitcherIP/interestpoints.n5"
+base_path = "/Users/seanfite/Desktop/interest_point_detection/interestpoints.n5"
 
 for tp_id in [0]:
     for setup_id in range(20):  

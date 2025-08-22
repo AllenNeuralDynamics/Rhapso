@@ -1,4 +1,4 @@
-cluster_name: rhapso-cluster-matching-affine-sean-0002
+cluster_name: rhapso-cluster-matching-sean-500003202
 max_workers: 6
 min_workers: 6
 
@@ -10,16 +10,14 @@ provider:
 
 auth:
   ssh_user: ubuntu
-  # ssh_private_key: ~/.ssh/rhapso-ray-ssh-martin.pem
-  ssh_private_key: /Users/seanfite/Desktop/AllenInstitute/Rhapso/Auth/AWS/EC2-SSH-Key/rhapso-ssh.pem
+  ssh_private_key: /Users/seanfite/Desktop/AllenInstitute/Rhapso/Auth/AWS/EC2-SSH-Key/sean-rhapso.pem
 
 available_node_types:
   ray.head.default:
     node_config:
       InstanceType: r5.4xlarge
       ImageId: ami-0ec1bf4a8f92e7bd1
-      # KeyName: rhapso-ray-ssh-martin
-      KeyName: rhapso-ssh
+      KeyName: sean-rhapso
       IamInstanceProfile:
         Name: RhapsoInstanceProfile
       TagSpecifications:
@@ -32,8 +30,7 @@ available_node_types:
     node_config:
       InstanceType: r5.4xlarge
       ImageId: ami-0ec1bf4a8f92e7bd1 
-      # KeyName: rhapso-ray-ssh-martin
-      KeyName: rhapso-ssh
+      KeyName: sean-rhapso
       IamInstanceProfile:
         Name: RhapsoInstanceProfile
       TagSpecifications:
@@ -50,27 +47,18 @@ setup_commands:
   - sudo python3 -m pip install awscli
   - sudo python3 -m pip install "ray[default]==2.9.1"  
   - sudo python3 -m pip install protobuf==4.23.4 
-  # install quilt3 if Big Stitcher s3 input:
   - sudo python3 -m pip install quilt3
-  # - aws s3 cp s3://martin-test-bucket/rhapso-0.1.13-py3-none-any.whl /tmp/Rhapso-0.1.13-py3-none-any.whl  
   - aws s3 cp s3://rhapso-whl-v2/Rhapso-0.1.8-py3-none-any.whl /tmp/Rhapso-0.1.8-py3-none-any.whl  
-  # download data from S3 bucket locally below if Big Stitcher s3 input:
   - mkdir -p /tmp/data/allen
-  - python3 -c "import quilt3; quilt3.Bucket('s3://aind-open-data').fetch('exaSPIM_686951_2025-02-25_09-45-02_alignment_2025-06-12_19-58-52/interest_point_detection/', '/tmp/data/allen/'); print('Data downloaded to /tmp/data/allen')"
+  - python3 -c "import quilt3; quilt3.Bucket('s3://aind-open-data').fetch('exaSPIM_720164_2025-07-07_17-55-45_processed_2025-07-15_16-22-02/tile_alignment/ip_rigid_alignment/', '/tmp/data/allen/')"
   - ls -l /tmp/data/allen
-  # downloaded 
   - echo 'export PATH=$HOME/.local/bin:$PATH' >> ~/.bashrc
   - source ~/.bashrc
-  # - pip install --force-reinstall /tmp/Rhapso-0.1.13-py3-none-any.whl 
   - pip install --force-reinstall /tmp/Rhapso-0.1.8-py3-none-any.whl   
-  # Debug: List installed packages and check Rhapso module
-  # - pip show Rhapso || true
-  # - python3 -c "import Rhapso; print(Rhapso.__file__)" || true
 
 head_start_ray_commands:
   - ray stop
   - ray start --head --port=6379 --dashboard-host=0.0.0.0 --autoscaling-config=~/ray_bootstrap_config.yaml
-  - python3 -m Rhapso.pipelines.matching.ray_matching_pipeline 
 
 worker_start_ray_commands:
   - ray stop
@@ -81,14 +69,13 @@ worker_start_ray_commands:
 # CREATE WHL FILE
 # python setup.py bdist_wheel 
 
-# RAY UP/DOWN COMMANDS
-# ray up matching_cluster.yml --no-config-cache
-# ray down matching_cluster.yml
+# RAY UP / DOWN / CLEAR CACHE COMMANDS
+# ray up matching_cluster_big_stitcher_sean.yml --no-config-cache
+# ray down matching_cluster_big_stitcher_sean.yml
 # rm -rf ~/.cache/ray
 
 # ACCESS RAY DASHBOARD
-# ssh -i ~/.ssh/rhapso-ray-ssh-martin.pem -L 8265:localhost:8265 ubuntu@54.203.12.142
-# ssh -i /Users/seanfite/Desktop/AllenInstitute/Rhapso/Auth/AWS/EC2-SSH-Key/rhapso-ssh.pem -L 8265:localhost:8265 ubuntu@35.90.74.225
+# ssh -i /Users/seanfite/Desktop/AllenInstitute/Rhapso/Auth/AWS/EC2-SSH-Key/sean-rhapso.pem -L 8265:localhost:8265 ubuntu@34.220.36.102
 # http://localhost:8265
 
 # TO FIX
