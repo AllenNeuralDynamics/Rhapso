@@ -75,9 +75,8 @@ class Solver:
         print("Tiles are pre-aligned")
 
         # Update all points with transform models and iterate through all tiles (views) and optimize alignment
-        global_optimization = GlobalOptimization(tc, self.fixed_views, self.n5_input_path, self.relative_threshold,
-                                                self.absolute_threshold, self.min_matches, self.damp, self.max_iterations, 
-                                                self.max_allowed_error, self.max_plateauwidth, self.run_type, self.metrics_output_path)
+        global_optimization = GlobalOptimization(tc, self.fixed_views, self.relative_threshold, self.absolute_threshold, self.min_matches, self.damp, 
+                                                 self.max_iterations, self.max_allowed_error, self.max_plateauwidth, self.run_type, self.metrics_output_path)
         tiles = global_optimization.run()
         print("Global optimization complete")
 

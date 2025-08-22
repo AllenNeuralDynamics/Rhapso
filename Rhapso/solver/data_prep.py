@@ -30,7 +30,7 @@ class DataPrep():
             if self.xml_file_path.startswith("s3://"):
                 s3 = s3fs.S3FileSystem(anon=False)
                 root = self.n5_input_prep.replace("s3://", "", 1)
-                path = root + "/interestpoints.n5"
+                path = root + "interestpoints.n5"
                 store = s3fs.S3Map(root=path, s3=s3)
                 root = zarr.open(store, mode='r')
                 correspondences_key = f"{row['path']}/correspondences"
@@ -69,7 +69,7 @@ class DataPrep():
         if self.xml_file_path.startswith("s3://"):
             s3 = s3fs.S3FileSystem(anon=False)
             root = self.n5_input_prep.replace("s3://", "", 1)
-            path = root + "/interestpoints.n5"
+            path = root + "interestpoints.n5"
             store = s3fs.S3Map(root=path, s3=s3)
         else:
             store = zarr.N5Store('/interestpoints.n5')
@@ -131,7 +131,7 @@ class DataPrep():
         if self.xml_file_path.startswith("s3://"):
             s3 = s3fs.S3FileSystem(anon=False)
             root = self.n5_input_prep.replace("s3://", "", 1)
-            path = root + "/interestpoints.n5"
+            path = root + "interestpoints.n5"
             store = s3fs.S3Map(root=path, s3=s3)
         else:
             store = zarr.N5Store(self.data_prefix)
