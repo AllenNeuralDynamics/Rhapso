@@ -69,7 +69,11 @@ def read_rhapso_output(full_path):
         s3 = s3fs.S3FileSystem(anon=False)
         store = s3fs.S3Map(root=full_path, s3=s3)
         zarray = zarr.open_array(store, mode='r')
-        data = zarray[:]
+        data = zarray[:] 
+
+        # store = s3fs.S3Map(root=path_int, s3=s3)
+        # zarray = zarr.open_array(store, mode='r')
+        # data_int = zarray[:] 
     
     else:
         full_path = full_path.rstrip("/")  # remove trailing slash if any
@@ -95,8 +99,21 @@ def read_rhapso_output(full_path):
         zarray = root[dataset_rel_path]
         data = zarray[:]
 
+        # store = zarr.N5Store(path_int)
+        # root = zarr.open(store, mode='r')
+
+        # if dataset_rel_path not in root:
+        #     print(f"Skipping: {dataset_rel_path} (not found)")
+        #     return
+
+        # zarray = root[dataset_rel_path]
+        # data_int = zarray[:]
+
+    # intensities = data_int
+
     print("\n--- Detection Stats (Raw Rhapso Output) ---")
     print(f"Total Points: {len(data)}")
+    # print(f"Intensity: min={intensities.min():.2f}, max={intensities.max():.2f}, mean={intensities.mean():.2f}, std={intensities.std():.2f}")
 
     for dim, name in zip(range(3), ['X', 'Y', 'Z']):
         values = data[:, dim]
@@ -117,16 +134,17 @@ def read_rhapso_output(full_path):
     ax.set_xlabel('X')
     ax.set_ylabel('Y')
     ax.set_zlabel('Z')
-    ax.set_title(f"Interest Points in 3D (showing {len(sample)} points)")
+    ax.set_title(f"Interest Points in 3D Rhapso (showing {len(sample)} points)")
     plt.tight_layout()
     plt.show()
 
-# base_path = "s3://rhapso-matching-test/output/interestpoints.n5"
-base_path = "/Users/seanfite/Desktop/interest_point_detection/interestpoints.n5"
+base_path = "s3://rhapso-matching-test/interestpoints.n5"
+# base_path = "/Users/seanfite/Desktop/interestpoints.n5"
 
 for tp_id in [0]:
     for setup_id in range(20):  
         path = f"{base_path}/tpId_{tp_id}_viewSetupId_{setup_id}/beads/interestpoints/loc"
+        # path_int = f"{base_path}/tpId_{tp_id}_viewSetupId_{setup_id}/beads/interestpoints/intensities"
         print(f"Reading: {path}")
         # read_big_stitcher_output(path)
         read_rhapso_output(path)

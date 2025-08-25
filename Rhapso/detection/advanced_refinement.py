@@ -16,7 +16,6 @@ class AdvancedRefinement:
         self.overlapping_area = overlapping_area
         self.max_interval_size = max_interval_size
         self.max_spots = max_spots
-
         self.overlapping_only = True
         self.sorted_view_ids = None
         self.result = interest_points  

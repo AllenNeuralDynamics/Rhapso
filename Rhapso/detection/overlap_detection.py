@@ -215,7 +215,7 @@ class OverlapDetection():
                 level, leftovers = self.choose_zarr_level()
                 dim_base = self.load_image_metadata(self.prefix + row_i['file_path'] + f'/{0}')
 
-                # isotropic pyramid: 1,2,4,8,16,32,64
+                # isotropic pyramid
                 s = float(2 ** level)  
                 mipmap_of_downsample = self.affine_with_half_pixel_shift(s, s, s)
 
@@ -286,8 +286,8 @@ class OverlapDetection():
     
             self.to_process[view_id] = all_intervals
         
-        return dsxy, dsz, level
+        return dsxy, dsz, level, mipmap_of_downsample
                 
     def run(self):
-        dsxy, dsz, level = self.find_overlapping_area()
-        return self.to_process, dsxy, dsz, level, self.max_interval_size
+        dsxy, dsz, level, mipmap_of_dowsample = self.find_overlapping_area()
+        return self.to_process, dsxy, dsz, level, self.max_interval_size, mipmap_of_dowsample

@@ -34,9 +34,9 @@ class InterestPointMatching:
         process_pairs, view_registrations = data_loader.run()
         print("Points loaded and transformed into global space")
 
-        # --- Ray Remote Task ---
-        # @ray.remote                 # If deployed to cluster
-        @ray.remote(num_cpus=2)       # Local Setting
+        # Distribute interest point matching with Ray
+        # @ray.remote(num_cpus=2)    # If ran locally
+        @ray.remote
         def match_pair(pointsA, pointsB, viewA_str, viewB_str, num_neighbors, redundancy, significance, num_required_neighbors, 
                        match_type, inlier_factor, lambda_value, num_iterations, model_min_matches, regularization_weight, search_radius,
                        view_registrations, input_type): 
@@ -57,7 +57,7 @@ class InterestPointMatching:
             percent = 100.0 * len(filtered_inliers) / len(candidates) if candidates else 0
             print(f"✅ RANSAC inlier percentage: {percent:.1f}% ({len(filtered_inliers)} of {len(candidates)} for {viewA_str}), {viewB_str}")
 
-            if len(filtered_inliers) < 20:
+            if len(filtered_inliers) < self.model_min_matches:
                 return []
 
             return filtered_inliers if filtered_inliers else []
@@ -80,7 +80,6 @@ class InterestPointMatching:
         print("Matches Saved as N5")
 
         print("Interest point matching is done")
-        
     
     def run(self):
         self.match()

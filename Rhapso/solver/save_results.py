@@ -1,18 +1,32 @@
 import xml.etree.ElementTree as ET
 import boto3
 import io
+import s3fs
+import json
 
 """
 Utility class that saves the final matrices of alignment per view to XML
 """
 
 class SaveResults:
-    def __init__(self, tiles, xml_file, xml_file_path, fixed_views, run_type):
+    def __init__(self, tiles, xml_file, xml_file_path, fixed_views, run_type, validation_stats, n5_input_path):
         self.tiles = tiles
         self.xml_file = xml_file
         self.xml_file_path = xml_file_path
         self.fixed_views = fixed_views
         self.run_type = run_type
+        self.validation_stats = validation_stats
+        self.n5_input_path = n5_input_path
+    
+    def save_ransac_metrics(self):
+        path = self.n5_input_path + self.run_type + "-solver_metrics.txt"
+        if self.n5_input_path.startswith("s3://"):
+            fs = s3fs.S3FileSystem(anon=False)
+            with fs.open(path, "w", encoding="utf-8") as f:
+                json.dump(self.validation_stats, f, default=str, indent=2)
+        else:
+            with open(path, "w", encoding="utf-8") as f:
+                json.dump(self.validation_stats, f, default=str, indent=2)
     
     def save_xml(self):
         """
@@ -81,3 +95,4 @@ class SaveResults:
         self.load_xml()
         self.add_new_view_transform()
         self.save_xml()
+        self.save_ransac_metrics()

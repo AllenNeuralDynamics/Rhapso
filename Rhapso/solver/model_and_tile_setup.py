@@ -16,34 +16,6 @@ class ModelAndTileSetup():
         self.pairs = []
         self.tiles = {}
     
-    def create_default_model_3d(self):
-        """
-        Returns a default 3D rigid transformation model with identity rotation and zero translation.
-        """
-        return {
-            "m00": 1.0, "m01": 0.0, "m02": 0.0, "m03": 0.0,
-            "m10": 0.0, "m11": 1.0, "m12": 0.0, "m13": 0.0,
-            "m20": 0.0, "m21": 0.0, "m22": 1.0, "m23": 0.0,
-            "i00": 1.0, "i01": 0.0, "i02": 0.0, "i03": 0.0,
-            "i10": 0.0, "i11": 1.0, "i12": 0.0, "i13": 0.0,
-            "i20": 0.0, "i21": 0.0, "i22": 1.0, "i23": 0.0,
-            "cost": 1.7976931348623157e+308,  
-            "isInvertible": True
-        }
-
-    def create_models(self):
-        """
-        Initializes default transformation models and parameters for affine and rigid alignment.
-        """
-        self.model = {
-            'a' : self.create_default_model_3d(),
-            'b' : self.create_default_model_3d(),
-            'regularized': None,
-            'cost' : 1.7976931348623157e+308,
-            'l1' : 0.900000,
-            'lambda' : 0.100000
-        }
-    
     def apply_transform(self, point, matrix):
         """
         Applies a 3D affine transformation matrix to a point using homogeneous coordinates.
@@ -135,6 +107,5 @@ class ModelAndTileSetup():
         Executes the entry point of the script.
         """
         self.setup_point_matches_from_interest_points()
-        self.create_models()
 
-        return self.model, self.pairs
+        return self.pairs
