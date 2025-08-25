@@ -70,7 +70,6 @@ solver_rigid = Solver(
     xml_file_path_output=config['xml_file_path_output_rigid'],
     n5_input_path=config['n5_input_path'],
     xml_file_path=config['xml_file_path_solver_rigid'],
-    metrics_output_path=config['metrics_output_path'],
     fixed_views=config['fixed_views'],
     run_type=config['run_type_solver_rigid'],   
     relative_threshold=config['relative_threshold'],
@@ -80,6 +79,7 @@ solver_rigid = Solver(
     max_iterations=config['max_iterations'],
     max_allowed_error=config['max_allowed_error'],
     max_plateauwidth=config['max_plateauwidth'],
+    metrics_output_path=config['metrics_output_path'],
 )
 
 # SOLVER AFFINE
@@ -87,7 +87,6 @@ solver_affine = Solver(
     xml_file_path_output=config['xml_file_path_output_affine'],
     n5_input_path=config['n5_input_path'],
     xml_file_path=config['xml_file_path_solver_rigid'],
-    metrics_output_path=config['metrics_output_path'],
     fixed_views=config['fixed_views'],
     run_type=config['run_type_solver_affine'],  
     relative_threshold=config['relative_threshold'],
@@ -97,6 +96,7 @@ solver_affine = Solver(
     max_iterations=config['max_iterations'],
     max_allowed_error=config['max_allowed_error'],
     max_plateauwidth=config['max_plateauwidth'],
+    metrics_output_path=config['metrics_output_path'],
 )
 
 interest_point_detection.run()

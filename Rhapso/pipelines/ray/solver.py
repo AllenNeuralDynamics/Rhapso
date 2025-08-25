@@ -61,7 +61,7 @@ class Solver:
         # Create models, tiles, and point matches
         model_and_tile_setup = ModelAndTileSetup(connected_views, corresponding_interest_points, interest_points, 
                                                 view_transform_matrices, view_id_set, label_map_global)
-        model, pmc = model_and_tile_setup.run()
+        pmc = model_and_tile_setup.run()
         print("Models and tiles created")
 
         # Find point matches and save to each tile
@@ -77,11 +77,11 @@ class Solver:
         # Update all points with transform models and iterate through all tiles (views) and optimize alignment
         global_optimization = GlobalOptimization(tc, self.fixed_views, self.relative_threshold, self.absolute_threshold, self.min_matches, self.damp, 
                                                  self.max_iterations, self.max_allowed_error, self.max_plateauwidth, self.run_type, self.metrics_output_path)
-        tiles = global_optimization.run()
+        tiles, validation_stats = global_optimization.run()
         print("Global optimization complete")
 
         # Save results to xml - one new affine matrix per view registration
-        save_results = SaveResults(tiles, xml_file, self.xml_file_path_output, self.fixed_views, self.run_type)
+        save_results = SaveResults(tiles, xml_file, self.xml_file_path_output, self.fixed_views, self.run_type, validation_stats, self.n5_input_path)
         save_results.run()
         print("Results have been saved")
     

@@ -72,7 +72,7 @@ class MetadataBuilder:
                             'view_id': view_id,
                             'file_path': file_path,
                             'interval_key': interval_key,
-                            'offset': z_start,
+                            'offset': z,
                             'lb' : lb
                         })  
 
@@ -101,7 +101,7 @@ class MetadataBuilder:
                             'view_id': view_id,
                             'file_path': file_path,
                             'interval_key': interval_key,
-                            'offset': z_start,
+                            'offset': z,
                             'lb' : lb
                         })  
     

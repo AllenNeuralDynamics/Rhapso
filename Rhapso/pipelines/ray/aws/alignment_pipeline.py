@@ -86,11 +86,11 @@ matching_cmd_affine = (
     "\""
 )
 
+# SOLVER RIGID
 solver_rigid = Solver(
     xml_file_path_output=config['xml_file_path_output_rigid'],
     n5_input_path=config['n5_input_path'],
     xml_file_path=config['xml_file_path_solver_rigid'],
-    metrics_output_path=config['metrics_output_path'],
     fixed_views=config['fixed_views'],
     run_type=config['run_type_solver_rigid'],   
     relative_threshold=config['relative_threshold'],
@@ -100,13 +100,14 @@ solver_rigid = Solver(
     max_iterations=config['max_iterations'],
     max_allowed_error=config['max_allowed_error'],
     max_plateauwidth=config['max_plateauwidth'],
+    metrics_output_path=config['metrics_output_path'],
 )
 
+# SOLVER AFFINE
 solver_affine = Solver(
     xml_file_path_output=config['xml_file_path_output_affine'],
     n5_input_path=config['n5_input_path'],
     xml_file_path=config['xml_file_path_solver_rigid'],
-    metrics_output_path=config['metrics_output_path'],
     fixed_views=config['fixed_views'],
     run_type=config['run_type_solver_affine'],  
     relative_threshold=config['relative_threshold'],
@@ -116,37 +117,34 @@ solver_affine = Solver(
     max_iterations=config['max_iterations'],
     max_allowed_error=config['max_allowed_error'],
     max_plateauwidth=config['max_plateauwidth'],
+    metrics_output_path=config['metrics_output_path'],
 )
 
 prefix = (Path(__file__).resolve().parent / "config").as_posix()
-detection_yml = "detection_cluster_sean.yml"
-matching_yml = "matching_cluster_sean.yml"
+unified_yml = "alignment_cluster_sean.yml"
 
-def run_cluster_stage(name, yml, cmd, cwd):
+def exec_on_cluster(name, yml, cmd, cwd):
     print(f"\n=== {name} ===")
-    try:
-        # spin up
-        print("$", " ".join(["ray", "up", yml, "--no-config-cache", "-y"]))
-        subprocess.run(["ray", "up", yml, "--no-config-cache", "-y"], check=True, cwd=cwd)
+    print("$", " ".join(["ray", "exec", yml, cmd]))
+    subprocess.run(["ray", "exec", yml, cmd], check=True, cwd=cwd)
 
-        # run command
-        print("$", " ".join(["ray", "exec", yml, cmd]))
-        subprocess.run(["ray", "exec", yml, cmd], check=True, cwd=cwd)
+print("\n=== Start cluster ===")
+print("$", " ".join(["ray", "up", unified_yml, "-y"]))
+subprocess.run(["ray", "up", unified_yml, "-y"], check=True, cwd=prefix)
 
-    except subprocess.CalledProcessError as e:
-        print(f"❌ Error in stage {name}: {e}")
-        raise  # re-raise so pipeline knows something went wrong
-
-    finally:
-        # always spin down, even if up/exec failed
-        print("$", " ".join(["ray", "down", yml, "-y"]))
-        subprocess.run(["ray", "down", yml, "-y"], cwd=cwd)
-
-# Detection ➜ Matching (rigid) ➜ Solver (rigid) ➜ Matching (affine) ➜ Solver (affine)
-run_cluster_stage("Detection",          detection_yml, detection_cmd,     prefix)
-run_cluster_stage("Matching (rigid)",   matching_yml,  matching_cmd_rigid, prefix)
-solver_rigid.run()
-run_cluster_stage("Matching (affine)",  matching_yml,  matching_cmd_affine, prefix)
-solver_affine.run()
+try:
+    exec_on_cluster("Detection", unified_yml, detection_cmd, prefix)
+    exec_on_cluster("Matching (rigid)", unified_yml, matching_cmd_rigid, prefix)
+    solver_rigid.run()
+    exec_on_cluster("Matching (affine)", unified_yml, matching_cmd_affine, prefix)
+    solver_affine.run()
+    print("\n✅ Pipeline complete.")
+except subprocess.CalledProcessError as e:
+    print(f"❌ Pipeline error: {e}")
+    raise
+finally:
+    print("\n=== Tear down cluster ===")
+    print("$", " ".join(["ray", "down", unified_yml, "-y"]))
+    subprocess.run(["ray", "down", unified_yml, "-y"], cwd=prefix)
 
 print("\n✅ Pipeline complete.")

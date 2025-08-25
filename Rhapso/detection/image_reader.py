@@ -67,6 +67,7 @@ class ImageReader:
         file_path = record['file_path']
         interval_key = record['interval_key']
         offset = record['offset']
+        lower_bound = record['lb']
         
         # Create image pathways using Dask
         if self.file_type == "tiff":
@@ -101,7 +102,7 @@ class ImageReader:
             tuple((ub[0] - lb[0]+1, ub[1] - lb[1]+1, ub[2] - lb[2]+1))  
         )
 
-        return view_id, interval_key, downsampled_image_chunk, offset, lb
+        return view_id, interval_key, downsampled_image_chunk, offset, lower_bound
 
     def run(self, metadata_df, dsxy, dsz):
             return self.fetch_image_data(metadata_df, dsxy, dsz)

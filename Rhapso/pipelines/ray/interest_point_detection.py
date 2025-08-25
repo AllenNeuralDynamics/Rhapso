@@ -58,7 +58,7 @@ class InterestPointDetection:
 
         # Use view transform matrices to find areas of overlap
         overlap_detection = OverlapDetection(view_transform_matrices, dataframes, self.dsxy, self.dsz, self.image_file_prefix, self.file_type)
-        overlapping_area, new_dsxy, new_dsz, level, max_interval_size = overlap_detection.run()
+        overlapping_area, new_dsxy, new_dsz, level, max_interval_size, mip_map_downsample = overlap_detection.run()
         print("Overlap detection is done")
 
         # Implement image chunking strategy as list of metadata 
@@ -68,14 +68,14 @@ class InterestPointDetection:
         print("Metadata has loaded")
 
         # Use Ray to distribute peak detection to image chunking metadata 
-        @ray.remote(num_cpus=1)
-        def process_peak_detection_task(chunk_metadata, dsxy, dsz, new_dsxy, new_dsz, min_intensity, max_intensity, sigma, threshold,
-                                        median_filter):
+        @ray.remote
+        def process_peak_detection_task(chunk_metadata, new_dsxy, new_dsz, min_intensity, max_intensity, sigma, threshold,
+                                        median_filter, mip_map_downsample):
             try:
-                difference_of_gaussian = DifferenceOfGaussian(min_intensity, max_intensity, sigma, threshold, median_filter)
+                difference_of_gaussian = DifferenceOfGaussian(min_intensity, max_intensity, sigma, threshold, median_filter, mip_map_downsample)
                 image_fetcher = ImageReader(self.file_type)
                 view_id, interval, image_chunk, offset, lb = image_fetcher.run(chunk_metadata, new_dsxy, new_dsz)
-                interest_points = difference_of_gaussian.run(image_chunk, dsxy, dsz, offset, lb)
+                interest_points = difference_of_gaussian.run(image_chunk, offset, lb)
 
                 return {
                     'view_id': view_id,
@@ -87,8 +87,8 @@ class InterestPointDetection:
                 return {'error': str(e), 'view_id': chunk_metadata.get('view_id', 'unknown')}
 
         # Submit tasks to Ray
-        futures = [process_peak_detection_task.remote(chunk_metadata, self.dsxy, self.dsz, new_dsxy, new_dsz, self.min_intensity, self.max_intensity, 
-                                                      self.sigma, self.threshold, self.median_filter)
+        futures = [process_peak_detection_task.remote(chunk_metadata, new_dsxy, new_dsz, self.min_intensity, self.max_intensity, 
+                                                      self.sigma, self.threshold, self.median_filter, mip_map_downsample)
             for chunk_metadata in image_chunk_metadata
         ]
 
@@ -112,8 +112,26 @@ class InterestPointDetection:
                                                   self.dsxy, self.dsz, self.min_intensity, self.max_intensity, self.sigma, self.threshold)
         save_interest_points.run()
         print("Interest points saved")
-
-        print("Interest point detection is done")
     
     def run(self):
         self.detection()
+
+
+
+# DEBUG - to step through DOG
+# final_peaks = []
+# for chunk_metadata in image_chunk_metadata:
+#     difference_of_gaussian = DifferenceOfGaussian(
+#         self.min_intensity, self.max_intensity, self.sigma, self.threshold, self.median_filter, mip_map_downsample
+#     )
+#     image_fetcher = ImageReader(self.file_type)
+
+#     view_id, interval, image_chunk, offset, lb = image_fetcher.run(chunk_metadata, new_dsxy, new_dsz)
+#     interest_points = difference_of_gaussian.run(image_chunk, offset, lb)
+
+#     final_peaks.append({
+#         'view_id': view_id,
+#         'interval_key': interval,
+#         'interest_points': interest_points['interest_points'],
+#         'intensities': interest_points['intensities'],
+#     })

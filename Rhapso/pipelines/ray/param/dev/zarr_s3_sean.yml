@@ -2,22 +2,26 @@
 # INTEREST POINT DETECTION
 # -----------------------------------
 
-dsxy: 16
-dsz: 16
-min_intensity: 1
-max_intensity: 5
-sigma: 2
-threshold: 0.005
-file_type: 'zarr'
+# sigma: 2                                # blur - dog
+# threshold: 0.005                        # find peaks - dog (min initial peak value) / 3
+# median_filter: 10                       # xysubtract - predog
+
 xml_file_path_detection: 's3://aind-open-data/exaSPIM_720164_2025-07-07_17-55-45_processed_2025-07-15_16-22-02/tile_alignment/dataset.xml'
 image_file_prefix:  's3://aind-open-data/exaSPIM_720164_2025-07-07_17-55-45_processed_2025-07-15_16-22-02/flatfield_correction/SPIM.ome.zarr/' 
 xml_output_file_path: &detection_xml_output_file_path 's3://rhapso-matching-test/rhapso-detection.xml'
-n5_output_file_prefix: &n5_output_file_prefix 's3://rhapso-matching-test/'
+n5_output_file_prefix: &n5_output_file_prefix 's3://rhapso-matching-test/' 
+detection_run_type: 'ray' 
+file_type: 'zarr' 
+dsxy: 16
+dsz: 16
+min_intensity: 1                          # normalize - dog
+max_intensity: 5                          # normalize - dog
+sigma: 1.8                                # blur - dog
+threshold: 0.003                          # find peaks (min initial peak value) / 3 - dog
+median_filter: 1                          # xysubtract - predog
 combine_distance: .5
-chunks_per_bound: 14
-detection_run_type: 'ray'
-max_spots: 8000
-median_filter: 10    
+chunks_per_bound: 14                      # chunks per bound
+max_spots: 10000                          # max points per bound
 
 # SOLVER
 # -----------------------------------
@@ -29,7 +33,7 @@ relative_threshold: 3.5
 absolute_threshold: 7.0
 min_matches: 3
 damp: 1.0
-max_iterations: 100000
+max_iterations: 10000
 max_allowed_error: .inf
 max_plateauwidth: 200
 
