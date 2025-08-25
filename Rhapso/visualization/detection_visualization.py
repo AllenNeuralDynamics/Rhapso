@@ -106,17 +106,31 @@ def read_rhapso_output(full_path, tp_id=None, setup_id=None, current_index=None,
         dataset_path = "/".join(components[:n5_index + 1])            # the store root
         dataset_rel_path = "/".join(components[n5_index + 1:])        # relative dataset path
 
+        # Check if this is a valid Zarr store by looking for attributes.json
+        if not os.path.exists(os.path.join(dataset_path, "attributes.json")):
+            print(f"Error: {dataset_path} is not a valid Zarr store (missing attributes.json)")
+            print("Exiting script - cannot proceed without valid Zarr store")
+            exit(1)
+            
         # Open N5 store and dataset
         # Note: N5Store is deprecated but still functional for now
-        store = zarr.N5Store(dataset_path)
-        root = zarr.open(store, mode='r')
+        try:
+            store = zarr.N5Store(dataset_path)
+            root = zarr.open(store, mode='r')
+        except Exception as e:
+            print(f"Error opening Zarr store: {e}")
+            return None
 
         if dataset_rel_path not in root:
             print(f"Skipping: {dataset_rel_path} (not found)")
-            return
+            return None
 
-        zarray = root[dataset_rel_path]
-        data = zarray[:]
+        try:
+            zarray = root[dataset_rel_path]
+            data = zarray[:]
+        except Exception as e:
+            print(f"Error reading data: {e}")
+            return None
 
         # store = zarr.N5Store(path_int)
         # root = zarr.open(store, mode='r')
@@ -146,11 +160,11 @@ def read_rhapso_output(full_path, tp_id=None, setup_id=None, current_index=None,
     # Return the data instead of plotting
     return data
 
-# works
-#base_path = "/home/martin/Documents/Allen/Data/exaSPIM_686951_2025-02-25_09-45-02_alignment_2025-06-12_19-58-52/interest_point_detection/interestpoints.n5"
+# aind-open-data works
+base_path = "/home/martin/Documents/Allen/Data/exaSPIM_686951_2025-02-25_09-45-02_alignment_2025-06-12_19-58-52/interest_point_detection/interestpoints.n5"
 
-# breaks
-base_path = "/home/martin/Documents/Allen/rhapso-e2e-testing/exaSPIM_720164/rhapso detection/aws-output rigid-rhapso-matching-output/interestpoints.n5"
+# rhapso breaks
+#base_path = "/home/martin/Documents/Allen/rhapso-e2e-testing/exaSPIM_720164/rhapso detection/aws-output rigid-rhapso-matching-output/interestpoints.n5"
 
 # Create interactive visualization with navigation
 class InteractiveVisualizer:
@@ -233,6 +247,7 @@ class InteractiveVisualizer:
                 self.update_visualization()
             else:
                 print(f"Failed to load dataset {index + 1}")
+                exit(1)
     
     def update_visualization(self):
         """Update the 3D plot with current data"""
