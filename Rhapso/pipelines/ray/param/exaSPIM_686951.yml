@@ -1,28 +1,35 @@
 
 # INTEREST POINT DETECTION
 # -----------------------------------
-
-xml_file_path_detection: 's3://aind-open-data/exaSPIM_720164_2025-07-07_17-55-45_processed_2025-07-15_16-22-02/tile_alignment/dataset.xml'
-
-image_file_prefix:  's3://aind-open-data/exaSPIM_720164_2025-07-07_17-55-45_processed_2025-07-15_16-22-02/flatfield_correction/SPIM.ome.zarr/' 
-
-xml_output_file_path: &detection_xml_output_file_path 's3://martin-test-bucket/rigid-rhapso-matching-output/rhapso-detection.xml'
-
-n5_output_file_prefix: &n5_output_file_prefix 's3://martin-test-bucket/rigid-rhapso-matching-output/' 
-
+xml_file_path_detection: 's3://aind-open-data/exaSPIM_686951_2025-02-25_09-45-02_alignment_2025-06-12_19-58-52/dataset.xml'
+image_file_prefix:  's3://aind-open-data/exaSPIM_686951_2025-02-25_09-45-02/SPIM.ome.zarr/'
+# broke
+# image_file_prefix:  's3://aind-open-data/exaSPIM_686951_2025-02-25_09-45-02_flatfield-correction_2025-06-10_06-58-54/SPIM.ome.zarr'
+xml_output_file_path: &detection_xml_output_file_path 's3://martin-test-bucket/exaSPIM_686951/detection/rhapso_detection.xml'
+n5_output_file_prefix: &n5_output_file_prefix 's3://martin-test-bucket/exaSPIM_686951/detection/'
 detection_run_type: 'ray' 
 file_type: 'zarr' 
+label: "beads"              # ❌ HARDCODED to "beads" in save_interest_points.py line 70
+sigma: 2             
+threshold: 0.005     
+overlappingOnly: true       # ❌ HARDCODED to "true" in save_interest_points.py line 29
+storeIntensities: false     # ❌ NOT IMPLEMENTED - config value ignored
+prefetch: false             # ❌ NOT IMPLEMENTED - config value ignored
+min_intensity: 1                       
+max_intensity: 5    
 dsxy: 16
 dsz: 16
-min_intensity: 1                          # normalize - dog
-max_intensity: 5                          # normalize - dog
-sigma: 1.8                                # blur - dog
-threshold: 0.003                          # find peaks (min initial peak value) / 3 - dog
-median_filter: 1                          # xysubtract - predog
-combine_distance: .5
-chunks_per_bound: 14                      # chunks per bound
-max_spots: 10000                          # max points per bound
+blocksize: "512,512,128"    # ❌ NOT IMPLEMENTED - config value ignored
+type: "MAX"                 # (default:max) ❌ HARDCODED to "list" in save_interest_points.py line 165
+localization: "QUADRATIC"   # ❌ NOT IMPLEMENTED - config value ignored
+median_filter: 10
+max_spots: 8000  
+max_spots_per_overlap: true # ❌ HARDCODED to False in advanced_refinement.py line 23
+# required for detection
+combine_distance: 0.5
+chunks_per_bound: 14
 
+## ----------------------------------------------
 # SOLVER
 # -----------------------------------
 

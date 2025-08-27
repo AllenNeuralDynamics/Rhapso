@@ -46,22 +46,35 @@ class OverlapDetection():
         if file_path in self.image_shape_cache:
             return self.image_shape_cache[file_path]
         
-        if self.file_type == 'zarr':
-            s3 = s3fs.S3FileSystem(anon=False)
-            store = s3fs.S3Map(root=file_path, s3=s3)
-            zarr_array = zarr.open(store, mode='r')
-            dask_array = da.from_zarr(zarr_array)
-            dask_array = da.expand_dims(dask_array, axis=2)
-            shape = dask_array.shape
-            self.image_shape_cache[file_path] = shape
-
-        elif self.file_type == 'tiff':
-            img = CustomBioImage(file_path, reader=bioio_tifffile.Reader)
-            data = img.get_dask_stack()
-            shape = data.shape
-            self.image_shape_cache[file_path] = shape
+        # Validate file path
+        if not file_path or str(file_path).strip() == '':
+            raise ValueError(f"Invalid file path: '{file_path}' - path is empty or None")
         
-        return shape
+        try:
+            if self.file_type == 'zarr':
+                s3 = s3fs.S3FileSystem(anon=False)
+                store = s3fs.S3Map(root=file_path, s3=s3)
+                zarr_array = zarr.open(store, mode='r')
+                dask_array = da.from_zarr(zarr_array)
+                dask_array = da.expand_dims(dask_array, axis=2)
+                shape = dask_array.shape
+                self.image_shape_cache[file_path] = shape
+
+            elif self.file_type == 'tiff':
+                img = CustomBioImage(file_path, reader=bioio_tifffile.Reader)
+                data = img.get_dask_stack()
+                shape = data.shape
+                self.image_shape_cache[file_path] = shape
+            else:
+                raise ValueError(f"Unsupported file type: {self.file_type}")
+            
+            return shape
+            
+        except Exception as e:
+            error_msg = f"Error loading image metadata for path '{file_path}': {str(e)}"
+            print(f"❌ {error_msg}")
+            # Re-raise with more context
+            raise RuntimeError(error_msg) from e
     
     # def open_and_downsample(self, shape):
     #     X = int(shape[5])
@@ -206,14 +219,29 @@ class OverlapDetection():
                 (int(ub[2]) - int(lb[2]) + 1))
 
     def find_overlapping_area(self):
+        print(f"🔍 Processing {len(self.image_loader_df)} image rows")
+        print(f"🔍 Image prefix: {self.prefix}")
+        print(f"🔍 File type: {self.file_type}")
+        
         for i, row_i in self.image_loader_df.iterrows():
             view_id = f"timepoint: {row_i['timepoint']}, setup: {row_i['view_setup']}"
+            
+            # Validate file path before processing
+            if not row_i.get('file_path') or str(row_i['file_path']).strip() == '':
+                error_msg = f"❌ Missing or empty file_path for {view_id} in row {i}"
+                print(error_msg)
+                print(f"   Row data: {dict(row_i)}")
+                raise ValueError(error_msg)
+            
+            print(f"🔍 Processing row {i}: {view_id} -> file_path: '{row_i['file_path']}'")
             
             # get inverted matrice of downsampling
             all_intervals = []        
             if self.file_type == 'zarr':
                 level, leftovers = self.choose_zarr_level()
-                dim_base = self.load_image_metadata(self.prefix + row_i['file_path'] + f'/{0}')
+                file_path = self.prefix + row_i['file_path'] + f'/{0}'
+                print(f"🔍 Processing zarr path: {file_path}")
+                dim_base = self.load_image_metadata(file_path)
 
                 # isotropic pyramid
                 s = float(2 ** level)  
@@ -223,7 +251,9 @@ class OverlapDetection():
                 _, dsxy, dsz = leftovers
                 
             elif self.file_type == 'tiff':
-                dim_base = self.load_image_metadata(self.prefix + row_i['file_path'])
+                file_path = self.prefix + row_i['file_path']
+                print(f"🔍 Processing tiff path: {file_path}")
+                dim_base = self.load_image_metadata(file_path)
                 mipmap_of_downsample = self.create_mipmap_transform()
                 dsxy, dsz = self.dsxy, self.dsz
                 level = None
@@ -236,11 +266,22 @@ class OverlapDetection():
                 if i == j: continue
                 
                 view_id_other = f"timepoint: {row_j['timepoint']}, setup: {row_j['view_setup']}"
+                
+                # Validate other file path too
+                if not row_j.get('file_path') or str(row_j['file_path']).strip() == '':
+                    error_msg = f"❌ Missing or empty file_path for {view_id_other} in row {j}"
+                    print(error_msg)
+                    print(f"   Row data: {dict(row_j)}")
+                    raise ValueError(error_msg)
 
                 if self.file_type == 'zarr':
-                    dim_other = self.load_image_metadata(self.prefix + row_j['file_path'] + f'/{0}')
+                    file_path_other = self.prefix + row_j['file_path'] + f'/{0}'
+                    print(f"🔍 Processing other zarr path: {file_path_other}")
+                    dim_other = self.load_image_metadata(file_path_other)
                 elif self.file_type == 'tiff':
-                    dim_other = self.load_image_metadata(self.prefix + row_j['file_path'])
+                    file_path_other = self.prefix + row_j['file_path']
+                    print(f"🔍 Processing other tiff path: {file_path_other}")
+                    dim_other = self.load_image_metadata(file_path_other)
                 
                 # get transforms matrix from both view_ids and downsampling matrices
                 matrix = self.transform_models.get(view_id)

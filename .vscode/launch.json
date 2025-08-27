@@ -12,7 +12,7 @@
             "justMyCode": true
         },
         {
-            "name": "Python: N5Reader Script",
+            "name": "N5Reader",
             "type": "debugpy",
             "request": "launch",
             "program": "${workspaceFolder}/Rhapso/data_prep/n5_reader.py",
@@ -20,6 +20,28 @@
             "python": "venv/bin/python",
             "args": [],
             "justMyCode": true
+        },
+        {
+            "name": "Pipeline",
+            "type": "debugpy",
+            "request": "launch",
+            "module": "Rhapso.pipelines.ray.aws.martin_dev_alignment_pipeline",
+            "cwd": "${workspaceFolder}",
+            "python": "venv/bin/python",
+            "args": [],
+            "justMyCode": true
+        },
+        {
+            "name": "detection-visualization",
+            "type": "debugpy",
+            "request": "launch",
+            "module": "Rhapso.visualization.detection_visualization",
+            "cwd": "${workspaceFolder}",
+            "python": "venv/bin/python",
+            // "args": ["--base_path", "/home/martin/Documents/Allen/rhapso-e2e-testing/exaSPIM_720164/rhapso detection/aws-output rigid-rhapso-matching-output/interestpoints.n5/"],
+            "justMyCode": true
+            // Command line equivalent:
+            // python -m Rhapso.visualization.detection_visualization --base_path "/home/martin/Documents/Allen/rhapso-e2e-testing/exaSPIM_720164/rhapso detection/aws-output rigid-rhapso-matching-output/interestpoints.n5/"
         }
     ]
 }
