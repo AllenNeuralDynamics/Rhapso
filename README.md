@@ -18,9 +18,9 @@
 - [Performance](#performance)
 - [Layout](#layout)
 - [Installation](#installation)
-- [Ray Integration](#ray-integration)
+- [Ray](#ray)
 - [Run Locally w/ Ray](#run-locally-with-ray)
-- [Run on AWS w/ Cluster](#run-on-aws-with-cluster)
+- [Run on AWS Cluster w/ Ray](#run-on-aws-cluster-with-ray)
 - [Access Ray Dashboard](#access-ray-dashboard)
 - [Parameters](#parameters)
 - [Tuning Guide](#tuning-guide)
@@ -41,10 +41,10 @@ Current data loaders support Zarr and TIFF.
 <br>
 
 ## Features
-- Interest Point Detection - using DOG to find interesting points
-- Interest Point Matching - using descriptor based RANSAC to match interest points
-- Global Optimization - alignin matched points per view
-- Validation and Visualization Tools - validate component specific results for the best output
+- **Interest Point Detection** - using DOG to find interesting points
+- **Interest Point Matching** - using descriptor based RANSAC to match interest points
+- **Global Optimization** - alignin matched points per view
+- **Validation and Visualization Tools** - validate component specific results for the best output
 
 ---
 
@@ -114,7 +114,7 @@ pip install -r requirements.txt
 
 <br>
 
-## Ray Integration
+## Ray
 
 **Ray** is a Python framework for parallel and distributed computing. It lets you run regular Python functions in parallel on a single machine **or** scale them out to a cluster (e.g., AWS) with minimal code changes. In Rhapso, we use Ray to process large scale datasets.
 
@@ -132,13 +132,13 @@ pip install -r requirements.txt
 >   ```
 > - **Cap by Memory and CPU** if Tasks are RAM-Heavy (bytes):
 >   ```python
->   @ray.remote(num_cpus=2, memory=4 * 1024**3)  # 4 GiB per task>
+>   @ray.remote(num_cpus=2, memory=4 * 1024**3)  # 4 GiB and 2 CPU per task>
 >   ```
 > - **No Cap** on Resources:
 >   ```python
 >   @ray.remote             
 >   ```
-> - **Good Local Default:** for typical Mac/desktop development, using `@ray.remote(num_cpus=2)` on heavy compute tasks balances performance and responsiveness.
+> - **Good Local Default:**
 >   ```python
 >   @ray.remote(num_cpus=2)
 >   ```
@@ -172,7 +172,7 @@ python Rhapso/pipelines/ray/local/alignment_pipeline.py
 <br>
 
 
-## Run on AWS with Cluster
+## Run on AWS Cluster with Ray
 
 ### 1. Edit/create param file (templates in codebase)
 ```python
@@ -210,21 +210,21 @@ python setup.py sdist bdist_wheel
 python Rhapso/pipelines/ray/aws/alignment_pipeline.py
 ```
 
-### Tips
-- The pipeline script is set to always spin the cluster down, it is a good practice to double check in AWS
-- If you experience a sticky cache on run params, you may have forgotten to spin your old cluster down
+> [!TIP]
+> - The pipeline script is set to always spin the cluster down, it is a good practice to double check in AWS.
+> - If you experience a sticky cache on run params, you may have forgotten to spin your old cluster down.
 
 <br>
 
 ## Access Ray Dashboard
 
-**This is a great place to tune your cluster's performance**
+**This is a great place to tune your cluster's performance.**
 1.	Find public IP of head node.
-2.	Replace the ip address and PEM file location to ssh into head node
+2.	Replace the ip address and PEM file location to ssh into head node.
      ```
     ssh -i /You/path/to/ssh/key.pem -L port:localhost:port ubuntu@public.ip.address
     ```
-4.	Go to dashboard
+4.	Go to dashboard.
      ```
     http://localhost:8265
     ```
@@ -250,6 +250,7 @@ python Rhapso/pipelines/ray/aws/alignment_pipeline.py
 | `chunks_per_bound` | Tiling/parallelism     | Sub-partitions per tile/bound; higher improves parallelism but adds overhead                  | 12-18                             |
 | `max_spots`        | Post-cap               | Maximum detections per bound to prevent domination by dense regions                           | 8,0000 - 10,000                   |
 ```
+<br>
 
 ### Matching
 ```
@@ -272,6 +273,7 @@ python Rhapso/pipelines/ray/aws/alignment_pipeline.py
 | `regularization_weight`       | RANSAC               | Weight applied to the regularization term                         | 1.0            |
 
 ```
+<br>
 
 ### Solver
 ```
@@ -323,5 +325,5 @@ python Rhapso/pipelines/ray/aws/alignment_pipeline.py
 ---
 
 <br>
-
-## Frequently Asked Questions
+<br>
+<br>
