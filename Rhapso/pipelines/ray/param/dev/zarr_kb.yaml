@@ -1,0 +1,125 @@
+# INTEREST POINT DETECTION
+# -----------------------------------
+
+dsxy: 16
+dsz: 16
+min_intensity: 1
+max_intensity: 5
+sigma: 2
+threshold: 0.005
+file_type: 'zarr'
+xml_file_path_detection: "s3://kb-ipd/rigid-rhapso-matching-output/rhapso-detection.xml"
+image_file_prefix: "s3://kb-ipd/rigid-rhapso-matching-output/"
+xml_output_file_path: &detection_xml_output_file_path "s3://kb-ipd/rigid-rhapso-matching-output/rhapso-detection.xml"
+n5_output_file_prefix: &n5_output_file_prefix "s3://kb-ipd/rigid-rhapso-matching-output/"
+
+combine_distance: 0.5
+chunks_per_bound: 14
+detection_run_type: 'ray'
+max_spots: 8000
+median_filter: 10
+
+# SOLVER
+# -----------------------------------
+
+n5_input_path: *n5_output_file_prefix
+metrics_output_path: "metrics/metrics.json"
+fixed_views:
+  - "timepoint: 0, setup: 0"
+relative_threshold: 3.5
+absolute_threshold: 7.0
+min_matches: 3
+damp: 1.0
+max_iterations: 100000
+max_allowed_error: .inf
+max_plateauwidth: 200
+
+# -- RIGID --
+run_type_solver_rigid: 'rigid'
+xml_file_path_solver_rigid: *detection_xml_output_file_path
+xml_file_path_output_rigid: &rigid_solver_xml_output "s3://kb-ipd/rhapso_save/"
+
+# -- AFFINE --
+run_type_solver_affine: 'affine'
+xml_file_path_solver_affine: *detection_xml_output_file_path
+xml_file_path_output_affine: "s3://kb-ipd/rigid-rhapso-matching-output/rhapso-solver-affine.xml"
+
+# INTEREST POINT MATCHING
+# -----------------------------------
+
+input_type: 'zarr'
+n5_matching_output_path: *n5_output_file_prefix
+
+# -- RIGID --
+match_type_rigid: 'rigid'
+xml_file_path_matching_rigid: *detection_xml_output_file_path
+
+# Candidates
+num_neighbors_rigid: 3
+redundancy_rigid: 0
+significance_rigid: 3
+search_radius_rigid: 300
+num_required_neighbors_rigid: 3
+
+# RANSAC
+model_min_matches_rigid: 18
+inlier_factor_rigid: 100
+lambda_value_rigid: 0.1
+num_iterations_rigid: 10000
+regularization_weight_rigid: 1.0
+
+# -- AFFINE --
+match_type_affine: 'affine'
+xml_file_path_matching_affine: "s3://kb-ipd/rigid-rhapso-matching-output/rhapso-detection.xml"
+
+# Candidates
+num_neighbors_affine: 3
+redundancy_affine: 0
+significance_affine: 3
+search_radius_affine: 100
+num_required_neighbors_affine: 3
+
+# RANSAC
+model_min_matches_affine: 3
+inlier_factor_affine: 30
+lambda_value_affine: 0.05
+num_iterations_affine: 10000
+regularization_weight_affine: 1.0
+
+# EVALUATION
+# -----------------------------------
+
+xml_file: "/Users/ai/Desktop/rhapso_test/TEST5_Rh/aind-open-data/exaSPIM_730223_2025-04-25_14-44-58_alignment_2025-05-13_23-58-19/interest_point_detection/bigstitcher_ip.xml"
+base_path: "/Users/ai/Desktop/s3test/TEST5_Rhcopy/aind-open-data/exaSPIM_730223_2025-04-25_14-44-58_alignment_2025-05-13_23-58-19/interest_point_detection/interestpoints.n5"
+metrics_output_path: "/Users/ai/Desktop/rhapso_test/TEST5_Rh/aind-open-data/exaSPIM_730223_2025-04-25_14-44-58_alignment_2025-05-13_23-58-19/interest_point_detection/metrics.json"
+file_source: 'local'
+xml_bucket_name: null
+
+# KDE
+args:
+  voxel: true
+  voxel_vis: false
+  KDE: true
+KDE_type: null
+bandwidth: null
+view_id: null
+pair: null
+plot: false
+
+# Threshold
+thresholding: false
+min_alignment: null
+max_alignment: null
+minimum_points: null
+maximum_points: null
+minimum_total_matches: null
+maximum_total_matches: null
+max_kde: null
+min_kde: null
+max_cv: null
+min_cv: null
+
+# INTERACTIVE EVALUATION
+# -----------------------------------
+
+file_path: "/Users/ai/Desktop/rhapso_test/TEST5_Rh/aind-open-data/exaSPIM_730223_2025-04-25_14-44-58_alignment_2025-05-13_23-58-19/interest_point_detection/metrics.json"
