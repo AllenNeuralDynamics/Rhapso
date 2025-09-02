@@ -9,6 +9,7 @@ import bioio_tifffile
 import dask.array as da
 import s3fs
 import copy
+import re
 
 """
 Utility class to find interest point match candidates and filter with ransac 
@@ -27,8 +28,7 @@ class CustomBioImage(BioImage):
 class RansacMatching:
     def __init__(self, data_global, num_neighbors, redundancy, significance, num_required_neighbors, match_type, 
                  max_epsilon, min_inlier_ratio, num_iterations, model_min_matches, regularization_weight, 
-                 search_radius, view_registrations, input_type
-        ):
+                 search_radius, view_registrations, input_type, image_file_prefix):
         self.data_global = data_global
         self.num_neighbors = num_neighbors
         self.redundancy = redundancy
@@ -43,6 +43,7 @@ class RansacMatching:
         self.search_radius = search_radius
         self.view_registrations = view_registrations
         self.input_type = input_type
+        self.image_file_prefix = image_file_prefix
     
     def filter_inliers(self, candidates, initial_model):
         max_trust = 4.0
@@ -197,15 +198,39 @@ class RansacMatching:
         
         return is_good, inliers
     
+    def regularize_models(self, affine, rigid):
+        alpha=0.1
+        l1 = 1.0 - alpha
+
+        def to_array(model):
+            return [
+                model['m00'], model['m01'], model['m02'], model['m03'], 
+                model['m10'], model['m11'], model['m12'], model['m13'],  
+                model['m20'], model['m21'], model['m22'], model['m23'], 
+            ]
+
+        afs = to_array(affine)
+        bfs = to_array(rigid)
+        rfs = [l1 * a + alpha * b for a, b in zip(afs, bfs)]
+
+        keys = [
+            'm00', 'm01', 'm02', 'm03',
+            'm10', 'm11', 'm12', 'm13',
+            'm20', 'm21', 'm22', 'm23',
+        ]
+        regularized = dict(zip(keys, rfs))
+
+        return regularized
+    
     def model_regularization(self, point_pairs):
         if self.match_type == "rigid":
             regularized_model = self.fit_rigid_model(point_pairs)
-        elif self.match_type == "affine":
+        elif self.match_type == "affine" or self.match_type == "split-affine":
             rigid_model = self.fit_rigid_model(point_pairs)
             affine_model = self.fit_affine_model(point_pairs)
             regularized_model = (1 - self.regularization_weight) * affine_model + self.regularization_weight * rigid_model
         else:
-            raise ValueError(f"Unsupported match type: {self.match_type}")
+            raise SystemExit(f"Unsupported match type: {self.match_type}")
         
         return regularized_model
     
@@ -215,7 +240,6 @@ class RansacMatching:
         best_model = None
 
         if len(candidates) < self.model_min_matches:
-            print(f"[Warning] Not enough candidates: have {len(candidates)}, need {self.model_min_matches}")
             return [], None
         
         for _ in range(self.num_iterations):
@@ -225,8 +249,8 @@ class RansacMatching:
             try:
                 point_pairs = [(m[1], m[4]) for m in min_matches]
                 regularized_model = self.model_regularization(point_pairs)
-            except Exception:
-                continue  # skip degenerate samples
+            except Exception as e:
+                print(e)
 
             num_inliers = 0
             is_good, tmp_inliers = self.test(candidates, regularized_model, self.max_epsilon, self.min_inlier_ratio, self.model_min_matches)
@@ -294,6 +318,11 @@ class RansacMatching:
             try:
                 neighbor_idxs = indices[i][1:]
                 neighbors = points_array[neighbor_idxs]
+                
+                if len(neighbors) == num_required_neighbors:
+                    idx_sets = [tuple(range(num_required_neighbors))]   
+                elif len(neighbors) > num_required_neighbors:
+                    idx_sets = matcher["neighbors"] 
 
                 relative_vectors = neighbors - basis_point     
 
@@ -304,14 +333,13 @@ class RansacMatching:
                     "neighbors": neighbors,
                     "relative_descriptors": relative_vectors,
                     "matcher": matcher,
-                    # "subsets": np.stack([relative_vectors[list(combo)] for combo in matcher["neighbors"]])
-                    "subsets": np.stack([neighbors[list(combo)] for combo in matcher["neighbors"]])
+                    "subsets": np.stack([neighbors[list(c)] for c in idx_sets])
                 }
 
                 descriptors.append(descriptor)
 
             except Exception as e:
-                print(f"⚠️ Failed to create descriptor for point {i}: {e}")
+                raise
 
         return descriptors
 
@@ -412,8 +440,7 @@ class RansacMatching:
             entry_tp = int(entry.get('timepoint', -1))
 
             if entry_setup == setup_id and entry_tp == tp_id:
-                file_path = entry.get('file_path')
-                
+                file_path = self.image_file_prefix + entry.get('file_path')
                 if self.input_type == "tiff":
                     img = CustomBioImage(file_path, reader=bioio_tifffile.Reader)
                     dask_array = img.get_dask_stack()[0, 0, 0, :, :, :]
@@ -469,11 +496,16 @@ class RansacMatching:
         points_a = list(enumerate(points_a))  
         points_b = list(enumerate(points_b))
 
+        if not points_a or not points_b:
+            return [], []
+
         # Check points_a against view_b's interval
         overlapping_a = []
         tinv_b = self.invert_transformation_matrix(view_b)
-        dim_b = self.get_tile_dims(view_b)
-        interval_b = {'min': (0, 0, 0), 'max': dim_b}
+
+        view_b_key = tuple(map(int, re.findall(r'\d+', view_b)))
+        dim_b = self.data_global['viewSetup']['byId'][view_b_key[1]]
+        interval_b = {'min': (0, 0, 0), 'max': dim_b['size']}
 
         for i in reversed(range(len(points_a))):
             idx, point = points_a[i]
@@ -490,8 +522,10 @@ class RansacMatching:
         # Check points_b against view_a's interval
         overlapping_b = []
         tinv_a = self.invert_transformation_matrix(view_a)
-        dim_a = self.get_tile_dims(view_a)
-        interval_a = {'min': (0, 0, 0), 'max': dim_a}
+
+        view_a_key = tuple(map(int, re.findall(r'\d+', view_a)))
+        dim_a = self.data_global['viewSetup']['byId'][view_a_key[1]]
+        interval_a = {'min': (0, 0, 0), 'max': dim_a['size']}
 
         for i in reversed(range(len(points_b))):
             idx, point = points_b[i]

@@ -3,9 +3,8 @@ This class updates tiles for grouping, flipping point matches, and weights
 """
 
 class ComputeTiles:
-    def __init__(self, pmc, fixed_views, view_id_set):
+    def __init__(self, pmc, view_id_set):
         self.pmc = pmc
-        self.fixed_views = fixed_views
         self.view_id_set = view_id_set
     
     def flip_matches(self, matches):
@@ -129,14 +128,15 @@ class ComputeTiles:
             key = f"timepoint: {tp}, setup: {setup}"
             tile = map[key]
             
-            if key in self.fixed_views and tile not in tc['fixed_tiles']:
-                fixed_group = self.is_contained(key, group)  # For grouping / split affine 
-                tc['fixed_tiles'].append(tile)
+            # if key in self.fixed_views and tile not in tc['fixed_tiles']:
+            #     fixed_group = self.is_contained(key, group)  # For grouping / split affine 
+            #     tc['fixed_tiles'].append(tile)
             
             tiles.append(tile)
         
         for tile in tiles:
-            if len(tile['connected_tiles']) > 0 or tile in tc['fixed_tiles']:
+            if len(tile['connected_tiles']) > 0:
+            # if len(tile['connected_tiles']) > 0 or tile in tc['fixed_tiles']:
                 tc['tiles'].append(tile)
         
         return tc

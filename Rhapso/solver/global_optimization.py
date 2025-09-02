@@ -7,10 +7,9 @@ This class creates alignment matrices to represent proper alignment of tiles
 """
 
 class GlobalOptimization:
-    def __init__(self, tiles, fixed_views, relative_threshold, absolute_threshold, min_matches, 
+    def __init__(self, tiles, relative_threshold, absolute_threshold, min_matches, 
                  damp, max_iterations, max_allowed_error, max_plateauwidth, run_type, metrics_output_path):
         self.tiles = tiles
-        self.fixed_views = fixed_views
         self.relative_threshold = relative_threshold
         self.absolute_threshold = absolute_threshold
         self.min_matches = min_matches
@@ -324,6 +323,7 @@ class GlobalOptimization:
 
         afs = to_array(affine)
         bfs = to_array(rigid)
+
         rfs = [l1 * a + alpha * b for a, b in zip(afs, bfs)]
 
         keys = [
@@ -384,8 +384,8 @@ class GlobalOptimization:
                 return
             
             for tile in self.tiles:
-                if tile['view'] in self.fixed_views:
-                    continue
+                # if tile['view'] in self.fixed_views:
+                #     continue
                 
                 self.fit(tile)
                 self.apply_damp(tile)

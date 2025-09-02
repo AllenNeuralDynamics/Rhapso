@@ -5,11 +5,12 @@ import json
 import base64, json
 from pathlib import Path
 
-with open("Rhapso/pipelines/ray/param/exaSPIM_720164.yml", "r") as file:
+with open("Rhapso/pipelines/ray/param/dev/zarr_local_sean.yml", "r") as file:
     config = yaml.safe_load(file)
 
 serialized_config = base64.b64encode(json.dumps(config).encode()).decode()
 
+# Detection run command
 detection_cmd = (
     "bash -lc \""
     "python3 - <<\\\"PY\\\"\n"
@@ -32,6 +33,7 @@ detection_cmd = (
     "\""
 )
 
+# Rigid Matching run command
 matching_cmd_rigid = (
     "bash -lc \""
     "python3 - <<\\\"PY\\\"\n"
@@ -52,13 +54,15 @@ matching_cmd_rigid = (
     "    inlier_factor=cfg[\\\"inlier_factor_rigid\\\"],\n"
     "    lambda_value=cfg[\\\"lambda_value_rigid\\\"],\n"
     "    num_iterations=cfg[\\\"num_iterations_rigid\\\"],\n"
-    "    regularization_weight=cfg[\\\"regularization_weight_rigid\\\"]\n"
+    "    regularization_weight=cfg[\\\"regularization_weight_rigid\\\"],\n"
+    "    image_file_prefix=cfg[\\\"image_file_prefix\\\"]\n"
     ")\n"
     "ipm.run()\n"
     "PY\n"
     "\""
 )
 
+# Affine matching run command
 matching_cmd_affine = (
     "bash -lc \""
     "python3 - <<\\\"PY\\\"\n"
@@ -79,19 +83,48 @@ matching_cmd_affine = (
     "    inlier_factor=cfg[\\\"inlier_factor_affine\\\"],\n"
     "    lambda_value=cfg[\\\"lambda_value_affine\\\"],\n"
     "    num_iterations=cfg[\\\"num_iterations_affine\\\"],\n"
-    "    regularization_weight=cfg[\\\"regularization_weight_affine\\\"]\n"
+    "    regularization_weight=cfg[\\\"regularization_weight_affine\\\"],\n"
+    "    image_file_prefix=cfg[\\\"image_file_prefix\\\"]\n"
     ")\n"
     "ipm.run()\n"
     "PY\n"
     "\""
 )
 
-# SOLVER RIGID
+# Split affine matching run command
+matching_cmd_split_affine = (
+    "bash -lc \""
+    "python3 - <<\\\"PY\\\"\n"
+    "import json, base64\n"
+    "from Rhapso.pipelines.ray.interest_point_matching import InterestPointMatching\n"
+    f"cfg = json.loads(base64.b64decode(\\\"{serialized_config}\\\").decode())\n"
+    "ipm = InterestPointMatching(\n"
+    "    xml_input_path=cfg[\\\"xml_file_path_matching_split_affine\\\"],\n"
+    "    n5_output_path=cfg[\\\"n5_matching_output_path\\\"],\n"
+    "    input_type=cfg[\\\"input_type\\\"],\n"
+    "    match_type=cfg[\\\"match_type_split_affine\\\"],\n"
+    "    num_neighbors=cfg[\\\"num_neighbors_split_affine\\\"],\n"
+    "    redundancy=cfg[\\\"redundancy_split_affine\\\"],\n"
+    "    significance=cfg[\\\"significance_split_affine\\\"],\n"
+    "    search_radius=cfg[\\\"search_radius_split_affine\\\"],\n"
+    "    num_required_neighbors=cfg[\\\"num_required_neighbors_split_affine\\\"],\n"
+    "    model_min_matches=cfg[\\\"model_min_matches_split_affine\\\"],\n"
+    "    inlier_factor=cfg[\\\"inlier_factor_split_affine\\\"],\n"
+    "    lambda_value=cfg[\\\"lambda_value_split_affine\\\"],\n"
+    "    num_iterations=cfg[\\\"num_iterations_split_affine\\\"],\n"
+    "    regularization_weight=cfg[\\\"regularization_weight_split_affine\\\"],\n"
+    "    image_file_prefix=cfg[\\\"image_file_prefix\\\"]\n"
+    ")\n"
+    "ipm.run()\n"
+    "PY\n"
+    "\""
+)
+
+# Rigid solver run command
 solver_rigid = Solver(
     xml_file_path_output=config['xml_file_path_output_rigid'],
     n5_input_path=config['n5_input_path'],
     xml_file_path=config['xml_file_path_solver_rigid'],
-    fixed_views=config['fixed_views'],
     run_type=config['run_type_solver_rigid'],   
     relative_threshold=config['relative_threshold'],
     absolute_threshold=config['absolute_threshold'],
@@ -103,12 +136,11 @@ solver_rigid = Solver(
     metrics_output_path=config['metrics_output_path'],
 )
 
-# SOLVER AFFINE
+# Affine solver run command
 solver_affine = Solver(
     xml_file_path_output=config['xml_file_path_output_affine'],
     n5_input_path=config['n5_input_path'],
-    xml_file_path=config['xml_file_path_solver_rigid'],
-    fixed_views=config['fixed_views'],
+    xml_file_path=config['xml_file_path_solver_affine'],
     run_type=config['run_type_solver_affine'],  
     relative_threshold=config['relative_threshold'],
     absolute_threshold=config['absolute_threshold'],
@@ -138,6 +170,7 @@ try:
     solver_rigid.run()
     exec_on_cluster("Matching (affine)", unified_yml, matching_cmd_affine, prefix)
     solver_affine.run()
+    # exec_on_cluster("Matching (split_affine)", unified_yml, matching_cmd_split_affine, prefix)
     print("\n✅ Pipeline complete.")
 except subprocess.CalledProcessError as e:
     print(f"❌ Pipeline error: {e}")

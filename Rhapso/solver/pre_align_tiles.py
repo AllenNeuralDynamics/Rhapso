@@ -1,4 +1,5 @@
 import numpy as np
+import random
 
 """
 Utility class to roughly align p1 with p2 to speed up global optimization rounds
@@ -248,6 +249,8 @@ class PreAlignTiles:
             self.apply_model_in_place(match['p1']['w'], model)  
                 
     def pre_align(self, tiles):
+        random.shuffle(tiles['tiles'])
+
         unaligned_tiles = []
         aligned_tiles = []
 

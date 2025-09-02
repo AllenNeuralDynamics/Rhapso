@@ -163,10 +163,11 @@ class DifferenceOfGaussian:
         # strict local maxima vs 26 neighbors (exclude center)
         fp = np.ones((3, 3, 3), dtype=bool)
         fp[1, 1, 1] = False
-        neigh_max = maximum_filter(L, footprint=fp, mode="nearest")
+        neigh_max = maximum_filter(L, footprint=fp, mode="reflect")
         strict_max = L > neigh_max
 
-        strong = np.abs(L) >= float(min_initial_peak_value)
+        strong = L >= float(min_initial_peak_value)
+        # strong = np.abs(L) >= float(min_initial_peak_value)
 
         cand = interior & strict_max & strong
         if not cand.any():
@@ -177,7 +178,7 @@ class DifferenceOfGaussian:
 
     def apply_gaussian_blur(self, img, sigma):
         sigma = tuple(float(s) for s in sigma)
-        blurred_image = gaussian_filter(img, sigma=sigma, mode='mirror')
+        blurred_image = gaussian_filter(img, sigma=sigma, mode='reflect')
         
         return blurred_image
     
@@ -251,7 +252,7 @@ class DifferenceOfGaussian:
         blurred_image_2 = self.apply_gaussian_blur(input_float, sigma_2)
 
         # subtract blurred images
-        dog = (blurred_image_2 - blurred_image_1) * k_min_1_inv
+        dog = (blurred_image_1 - blurred_image_2) * k_min_1_inv
 
         # get all peaks
         peaks = self.find_peaks(dog, min_initial_peak_value)
@@ -261,20 +262,39 @@ class DifferenceOfGaussian:
          
         return final_peak_values
 
+    # def background_subtract_xy(self, image_chunk):
+    #     r = int(self.median_filter or 0)
+    #     img = image_chunk.astype(np.float32, copy=False)
+    #     if r <= 0:
+    #         return img
+    #     k = 2*r + 1
+    #     bg = median_filter(img, size=(k, k, 1), mode='nearest')  # X,Y,Z -> XY-only
+    #     return img - bg
+
     def background_subtract_xy(self, image_chunk):
         r = int(self.median_filter or 0)
         img = image_chunk.astype(np.float32, copy=False)
         if r <= 0:
             return img
-        k = 2*r + 1
-        bg = median_filter(img, size=(k, k, 1), mode='nearest')  # X,Y,Z -> XY-only
-        return img - bg
+
+        k = 2 * r + 1
+
+        # 1) Add XY border (reflect), no padding in Z
+        pad = ((r, r), (r, r), (0, 0))
+        img_pad = np.pad(img, pad, mode='reflect')
+
+        # 2) Median background on padded image (XY-only)
+        bg = median_filter(img_pad, size=(k, k, 1), mode='reflect')
+
+        # 3) Subtract and crop back to original core
+        sub = img_pad - bg
+        return sub[r:-r, r:-r, :]
 
     def run(self, image_chunk, offset, lb):
         """
         Executes the entry point of the script.
         """
-        # image_chunk = self.background_subtract_xy(image_chunk)
+        image_chunk = self.background_subtract_xy(image_chunk)
         peaks = self.compute_difference_of_gaussian(image_chunk)
 
         if peaks.size == 0:
@@ -282,7 +302,7 @@ class DifferenceOfGaussian:
             final_peaks = peaks
 
         else:
-            intensities = map_coordinates(image_chunk, peaks.T, order=1, mode='nearest')
+            intensities = map_coordinates(image_chunk, peaks.T, order=1, mode='reflect')
             final_peaks = self.apply_lower_bounds(peaks, lb)
             final_peaks = self.apply_offset(final_peaks, offset)
             final_peaks = self.upsample_coordinates(final_peaks)

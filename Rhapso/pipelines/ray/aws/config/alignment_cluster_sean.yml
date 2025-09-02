@@ -1,6 +1,6 @@
-cluster_name: rhapso-ray-alignment-cluster-sean-003312
-max_workers: 10
-min_workers: 10
+cluster_name: rhapso-ray-alignment-cluster-sean-0033120
+max_workers: 5
+min_workers: 5
 
 provider:
   type: aws
