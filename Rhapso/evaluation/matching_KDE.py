@@ -33,25 +33,32 @@ class MatchingKDE:
         points = []
         for view, matches in self.data.items():
             for match in matches:
-                points.append(match["p1"].tolist())
-                points.append(match["p2"].tolist())
-
+                points.append([match["p1"].tolist(), match["p2"].tolist()])
         return points
 
     def get_matches_from_view(self):
         points = []
         for match in self.data[self.view_id]:
-            points.append(match["p1"].tolist())
-            points.append(match["p2"].tolist())
+            points.append([match["p1"].tolist(), match["p2"].tolist()])
         return points
+
+    def compute_distances(self, data):
+        print("Input shape:", data.shape)
+        # Compute Euclidean distances between each pair of 3D points
+        distances = np.linalg.norm(data[:, 0, :] - data[:, 1, :], axis=1)
+        print(distances)
+        print("Computed distances:", distances)
+        return distances.reshape(-1, 1)
 
     def kde(self, matches):
         # Compute Scott's Rule bandwidth
-        n, d = np.array(matches).shape
+        n, d = np.array(matches[0]).shape
         if not self.bandwidth:
             self.bandwidth = np.power(n, -1.0 / (d + 4))
 
-        data_scaled = StandardScaler().fit_transform(matches)
+        distances = self.compute_distances(matches)
+
+        data_scaled = StandardScaler().fit_transform(distances)
 
         kde_model = KernelDensity(kernel="gaussian", bandwidth=self.bandwidth).fit(
             data_scaled

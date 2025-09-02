@@ -11,18 +11,18 @@ class S3BigStitcherReader:
            self.s3_uri = s3_uri
            self.local_directory = local_directory
     
-    def download_n5_from_s3_to_local( s3_uri, local_dir):
+    def download_n5_from_s3_to_local(self):
         """
         Recursively download an N5 dataset from S3 to a local directory.
         """
         s3 = s3fs.S3FileSystem(anon=False)
-        s3_path = s3_uri.replace("s3://", "")
+        s3_path = self.s3_uri.replace("s3://", "")
         all_keys = s3.find(s3_path, detail=True)
 
         for key, obj in all_keys.items():
             if obj["type"] == "file":
                 rel_path = key.replace(s3_path + "/", "")
-                local_file_path = os.path.join(local_dir, rel_path)
+                local_file_path = os.path.join(self.local_directory, rel_path)
                 os.makedirs(os.path.dirname(local_file_path), exist_ok=True)
                 s3.get(key, local_file_path)
 
@@ -40,10 +40,10 @@ class S3BigStitcherReader:
                                         json.dump(attributes_data, f, indent=2)
 
     def run(self):
-        self.download_n5_from_s3_to_local(self.s3_uri, self.local_dir)
+        self.download_n5_from_s3_to_local()
 
         s3_path = self.s3_uri.replace("s3://", "")
-        full_local_path = os.path.join(self.local_dir, s3_path)
+        full_local_path = os.path.join(self.local_directory, s3_path)
 
         # Final paths
         xml_input_path = os.path.join(full_local_path, "bigstitcher_ip.xml")

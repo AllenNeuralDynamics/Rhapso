@@ -1,3 +1,5 @@
+from Rhapso.CLI.eval import MetricReviewCLI
+from Rhapso.pipelines.accuracy_metrics.matching_stats_pipeline import StatsPipeline
 from Rhapso.pipelines.ray.interest_point_detection import InterestPointDetection
 from Rhapso.pipelines.ray.interest_point_matching import InterestPointMatching
 from Rhapso.pipelines.ray.solver import Solver
@@ -99,8 +101,43 @@ solver_affine = Solver(
     max_plateauwidth=config['max_plateauwidth'],
 )
 
+eval_stats = StatsPipeline(
+    args = config['args'],
+    xml_file = config['xml_file'],
+    base_path = config['base_path'],
+    metrics_output_path = config['metrics_output_path'],
+    KDE_type = config['KDE_type'],
+    bandwidth = config['bandwidth'], 
+    view_id = config['view_id'], 
+    pair = config['pair'], 
+    plot = config['plot'],
+    thresholding= config['thresholding'],
+    min_alignment= config['min_alignment'],
+    max_alignment= config['max_alignment'], 
+    minimum_points= config['minimum_points'], 
+    maximum_points= config['maximum_points'], 
+    minimum_total_matches= config['minimum_total_matches'], 
+    maximum_total_matches= config['maximum_total_matches'], 
+    max_kde= config['max_kde'],
+    min_kde= config['min_kde'], 
+    max_cv= config['max_cv'],
+    min_cv= config['min_cv']
+    )
+
+evaluation = MetricReviewCLI(
+    file_path=config['file_path'],
+    matching_affine=interest_point_matching_affine,
+    solve_affine=solver_affine, 
+    matching_rigid=interest_point_matching_rigid, 
+    solve_rigid=solver_rigid)
+
+
 interest_point_detection.run()
 interest_point_matching_rigid.run()
 solver_rigid.run()
 interest_point_matching_affine.run()
 solver_affine.run()
+eval_stats.run()
+# Interactive Evaluation
+evaluation.run()
+

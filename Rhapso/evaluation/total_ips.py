@@ -4,8 +4,7 @@ import numpy as np
 import pandas as pd
 import s3fs
 import zarr
-
-from Rhapso.accuracy_metrics.save_metrics import JSONFileHandler
+from Rhapso.evaluation.save_metrics import JSONFileHandler
 from Rhapso.data_prep.xml_to_dataframe import XMLToDataFrame
 
 
@@ -14,7 +13,6 @@ class DetectionOutput:
         self.base_path = base_path
         self.xml_file_path = xml_file_path
         self.output_path = output_path
-        self.view_setup_timepoint_array = self.load_dataframe()
         self.count_ips = 0
 
     def initialize_store(self, path):
@@ -24,12 +22,17 @@ class DetectionOutput:
         else:
             return zarr.N5Store(path)
 
-    def fetch_local_xml(self, file_path):
-        with open(file_path, "r", encoding="utf-8") as file:
-            return file.read()
+    def fetch_xml(self, file_path):
+        if file_path.startswith("s3://"):
+            s3 = s3fs.S3FileSystem(anon=False)
+            with s3.open(file_path, "r") as file:
+                return file.read()
+        else:
+            with open(file_path, "r", encoding="utf-8") as file:
+                return file.read()
 
     def load_dataframe(self):
-        xml_file = self.fetch_local_xml(self.xml_file_path)
+        xml_file = self.fetch_xml(self.xml_file_path)
         processor = XMLToDataFrame(xml_file)
         dataframes = processor.run()
         df = pd.DataFrame(dataframes["image_loader"])
@@ -39,15 +42,18 @@ class DetectionOutput:
         if full_path.startswith("s3://"):
             s3 = s3fs.S3FileSystem(anon=False)
             store = s3fs.S3Map(root=full_path, s3=s3)
-            zarray = zarr.open_array(store, mode="r")
-            data = zarray[:]
+            # Check if it's a valid Zarr array
+            try:
+                zarray = zarr.open_array(store, mode="r")
+                data = zarray[:]
+            except zarr.errors.ArrayNotFoundError:
+                print(f"Zarr array not found at: {full_path}")
+                return
         else:
             full_path = full_path.rstrip("/")
             components = full_path.split("/")
             try:
-                n5_index = next(
-                    i for i, c in enumerate(components) if c.endswith(".n5")
-                )
+                n5_index = next(i for i, c in enumerate(components) if c.endswith(".n5"))
             except StopIteration:
                 raise ValueError("No .n5 directory found in path")
 
@@ -66,18 +72,12 @@ class DetectionOutput:
         self.count_ips += len(data)
 
     def run(self):
+        self.view_setup_timepoint_array = self.load_dataframe()
         for view_id in self.view_setup_timepoint_array:
             view = view_id.tolist()
-            path = f"{self.base_path}/tpId_{view[1]}_viewSetupId_{view[0]}/beads/interestpoints/loc"
+            path = f"{self.base_path}/tpId_{view[1]}_viewSetupId_{view[0]}/beads/interestpoints/loc/"
             self.read_detection_output(path)
 
         saveJSON = JSONFileHandler(self.output_path)
         saveJSON.update("Total IPS", self.count_ips)
 
-
-analyzer = DetectionOutput(
-    base_path="/Users/ai/Downloads/IP_TIFF_XML/interestpoints.n5",
-    xml_file_path="/Users/ai/Downloads/IP_TIFF_XML/dataset.xml",
-    output_path="/Users/ai/Downloads/IP_TIFF_XML/metrics.json",
-)
-analyzer.run()

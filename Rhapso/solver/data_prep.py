@@ -72,7 +72,7 @@ class DataPrep():
             path = root + "interestpoints.n5"
             store = s3fs.S3Map(root=path, s3=s3)
         else:
-            store = zarr.N5Store('/interestpoints.n5')
+            store = zarr.N5Store(self.n5_input_prep +'/interestpoints.n5')
 
         root = zarr.open(store, mode='r')
 
@@ -134,7 +134,8 @@ class DataPrep():
             path = root + "interestpoints.n5"
             store = s3fs.S3Map(root=path, s3=s3)
         else:
-            store = zarr.N5Store(self.data_prefix)
+            path = self.n5_input_prep +'/interestpoints.n5'
+            store = zarr.N5Store(path)
 
         root = zarr.open(store, mode='r')
 
