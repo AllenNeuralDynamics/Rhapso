@@ -1,6 +1,7 @@
 import numpy as np
 import copy
 import math
+from Rhapso.evaluation.save_metrics import JSONFileHandler
 
 """
 This class creates alignment matrices to represent proper alignment of tiles
@@ -40,7 +41,7 @@ class GlobalOptimization:
             'var': 0,
             'var_0': 0,     
         }
-        # self.save_metrics = JSONFileHandler(self.metrics_output_path)
+        self.save_metrics = JSONFileHandler(self.metrics_output_path)
     
     def update_observer(self, new_value):
         obs = self.observer
@@ -119,14 +120,14 @@ class GlobalOptimization:
         # print( f"({datetime.datetime.now()}): Max Error: {max_error}px")
         # print( f"({datetime.datetime.now()}): Mean Error: {average_error}px")  
 
-        # self.save_metrics.update(
-        #     "alignment errors",
-        #     {
-        #         "min_error": min_error,
-        #         "max_error": max_error,
-        #         "mean_error": average_error,
-        #     },
-        # )  
+        self.save_metrics.update(
+            "alignment errors",
+            {
+                "min_error": min_error,
+                "max_error": max_error,
+                "mean_error": average_error,
+            },
+        )  
         
         return average_error 
 
