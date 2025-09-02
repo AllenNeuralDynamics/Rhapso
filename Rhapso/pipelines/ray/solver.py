@@ -13,12 +13,11 @@ This class implements the Solver pipeline
 """
 
 class Solver:
-    def __init__(self, xml_file_path_output, n5_input_path, xml_file_path, fixed_views, run_type, relative_threshold, absolute_threshold, 
+    def __init__(self, xml_file_path_output, n5_input_path, xml_file_path, run_type, relative_threshold, absolute_threshold, 
                  min_matches, damp, max_iterations, max_allowed_error, max_plateauwidth, metrics_output_path):
         self.xml_file_path_output = xml_file_path_output
         self.n5_input_path = n5_input_path
         self.xml_file_path = xml_file_path
-        self.fixed_views = fixed_views
         self.run_type = run_type
         self.relative_threshold = relative_threshold
         self.absolute_threshold = absolute_threshold
@@ -53,7 +52,7 @@ class Solver:
         print("Transforms models have been created")
 
         # Get data from n5 folders
-        data_prep = DataPrep(dataframes['view_interest_points'], view_transform_matrices, self.fixed_views, self.xml_file_path,
+        data_prep = DataPrep(dataframes['view_interest_points'], view_transform_matrices, self.xml_file_path,
                              self.n5_input_path)
         connected_views, corresponding_interest_points, interest_points, label_map_global, view_id_set = data_prep.run()
         print("Data prep is complete")
@@ -61,11 +60,11 @@ class Solver:
         # Create models, tiles, and point matches
         model_and_tile_setup = ModelAndTileSetup(connected_views, corresponding_interest_points, interest_points, 
                                                 view_transform_matrices, view_id_set, label_map_global)
-        model, pmc = model_and_tile_setup.run()
+        pmc = model_and_tile_setup.run()
         print("Models and tiles created")
 
         # Find point matches and save to each tile
-        compute_tiles = ComputeTiles(pmc, self.fixed_views, view_id_set)
+        compute_tiles = ComputeTiles(pmc, view_id_set)
         tiles = compute_tiles.run()
         print("Tiles are computed")
 
@@ -75,13 +74,13 @@ class Solver:
         print("Tiles are pre-aligned")
 
         # Update all points with transform models and iterate through all tiles (views) and optimize alignment
-        global_optimization = GlobalOptimization(tc, self.fixed_views, self.relative_threshold, self.absolute_threshold, self.min_matches, self.damp, 
+        global_optimization = GlobalOptimization(tc, self.relative_threshold, self.absolute_threshold, self.min_matches, self.damp, 
                                                  self.max_iterations, self.max_allowed_error, self.max_plateauwidth, self.run_type, self.metrics_output_path)
-        tiles = global_optimization.run()
+        tiles, validation_stats = global_optimization.run()
         print("Global optimization complete")
 
         # Save results to xml - one new affine matrix per view registration
-        save_results = SaveResults(tiles, xml_file, self.xml_file_path_output, self.fixed_views, self.run_type)
+        save_results = SaveResults(tiles, xml_file, self.xml_file_path_output, self.run_type, validation_stats, self.n5_input_path)
         save_results.run()
         print("Results have been saved")
     

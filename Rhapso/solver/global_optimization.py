@@ -8,10 +8,9 @@ This class creates alignment matrices to represent proper alignment of tiles
 """
 
 class GlobalOptimization:
-    def __init__(self, tiles, fixed_views, relative_threshold, absolute_threshold, min_matches, 
+    def __init__(self, tiles, relative_threshold, absolute_threshold, min_matches, 
                  damp, max_iterations, max_allowed_error, max_plateauwidth, run_type, metrics_output_path):
         self.tiles = tiles
-        self.fixed_views = fixed_views
         self.relative_threshold = relative_threshold
         self.absolute_threshold = absolute_threshold
         self.min_matches = min_matches
@@ -21,8 +20,27 @@ class GlobalOptimization:
         self.max_plateauwidth = max_plateauwidth
         self.run_type = run_type
         self.metrics_output_path = metrics_output_path
-        self.observer = {}
-
+        self.validation_stats = {
+            'solve_metrics_per_tile': {
+                'i': 0,
+                'stats': []
+            }
+        }
+        self.observer = {
+            'max': 0,
+            'mean': 0,
+            'median': 0,
+            'min': float('inf'),
+            'slope': [],
+            'sorted_values': [],
+            'square_differences': 0,
+            'squares': 0,
+            'std': 0,
+            'std_0': 0,
+            'values': [],
+            'var': 0,
+            'var_0': 0,     
+        }
         self.save_metrics = JSONFileHandler(self.metrics_output_path)
     
     def update_observer(self, new_value):
@@ -306,6 +324,7 @@ class GlobalOptimization:
 
         afs = to_array(affine)
         bfs = to_array(rigid)
+
         rfs = [l1 * a + alpha * b for a, b in zip(afs, bfs)]
 
         keys = [
@@ -357,23 +376,6 @@ class GlobalOptimization:
         Iteratively refines tile alignments using model fitting and dampening until convergence or max iterations.
         """
         i = 0
-        
-        self.observer = {
-            'max': 0,
-            'mean': 0,
-            'median': 0,
-            'min': float('inf'),
-            'slope': [],
-            'sorted_values': [],
-            'square_differences': 0,
-            'squares': 0,
-            'std': 0,
-            'std_0': 0,
-            'values': [],
-            'var': 0,
-            'var_0': 0,     
-        }
-
         proceed = i < self.max_iterations
         self.apply()
 
@@ -383,14 +385,20 @@ class GlobalOptimization:
                 return
             
             for tile in self.tiles:
-                if tile['view'] in self.fixed_views:
-                    continue
+                # if tile['view'] in self.fixed_views:
+                #     continue
                 
                 self.fit(tile)
                 self.apply_damp(tile)
 
             error = self.update_errors()
             self.update_observer(error)
+
+            # before appending, ensure the nested dict/list exist
+            self.validation_stats.setdefault('solver_metrics_per_tile', {}).setdefault('stats', []).append({
+                'iteration': i,
+                'observer': copy.deepcopy(self.observer),
+            })
 
             if i > self.max_plateauwidth:
                 proceed = error > self.max_allowed_error
@@ -436,4 +444,4 @@ class GlobalOptimization:
         # self.tiles = [match_length_to_tile[match_len] for match_len in target_match_order]
 
         self.compute_tiles()
-        return self.tiles
+        return self.tiles, self.validation_stats

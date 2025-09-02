@@ -9,7 +9,6 @@ class PointsValidation:
         self.consolidated_data = consolidated_data
 
     def validation_suite(self):
-        
         # Print total points found
         total_points = sum(len(points) for points in self.consolidated_data.values())
         print(f"\nTotal Interest Points Found: {total_points}")
@@ -18,18 +17,13 @@ class PointsValidation:
         for view_id, points in self.consolidated_data.items():
 
             # Sort points by index
-            sorted_points = sorted(points, key=lambda x: x[0][2])  # x[1] is the (z,x,y) index to sort by
+            sorted_points = sorted(points, key=lambda x: x[0][2])  # x[1] is the (x,y,z) index to sort by
 
             if len(sorted_points) == 0:
                 print(f"\nView ID: {view_id} | Num points: 0")
                 print("\n--- Detection Stats ---")
                 print("No points found for this view.\n")
                 continue
-            
-            # Print points per view
-            print(f"\nView ID: {view_id} | Num points: {len(sorted_points)}")
-            # for coord, intensity in sorted_points:
-            #     print(f"{coord}")
 
             coords = np.array([p[0] for p in sorted_points])
             intensities = np.array([p[1] for p in sorted_points])

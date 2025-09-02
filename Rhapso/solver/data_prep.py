@@ -8,12 +8,11 @@ This class fetches and preps n5 interest points data
 """
 
 class DataPrep():
-    def __init__(self, interest_points_df, view_transform_matrices, fixed_views, xml_file_path, n5_input_prep):
+    def __init__(self, interest_points_df, view_transform_matrices, xml_file_path, n5_input_path):
         self.interest_points_df = interest_points_df
         self.view_transform_matrices = view_transform_matrices
-        self.fixed_views = fixed_views
         self.xml_file_path = xml_file_path
-        self.n5_input_prep = n5_input_prep
+        self.n5_input_path = n5_input_path
 
         self.connected_views = {} 
         self.corresponding_interest_points = {}
@@ -27,35 +26,31 @@ class DataPrep():
         for _, row in self.interest_points_df.iterrows():
             view_id = f"timepoint: {row['timepoint']}, setup: {row['setup']}"
 
-            if self.xml_file_path.startswith("s3://"):
+            if self.n5_input_path.startswith("s3://"):
                 s3 = s3fs.S3FileSystem(anon=False)
-                root = self.n5_input_prep.replace("s3://", "", 1)
+                root = self.n5_input_path.replace("s3://", "", 1)
                 path = root + "interestpoints.n5"
                 store = s3fs.S3Map(root=path, s3=s3)
                 root = zarr.open(store, mode='r')
                 correspondences_key = f"{row['path']}/correspondences"
 
-                if correspondences_key in root:
-                    self.connected_views[view_id] = root[correspondences_key].attrs['idMap']
-                else:
-                    print(f"Attributes file not found for view {view_id}: {path}")
-
             else:
-                correspondences_key = f"{row['path']}/correspondences/attributes.json"
-                full_path = os.path.join('/interestpoints.n5', correspondences_key)
+                n5_root = os.path.join(self.n5_input_path, "interestpoints.n5")
+                store = zarr.N5Store(n5_root)
+                root = zarr.open(store, mode="r")
+                correspondences_key = f"{row['path']}/correspondences"
 
-                if os.path.exists(full_path):
-                    with open(full_path, 'r') as file:
-                        data = json.load(file)
-                        self.connected_views[view_id] = data.get('idMap', {})
-                else:
-                    print(f"Attributes file not found for view {view_id}: {full_path}")
+            if correspondences_key in root:
+                self.connected_views[view_id] = root[correspondences_key].attrs["idMap"]
+            else:
+                print(f"Attributes file not found for view {view_id}")
     
     def load_json_data(self, json_path):
         try:
-            if not os.path.exists(json_path):
+            path = self.n5_input_path + json_path
+            if not os.path.exists(path):
                 return {}
-            with open(json_path, 'r') as f:
+            with open(path, 'r') as f:
                 obj = json.load(f)
             id_map = obj.get('idMap', {})
             return id_map if isinstance(id_map, dict) else {}
@@ -66,23 +61,24 @@ class DataPrep():
         """
         Parses and transforms corresponding interest point data from N5 format into world space coordinates.
         """
-        if self.xml_file_path.startswith("s3://"):
+        if self.n5_input_path.startswith("s3://"):
             s3 = s3fs.S3FileSystem(anon=False)
-            root = self.n5_input_prep.replace("s3://", "", 1)
+            root = self.n5_input_path.replace("s3://", "", 1)
             path = root + "interestpoints.n5"
             store = s3fs.S3Map(root=path, s3=s3)
         else:
-            store = zarr.N5Store(self.n5_input_prep +'/interestpoints.n5')
+            path = self.n5_input_path + "interestpoints.n5"
+            store = zarr.N5Store(path)
 
         root = zarr.open(store, mode='r')
 
         for _, row in self.interest_points_df.iterrows():
             view_id = f"timepoint: {row['timepoint']}, setup: {row['setup']}"  
             correspondences_prefix = f"{row['path']}/correspondences"
-            attributes_path = '/interestpoints.n5' + f"/{row['path']}/correspondences/attributes.json"
+            attributes_path = 'interestpoints.n5' + f"/{row['path']}/correspondences/attributes.json"
 
             # Load JSON data for idMap
-            if self.xml_file_path.startswith("s3://"):
+            if self.n5_input_path.startswith("s3://"):
                 try:
                     id_map = root[correspondences_prefix].attrs['idMap']
                 except Exception:
@@ -97,8 +93,6 @@ class DataPrep():
             except (KeyError, FileNotFoundError, AttributeError, TypeError):
                 print(f"⚠️ Skipping {view_id}: missing correspondences.")
                 continue
-                
-            interest_points_index_map = root[correspondences_prefix + '/data'][:]
 
             # Load corresponding interest points data
             for ip_index, corr_index, corr_group_id in interest_points_index_map:
@@ -128,13 +122,13 @@ class DataPrep():
         """
         Loads raw interest point coordinates from N5 storage into memory, keyed by view ID.
         """
-        if self.xml_file_path.startswith("s3://"):
+        if self.n5_input_path.startswith("s3://"):
             s3 = s3fs.S3FileSystem(anon=False)
-            root = self.n5_input_prep.replace("s3://", "", 1)
+            root = self.n5_input_path.replace("s3://", "", 1)
             path = root + "interestpoints.n5"
             store = s3fs.S3Map(root=path, s3=s3)
         else:
-            path = self.n5_input_prep +'/interestpoints.n5'
+            path = self.n5_input_path + "interestpoints.n5"
             store = zarr.N5Store(path)
 
         root = zarr.open(store, mode='r')

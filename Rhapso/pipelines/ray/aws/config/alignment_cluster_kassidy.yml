@@ -1,6 +1,6 @@
-cluster_name: rhapso-cluster-matching-sean-10202121
-max_workers: 6
-min_workers: 6
+cluster_name: ray-cluster-rhapso-alignment-kassidy-01
+max_workers: 10
+min_workers: 10
 
 provider:
   type: aws
@@ -10,14 +10,14 @@ provider:
 
 auth:
   ssh_user: ubuntu
-  ssh_private_key: /Users/seanfite/Desktop/AllenInstitute/Rhapso/Auth/AWS/EC2-SSH-Key/sean-rhapso.pem
+  ssh_private_key: # to add
 
 available_node_types:
   ray.head.default:
     node_config:
       InstanceType: r5.4xlarge
       ImageId: ami-0ec1bf4a8f92e7bd1
-      KeyName: sean-rhapso
+      KeyName: # to add
       IamInstanceProfile:
         Name: RhapsoInstanceProfile
       TagSpecifications:
@@ -30,7 +30,7 @@ available_node_types:
     node_config:
       InstanceType: r5.4xlarge
       ImageId: ami-0ec1bf4a8f92e7bd1 
-      KeyName: sean-rhapso
+      KeyName: # to add
       IamInstanceProfile:
         Name: RhapsoInstanceProfile
       TagSpecifications:
@@ -42,21 +42,19 @@ available_node_types:
 head_node_type: ray.head.default
 
 setup_commands:
-  - sudo sed -i -e 's|http://archive.ubuntu.com/ubuntu|https://us-west-2.ec2.archive.ubuntu.com/ubuntu|g' -e 's|http://security.ubuntu.com/ubuntu|https://us-west-2.ec2.archive.ubuntu.com/ubuntu|g' /etc/apt/sources.list
-  - sudo rm -rf /var/lib/apt/lists/* && sudo mkdir -p /var/lib/apt/lists/partial
-  - sudo apt-get -o Acquire::ForceIPv4=true -o Acquire::Retries=5 update -y
+  - sudo apt-get update -y 
   - sudo DEBIAN_FRONTEND=noninteractive apt install -y python3-pip 
   - sudo python3 -m pip install awscli
   - sudo python3 -m pip install "ray[default]==2.9.1"  
-  - sudo python3 -m pip install protobuf==4.23.4  
-  - aws s3 cp s3://rhapso-whl-v2/Rhapso-0.1.8-py3-none-any.whl /tmp/Rhapso-0.1.8-py3-none-any.whl   
+  - sudo python3 -m pip install protobuf==4.23.4 
+  - aws s3 cp s3://martin-test-bucket/rhapso-0.1.13-py3-none-any.whl /tmp/Rhapso-0.1.13-py3-none-any.whl  
   - echo 'export PATH=$HOME/.local/bin:$PATH' >> ~/.bashrc
-  - source ~/.bashrc 
-  - pip install --force-reinstall /tmp/Rhapso-0.1.8-py3-none-any.whl   
+  - source ~/.bashrc
+  - pip install --force-reinstall /tmp/Rhapso-0.1.13-py3-none-any.whl    
 
 head_start_ray_commands:
   - ray stop
-  - ray start --head --port=6379 --dashboard-host=0.0.0.0 --autoscaling-config=~/ray_bootstrap_config.yaml
+  - ray start --head --port=6379 --dashboard-host=0.0.0.0 --autoscaling-config=~/ray_bootstrap_config.yaml 
 
 worker_start_ray_commands:
   - ray stop
@@ -68,15 +66,15 @@ worker_start_ray_commands:
 # python setup.py bdist_wheel 
 
 # RAY UP / DOWN / CLEAR CACHE COMMANDS
-# ray up matching_cluster_sean.yml --no-config-cache
-# ray down matching_cluster_sean.yml
+# ray up alignment_cluster_kassidy.yml --no-config-cache
+# ray down alignment_cluster_kassidy.yml
 # rm -rf ~/.cache/ray
 
 # ACCESS RAY DASHBOARD
-# ssh -i /Users/seanfite/Desktop/AllenInstitute/Rhapso/Auth/AWS/EC2-SSH-Key/sean-rhapso.pem -L 8265:localhost:8265 ubuntu@34.220.36.102
+# ssh -i ~/.ssh/{rhapso-ray-ssh-.....pem - to add}-L 8265:localhost:8265 ubuntu@54.203.12.142
 # http://localhost:8265
 
 # TO FIX
 # ---------------------
 # awscli 1.40.25 requires botocore==1.38.26, but you have botocore 1.35.93 which is incompatible
-# awscli 1.40.25 requires s3transfer<0.14.0,>=0.13.0, but you have s3transfer 0.10.4 which is incompatible
+# awscli 1.40.25 requires s3transfer<0.14.0,>=0.13.0, but you have s3transfer 0.10.4 which is incompatible 

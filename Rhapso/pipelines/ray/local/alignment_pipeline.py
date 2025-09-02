@@ -6,10 +6,15 @@ from Rhapso.pipelines.ray.solver import Solver
 import yaml
 import ray
 
+# Initialize Ray
 ray.init()
 
-with open("Rhapso/pipelines/ray/param/exaSPIM_720164.yml", "r") as file:
+# Point to param file
+with open("Rhapso/pipelines/ray/param/dev/zarr_local_sean.yml", "r") as file:
     config = yaml.safe_load(file)
+
+
+# -- INITIALIZE EACH COMPONENT --
 
 # INTEREST POINT DETECTION
 interest_point_detection = InterestPointDetection(
@@ -47,6 +52,7 @@ interest_point_matching_rigid = InterestPointMatching(
     lambda_value=config['lambda_value_rigid'],
     num_iterations=config['num_iterations_rigid'],
     regularization_weight=config['regularization_weight_rigid'],
+    image_file_prefix=config['image_file_prefix']
 )             
 
 # INTEREST POINT MATCHING AFFINE
@@ -65,6 +71,26 @@ interest_point_matching_affine = InterestPointMatching(
     lambda_value=config['lambda_value_affine'],
     num_iterations=config['num_iterations_affine'],
     regularization_weight=config['regularization_weight_affine'],
+    image_file_prefix=config['image_file_prefix']
+)
+
+# INTEREST POINT MATCHING SPLIT AFFINE
+interest_point_matching_split_affine = InterestPointMatching(
+    xml_input_path=config['xml_file_path_matching_split_affine'],
+    n5_output_path=config['n5_matching_output_path'],
+    input_type = config['input_type'],
+    match_type=config['match_type_split_affine'],
+    num_neighbors=config['num_neighbors_split_affine'],
+    redundancy=config['redundancy_split_affine'],
+    significance=config['significance_split_affine'],
+    search_radius=config['search_radius_split_affine'],
+    num_required_neighbors=config['num_required_neighbors_split_affine'],
+    model_min_matches=config['model_min_matches_split_affine'],
+    inlier_factor=config['inlier_factor_split_affine'],
+    lambda_value=config['lambda_value_split_affine'],
+    num_iterations=config['num_iterations_split_affine'],
+    regularization_weight=config['regularization_weight_split_affine'],
+    image_file_prefix=config['image_file_prefix']
 )
 
 # SOLVER RIGID
@@ -72,8 +98,6 @@ solver_rigid = Solver(
     xml_file_path_output=config['xml_file_path_output_rigid'],
     n5_input_path=config['n5_input_path'],
     xml_file_path=config['xml_file_path_solver_rigid'],
-    metrics_output_path=config['metrics_output_path'],
-    fixed_views=config['fixed_views'],
     run_type=config['run_type_solver_rigid'],   
     relative_threshold=config['relative_threshold'],
     absolute_threshold=config['absolute_threshold'],
@@ -82,15 +106,14 @@ solver_rigid = Solver(
     max_iterations=config['max_iterations'],
     max_allowed_error=config['max_allowed_error'],
     max_plateauwidth=config['max_plateauwidth'],
+    metrics_output_path=config['metrics_output_path'],
 )
 
 # SOLVER AFFINE
 solver_affine = Solver(
     xml_file_path_output=config['xml_file_path_output_affine'],
     n5_input_path=config['n5_input_path'],
-    xml_file_path=config['xml_file_path_solver_rigid'],
-    metrics_output_path=config['metrics_output_path'],
-    fixed_views=config['fixed_views'],
+    xml_file_path=config['xml_file_path_solver_affine'],
     run_type=config['run_type_solver_affine'],  
     relative_threshold=config['relative_threshold'],
     absolute_threshold=config['absolute_threshold'],
@@ -99,7 +122,26 @@ solver_affine = Solver(
     max_iterations=config['max_iterations'],
     max_allowed_error=config['max_allowed_error'],
     max_plateauwidth=config['max_plateauwidth'],
+    metrics_output_path=config['metrics_output_path'],
 )
+
+# SOLVER SPLIT AFFINE
+solver_split_affine = Solver(
+    xml_file_path_output=config['xml_file_path_output_split_affine'],
+    n5_input_path=config['n5_input_path'],
+    xml_file_path=config['xml_file_path_solver_split_affine'],
+    run_type=config['run_type_solver_split_affine'],  
+    relative_threshold=config['relative_threshold'],
+    absolute_threshold=config['absolute_threshold'],
+    min_matches=config['min_matches'],
+    damp=config['damp'],
+    max_iterations=config['max_iterations'],
+    max_allowed_error=config['max_allowed_error'],
+    max_plateauwidth=config['max_plateauwidth'],
+    metrics_output_path=config['metrics_output_path'],
+)
+
+# -- RUN PIPELINE --
 
 eval_stats = StatsPipeline(
     args = config['args'],
@@ -137,6 +179,9 @@ interest_point_matching_rigid.run()
 solver_rigid.run()
 interest_point_matching_affine.run()
 solver_affine.run()
+
+# interest_point_matching_split_affine.run()
+# solver_split_affine.run()
 eval_stats.run()
 # Interactive Evaluation
 evaluation.run()

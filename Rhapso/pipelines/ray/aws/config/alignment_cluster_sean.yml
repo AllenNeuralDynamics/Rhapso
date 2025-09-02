@@ -1,6 +1,6 @@
-cluster_name: rhapso-cluster-matching-sean-500003202
-max_workers: 6
-min_workers: 6
+cluster_name: rhapso-ray-alignment-cluster-sean-0033120
+max_workers: 5
+min_workers: 5
 
 provider:
   type: aws
@@ -42,23 +42,21 @@ available_node_types:
 head_node_type: ray.head.default
 
 setup_commands:
-  - sudo apt-get update -y 
+  - sudo sed -i -e 's|http://archive.ubuntu.com/ubuntu|https://us-west-2.ec2.archive.ubuntu.com/ubuntu|g' -e 's|http://security.ubuntu.com/ubuntu|https://us-west-2.ec2.archive.ubuntu.com/ubuntu|g' /etc/apt/sources.list
+  - sudo rm -rf /var/lib/apt/lists/* && sudo mkdir -p /var/lib/apt/lists/partial
+  - sudo apt-get -o Acquire::ForceIPv4=true -o Acquire::Retries=5 update -y
   - sudo DEBIAN_FRONTEND=noninteractive apt install -y python3-pip 
   - sudo python3 -m pip install awscli
   - sudo python3 -m pip install "ray[default]==2.9.1"  
   - sudo python3 -m pip install protobuf==4.23.4 
-  - sudo python3 -m pip install quilt3
   - aws s3 cp s3://rhapso-whl-v2/Rhapso-0.1.8-py3-none-any.whl /tmp/Rhapso-0.1.8-py3-none-any.whl  
-  - mkdir -p /tmp/data/allen
-  - python3 -c "import quilt3; quilt3.Bucket('s3://aind-open-data').fetch('exaSPIM_720164_2025-07-07_17-55-45_processed_2025-07-15_16-22-02/tile_alignment/ip_rigid_alignment/', '/tmp/data/allen/')"
-  - ls -l /tmp/data/allen
   - echo 'export PATH=$HOME/.local/bin:$PATH' >> ~/.bashrc
   - source ~/.bashrc
-  - pip install --force-reinstall /tmp/Rhapso-0.1.8-py3-none-any.whl   
+  - pip install /tmp/Rhapso-0.1.8-py3-none-any.whl   
 
 head_start_ray_commands:
   - ray stop
-  - ray start --head --port=6379 --dashboard-host=0.0.0.0 --autoscaling-config=~/ray_bootstrap_config.yaml
+  - ray start --head --port=6379 --dashboard-host=0.0.0.0 --autoscaling-config=~/ray_bootstrap_config.yaml 
 
 worker_start_ray_commands:
   - ray stop
@@ -70,15 +68,15 @@ worker_start_ray_commands:
 # python setup.py bdist_wheel 
 
 # RAY UP / DOWN / CLEAR CACHE COMMANDS
-# ray up matching_cluster_big_stitcher_sean.yml --no-config-cache
-# ray down matching_cluster_big_stitcher_sean.yml
+# ray up alignment_cluster_sean.yml --no-config-cache
+# ray down alignment_cluster_sean.yml
 # rm -rf ~/.cache/ray
 
 # ACCESS RAY DASHBOARD
-# ssh -i /Users/seanfite/Desktop/AllenInstitute/Rhapso/Auth/AWS/EC2-SSH-Key/sean-rhapso.pem -L 8265:localhost:8265 ubuntu@34.220.36.102
+# ssh -i /Users/seanfite/Desktop/AllenInstitute/Rhapso/Auth/AWS/EC2-SSH-Key/sean-rhapso.pem -L 8265:localhost:8265 ubuntu@35.92.150.181
 # http://localhost:8265
 
 # TO FIX
 # ---------------------
 # awscli 1.40.25 requires botocore==1.38.26, but you have botocore 1.35.93 which is incompatible
-# awscli 1.40.25 requires s3transfer<0.14.0,>=0.13.0, but you have s3transfer 0.10.4 which is incompatible
+# awscli 1.40.25 requires s3transfer<0.14.0,>=0.13.0, but you have s3transfer 0.10.4 which is incompatible 

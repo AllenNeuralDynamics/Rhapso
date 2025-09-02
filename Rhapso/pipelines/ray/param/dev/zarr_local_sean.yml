@@ -2,10 +2,10 @@
 # INTEREST POINT DETECTION
 # -----------------------------------
 
-xml_file_path_detection: 's3://aind-open-data/exaSPIM_720164_2025-07-07_17-55-45_processed_2025-07-15_16-22-02/tile_alignment/dataset.xml'
+xml_file_path_detection: '/Users/seanfite/Desktop/Rhapso-Output/dataset.xml'
 image_file_prefix: 's3://aind-open-data/exaSPIM_720164_2025-07-07_17-55-45_processed_2025-07-15_16-22-02/flatfield_correction/SPIM.ome.zarr/' 
-xml_output_file_path: &detection_xml_output_file_path 's3://rhapso-matching-test/rhapso-detection.xml'
-n5_output_file_prefix: &n5_output_file_prefix 's3://rhapso-matching-test/' 
+xml_output_file_path: &detection_xml_output_file_path '/Users/seanfite/Desktop/Rhapso-Output/rhapso-detection.xml'
+n5_output_file_prefix: &n5_output_file_prefix '/Users/seanfite/Desktop/Rhapso-Output/' 
 detection_run_type: 'ray' 
 file_type: 'zarr' 
 dsxy: 16
@@ -13,8 +13,8 @@ dsz: 16
 min_intensity: 1                          # normalize - dog
 max_intensity: 5                          # normalize - dog
 sigma: 1.8                                # blur - dog
-threshold: 0.005                          # find peaks (min initial peak value) - dog (threshold / 3) 
-median_filter: 10                         # xysubtract - pre-dog
+threshold: 0.005                          # find peaks (min initial peak value) / 3 - dog
+median_filter: 10                         # xysubtract - predog
 combine_distance: .5
 chunks_per_bound: 14                      # chunks per bound
 max_spots: 10000                          # max points per bound
@@ -35,17 +35,17 @@ max_plateauwidth: 200
 # -- RIGID --
 run_type_solver_rigid: 'rigid'
 xml_file_path_solver_rigid: *detection_xml_output_file_path
-xml_file_path_output_rigid: &rigid_solver_xml_output 's3://rhapso-matching-test/rhapso-solver-rigid.xml'
+xml_file_path_output_rigid: &rigid_solver_xml_output '/Users/seanfite/Desktop/Rhapso-Output/rhapso-solver-rigid.xml'
 
 # -- AFFINE --
 run_type_solver_affine: 'affine'
 xml_file_path_solver_affine: *rigid_solver_xml_output
-xml_file_path_output_affine: &affine_solver_xml_output 's3://rhapso-matching-test/rhapso-solver-affine.xml'
+xml_file_path_output_affine: &affine_solver_xml_output '/Users/seanfite/Desktop/Rhapso-Output/rhapso-solver-affine.xml'
 
 # -- SPLIT AFFINE --
 run_type_solver_split_affine: 'split-affine'
-xml_file_path_solver_split_affine: "s3://aind-open-data/exaSPIM_720164_2025-07-07_17-55-45_processed_2025-07-15_16-22-02/tile_alignment/ip_split_affine_alignment/bigstitcher_affine.split.xml"
-xml_file_path_output_split_affine: 's3://rhapso-matching-test/rhapso-solver-split-affine.xml'
+xml_file_path_solver_split_affine: '/Users/seanfite/Desktop/ip_split_affine_alignment/bigstitcher_affine.split.xml'
+xml_file_path_output_split_affine: '/Users/seanfite/Desktop/ip_split_affine_alignment/rhapso-split-solver-affine.xml'
 
 # INTEREST POINT MATCHING
 # -----------------------------------
@@ -65,15 +65,15 @@ search_radius_rigid: 300
 num_required_neighbors_rigid: 3
 
 # Ransac
-model_min_matches_rigid: 24              # inlier factor = 6
+model_min_matches_rigid: 18              # min number inlier factor = 6
 inlier_factor_rigid: 100                 # max epsilon
-lambda_value_rigid: 0.1                  
+lambda_value_rigid: 0.1                  # min inlier ratio
 num_iterations_rigid: 10000
 regularization_weight_rigid: 1.0
 
 # -- AFFINE --
 match_type_affine: 'affine'  
-xml_file_path_matching_affine: *rigid_solver_xml_output                
+xml_file_path_matching_affine: *rigid_solver_xml_output 
 
 # Candidates
 num_neighbors_affine: 3
@@ -83,15 +83,15 @@ search_radius_affine: 100
 num_required_neighbors_affine: 3
 
 # Ransac     
-model_min_matches_affine: 24            # inlier factor = 6
+model_min_matches_affine: 24            # min number inlier factor = 5
 inlier_factor_affine: 30                # max epsilon
-lambda_value_affine: 0.05               
+lambda_value_affine: 0.05               # min inlier ratio
 num_iterations_affine: 10000
 regularization_weight_affine: 1.0
 
 # -- SPLIT AFFINE -- 
 match_type_split_affine: 'split-affine'  
-xml_file_path_matching_split_affine: *affine_solver_xml_output               
+xml_file_path_matching_split_affine: '/Users/seanfite/Desktop/Rhapso-Output/rhapso-split-solver-affine.xml'               
 
 # Candidates
 num_neighbors_split_affine: 3
@@ -106,36 +106,3 @@ inlier_factor_split_affine: 25                # max epsilon
 lambda_value_split_affine: 0.05               # min inlier ratio
 num_iterations_split_affine: 10000
 regularization_weight_split_affine: 1.0
-
-# EVALUATION
-# -----------------------------------
-
-xml_file: *rigid_solver_xml_output
-base_path: *n5_output_file_prefix "/interestpoints.n5"
-metrics_output_path: "/Users/ai/Desktop/rhapso_test/TEST5_Rh/aind-open-data/exaSPIM_730223_2025-04-25_14-44-58_alignment_2025-05-13_23-58-19/interest_point_detection/metrics.json"
-
-# KDE 
-args: {"voxel": True, "voxel_vis": False, "KDE": True}
-KDE_type: Null                          # "all" "None" evalute to ever match, "pair" is a single match, tile
-bandwidth: Null
-view_id: Null                           
-pair: Null
-plot: False
-
-# Threshold
-thresholding: False
-min_alignment: Null
-max_alignment: Null
-minimum_points: Null
-maximum_points: Null
-minimum_total_matches: Null
-maximum_total_matches: Null
-max_kde: Null
-min_kde: Null
-max_cv: Null
-min_cv: Null
-
-# INTERACTIVE EVALUATION
-# -----------------------------------
-
-file_path: "/Users/ai/Desktop/rhapso_test/TEST5_Rh/aind-open-data/exaSPIM_730223_2025-04-25_14-44-58_alignment_2025-05-13_23-58-19/interest_point_detection/metrics.json"

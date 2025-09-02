@@ -25,20 +25,21 @@ class SaveMatches:
 
         idMap = {}
         view_keys = set()
-        label = matched_views[0][2]
-        for viewA, matches in grouped_by_viewA.items():
-            tpA = int(viewA.split("tpId=")[1].split(",")[0])
-            vsA = int(viewA.split("setupId=")[1].split(")")[0])
-            keyA = f"{tpA},{vsA},{label}"
-            view_keys.add(keyA)
+        labels = matched_views[0][2]
+        for label in labels:
+            for viewA, matches in grouped_by_viewA.items():
+                tpA = int(viewA.split("tpId=")[1].split(",")[0])
+                vsA = int(viewA.split("setupId=")[1].split(")")[0])
+                keyA = f"{tpA},{vsA},{label}"
+                view_keys.add(keyA)
 
-            for _, _, viewB in matches:
-                tpB = int(viewB.split("tpId=")[1].split(",")[0])
-                vsB = int(viewB.split("setupId=")[1].split(")")[0])
+                for _, _, viewB in matches:
+                    tpB = int(viewB.split("tpId=")[1].split(",")[0])
+                    vsB = int(viewB.split("setupId=")[1].split(")")[0])
 
-                if tpB == tpA:
-                    keyB = f"{tpB},{vsB},{label}"
-                    view_keys.add(keyB)
+                    if tpB == tpA:
+                        keyB = f"{tpB},{vsB},{label}"
+                        view_keys.add(keyB)
 
         idMap = {key: i for i, key in enumerate(sorted(view_keys))}
         grouped_with_ids = defaultdict(list)
@@ -56,46 +57,44 @@ class SaveMatches:
             vsA = int(viewA.split("setupId=")[1].split(")")[0])
 
             # Get label from matched_views
-            labelA = 'beads'
-            for tp, vs, label in matched_views:
-                if tp == tpA and vs == vsA:
-                    labelA = label
-                    break
+            labels = self.data_global['viewsInterestPoints'][(tpA, vsA)]['label']
 
             if len(corr_list) == 0:
                 continue
 
-            # Output path
-            full_path = f"{self.n5_output_path}interestpoints.n5/tpId_{tpA}_viewSetupId_{vsA}/{labelA}/correspondences/"
+            for labelA in labels:
 
-            if full_path.startswith("s3://"):
-                path = full_path.replace("s3://", "")
-                self.s3_filesystem = s3fs.S3FileSystem()
-                store = s3fs.S3Map(root=path, s3=self.s3_filesystem, check=False) 
-                root = zarr.open_group(store=store, mode='a')
-            else:
-                # Write to Zarr N5
-                store = zarr.N5Store(full_path)
-                root = zarr.group(store=store, overwrite="true")
+                # Output path
+                full_path = f"{self.n5_output_path}interestpoints.n5/tpId_{tpA}_viewSetupId_{vsA}/{labelA}/correspondences/"
 
-            # Delete existing 'data' array
-            if "data" in root:
-                del root["data"]
+                if full_path.startswith("s3://"):
+                    path = full_path.replace("s3://", "")
+                    self.s3_filesystem = s3fs.S3FileSystem()
+                    store = s3fs.S3Map(root=path, s3=self.s3_filesystem, check=False) 
+                    root = zarr.open_group(store=store, mode='a')
+                else:
+                    # Write to Zarr N5
+                    store = zarr.N5Store(full_path)
+                    root = zarr.group(store=store, overwrite="true")
 
-            # Set group-level attributes
-            root.attrs.update({
-                "correspondences": "1.0.0",
-                "idMap": idMap
-            })
+                # Delete existing 'data' array
+                if "data" in root:
+                    del root["data"]
 
-            # Create dataset inside the group
-            root.create_dataset(
-                name="data",  # just the dataset name, not a full path
-                data=corr_list,
-                dtype='u8',
-                chunks=(min(300000, len(corr_list)), 1),
-                compressor=zarr.GZip()
-            )
+                # Set group-level attributes
+                root.attrs.update({
+                    "correspondences": "1.0.0",
+                    "idMap": idMap
+                })
+
+                # Create dataset inside the group
+                root.create_dataset(
+                    name="data",  
+                    data=corr_list,
+                    dtype='u8',
+                    chunks=(min(300000, len(corr_list)), 1),
+                    compressor=zarr.GZip()
+                )
 
     def clear_correspondence(self):
         if self.n5_output_path.startswith("s3://"):
@@ -110,14 +109,16 @@ class SaveMatches:
 
         views = list(self.data_global['viewsInterestPoints'].keys())  
         for tp, vs in views:
-            corr_path = f"tpId_{tp}_viewSetupId_{vs}/beads/correspondences"
-            try:
-                if corr_path in root:
-                    del root[corr_path]                
-                elif f"{corr_path}/data" in root:
-                    del root[f"{corr_path}/data"]       
-            except Exception as e:
-                print(f"⚠️ Could not delete {corr_path}: {e}")
+            labels = self.data_global['viewsInterestPoints'][(tp, vs)]['label']
+            for label in labels:
+                corr_path = f"tpId_{tp}_viewSetupId_{vs}/{label}/correspondences"
+                try:
+                    if corr_path in root:
+                        del root[corr_path]                
+                    elif f"{corr_path}/data" in root:
+                        del root[f"{corr_path}/data"]       
+                except Exception as e:
+                    print(f"⚠️ Could not delete {corr_path}: {e}")
 
     def run(self):
         self.clear_correspondence()

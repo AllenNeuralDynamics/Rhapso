@@ -243,7 +243,6 @@ class SaveInterestPoints:
             root = zarr.group(store, overwrite=False)
             root.attrs['n5'] =  '4.0.0'
 
-        self.save_to_xml()
-
     def run(self):
         self.save_points()
+        self.save_to_xml()
