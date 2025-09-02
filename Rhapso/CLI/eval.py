@@ -20,8 +20,6 @@ class MetricReviewCLI:
                 self.data = json.load(file)
         except: 
             return "Data cannot be retrieved"
-        print(self.data["Descriptive stats"])
-        print(type(self.data))
 
     def descriptive_stats(self):
         print("Retrieving statistics")
