@@ -7,7 +7,7 @@ import ray
 class InterestPointMatching:
     def __init__(self, xml_input_path, n5_output_path, input_type, match_type, num_neighbors, redundancy, significance, 
                  search_radius, num_required_neighbors, model_min_matches, inlier_factor, lambda_value, num_iterations, 
-                 regularization_weight):
+                 regularization_weight, image_file_prefix):
         self.xml_input_path = xml_input_path
         self.n5_output_path = n5_output_path
         self.input_type = input_type
@@ -22,6 +22,7 @@ class InterestPointMatching:
         self.lambda_value = lambda_value               
         self.num_iterations = num_iterations
         self.regularization_weight = regularization_weight
+        self.image_file_prefix = image_file_prefix
 
     def match(self):
         # Load XML
@@ -30,20 +31,19 @@ class InterestPointMatching:
         print("XML loaded and parsed")
 
         # Load and transform points
-        data_loader = LoadAndTransformPoints(data_global, self.xml_input_path, self.n5_output_path)
+        data_loader = LoadAndTransformPoints(data_global, self.xml_input_path, self.n5_output_path, self.match_type)
         process_pairs, view_registrations = data_loader.run()
         print("Points loaded and transformed into global space")
 
         # Distribute interest point matching with Ray
-        # @ray.remote(num_cpus=2)    # If ran locally
-        @ray.remote
+        @ray.remote(num_cpus=3)
         def match_pair(pointsA, pointsB, viewA_str, viewB_str, num_neighbors, redundancy, significance, num_required_neighbors, 
                        match_type, inlier_factor, lambda_value, num_iterations, model_min_matches, regularization_weight, search_radius,
-                       view_registrations, input_type): 
+                       view_registrations, input_type, image_file_prefix): 
             
             matcher = RansacMatching(data_global, num_neighbors, redundancy, significance, num_required_neighbors, match_type, inlier_factor, 
                                      lambda_value, num_iterations, model_min_matches, regularization_weight, search_radius, view_registrations,
-                                     input_type)
+                                     input_type, image_file_prefix)
             
             pointsA, pointsB = matcher.filter_for_overlapping_points(pointsA, pointsB, viewA_str, viewB_str)
 
@@ -66,7 +66,7 @@ class InterestPointMatching:
         futures = [
             match_pair.remote(pointsA, pointsB, viewA_str, viewB_str, self.num_neighbors, self.redundancy, self.significance, self.num_required_neighbors,
                             self.match_type, self.inlier_factor, self.lambda_value, self.num_iterations, self.model_min_matches, self.regularization_weight, 
-                            self.search_radius, view_registrations, self.input_type)
+                            self.search_radius, view_registrations, self.input_type, self.image_file_prefix)
             for pointsA, pointsB, viewA_str, viewB_str in process_pairs
         ]
 
@@ -83,3 +83,28 @@ class InterestPointMatching:
     
     def run(self):
         self.match()
+
+
+# DEBUG MATCHING
+# all_results = []
+# for pointsA, pointsB, viewA_str, viewB_str in process_pairs:
+#     matcher = RansacMatching(data_global, self.num_neighbors, self.redundancy, self.significance, self.num_required_neighbors, self.match_type, self.inlier_factor, 
+#                              self.lambda_value, self.num_iterations, self.model_min_matches, self.regularization_weight, self.search_radius, view_registrations,
+#                              self.input_type, self.image_file_prefix)
+    
+#     pointsA, pointsB = matcher.filter_for_overlapping_points(pointsA, pointsB, viewA_str, viewB_str)
+
+#     if len(pointsA) == 0 or len(pointsB) == 0:
+#         continue
+    
+#     candidates = matcher.get_candidates(pointsA, pointsB, viewA_str, viewB_str)
+#     inliers, regularized_model = matcher.compute_ransac(candidates)
+#     filtered_inliers = matcher.filter_inliers(inliers, regularized_model)
+
+#     percent = 100.0 * len(filtered_inliers) / len(candidates) if candidates else 0
+#     print(f"✅ RANSAC inlier percentage: {percent:.1f}% ({len(filtered_inliers)} of {len(candidates)} for {viewA_str}), {viewB_str}")
+
+#     if len(filtered_inliers) < self.model_min_matches:
+#         continue
+
+#     all_results.append(filtered_inliers)

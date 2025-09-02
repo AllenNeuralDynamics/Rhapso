@@ -9,11 +9,10 @@ Utility class that saves the final matrices of alignment per view to XML
 """
 
 class SaveResults:
-    def __init__(self, tiles, xml_file, xml_file_path, fixed_views, run_type, validation_stats, n5_input_path):
+    def __init__(self, tiles, xml_file, xml_file_path, run_type, validation_stats, n5_input_path):
         self.tiles = tiles
         self.xml_file = xml_file
         self.xml_file_path = xml_file_path
-        self.fixed_views = fixed_views
         self.run_type = run_type
         self.validation_stats = validation_stats
         self.n5_input_path = n5_input_path
@@ -52,34 +51,34 @@ class SaveResults:
             timepoint = view_registration.get('timepoint')
             setup = view_registration.get('setup')
             view = f"timepoint: {timepoint}, setup: {setup}"
-            
+
             new_view_transform = ET.Element('ViewTransform', {'type': 'affine'})
-            new_view_transform.text = "\n        "
+            new_view_transform.text = "\n\t\t\t" 
             
             name = ET.SubElement(new_view_transform, 'Name')
             if self.run_type == "rigid":
                 name.text = 'RigidModel3D, lambda = 0.5'
             elif self.run_type == "affine":
                 name.text = 'AffineModel3D regularized with a RigidModel3D, lambda = 0.05'
-            name.tail = "\n        "
+            name.tail = "\n\t\t\t"
 
             affine = ET.SubElement(new_view_transform, 'affine')
+                 
+            tile = next((tile for tile in self.tiles if tile['view'] == view), None)
+            model = (tile or {}).get('model', {}).get('regularized', {})
             
-            if view in self.fixed_views:
+            if not model or all(float(v) == 0.0 for v in model.values()):
                 affine.text = '1.0 0.0 0.0 0.0 0.0 1.0 0.0 0.0 0.0 0.0 1.0 0.0'
-            else:     
-                tile = next((tile for tile in self.tiles if tile['view'] == view), None)
-                model = (tile or {}).get('model', {}).get('regularized', {})
-                
-                if not model or all(float(v) == 0.0 for v in model.values()):
-                    affine.text = '1.0 0.0 0.0 0.0 0.0 1.0 0.0 0.0 0.0 0.0 1.0 0.0'
-                else:
-                    # affine.text = ' '.join(f"{model.get(f'm{i}{j}', 0.0):.4f}" for i in range(3) for j in range(4))
-                    affine.text = ' '.join(str(model.get(f'm{i}{j}', 0.0)) for i in range(3) for j in range(4))
-                    print(f"tile: {view}, model: {affine.text}")
-            
-            affine.tail = "\n      "
+            else:
+                affine.text = ' '.join(str(model.get(f'm{i}{j}', 0.0)) for i in range(3) for j in range(4))
+                print(f"tile: {view}, model: {affine.text}")
+      
+            view_registration.text = "\n\t\t\t"
             view_registration.insert(0, new_view_transform)
+            new_view_transform.text = "\n\t\t\t\t"   
+            name.tail               = "\n\t\t\t\t"   
+            affine.tail             = "\n\t\t\t"    
+            new_view_transform.tail = "\n\t\t\t"
 
     def load_xml(self):
         """

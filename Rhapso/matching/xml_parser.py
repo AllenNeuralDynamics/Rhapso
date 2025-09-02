@@ -39,28 +39,96 @@ class XMLParser:
             len(root.findall(".//ViewSetup")) != len(root.findall(".//ViewRegistration")) * (1 / 2):
             length = False  # Set to False if the relationships do not match expected counts
         return length
+
+    def parse_view_setup(self, root):
+        timepoints = set()
+
+        # zarr loader 
+        for zg in root.findall(".//ImageLoader/zgroups/zgroup"):
+            tp_attr = zg.get("tp") or zg.get("timepoint") or "0"
+            try:
+                timepoints.add(int(tp_attr))
+            except ValueError:
+                pass
+
+        # tiff loader 
+        for fm in root.findall(".//ImageLoader/files/FileMapping"):
+            tp_attr = fm.get("timepoint") or "0"
+            try:
+                timepoints.add(int(tp_attr))
+            except ValueError:
+                pass
+
+        if not timepoints:
+            timepoints = {0}
+
+        # --- parse ViewSetups ---
+        by_id = {}
+        for vs in root.findall(".//ViewSetups/ViewSetup"):
+            sid = int(vs.findtext("id"))
+            name = (vs.findtext("name") or "").strip()
+
+            size_txt = (vs.findtext("size") or "").strip()
+            try:
+                sx, sy, sz = [int(x) for x in size_txt.split()]
+            except Exception:
+                sx = sy = sz = None
+
+            vox_txt = (vs.findtext("voxelSize/size") or "").strip()
+            try:
+                vx, vy, vz = [float(x) for x in vox_txt.split()]
+            except Exception:
+                vx = vy = vz = None
+
+            attrs = {}
+            attrs_node = vs.find("attributes")
+            if attrs_node is not None:
+                for child in list(attrs_node):
+                    txt = (child.text or "").strip()
+                    try:
+                        attrs[child.tag] = int(txt)
+                    except ValueError:
+                        attrs[child.tag] = txt
+
+            by_id[sid] = {
+                "id": sid,
+                "name": name,
+                "size": (sx, sy, sz),
+                "voxelSize": (vx, vy, vz),
+                "attributes": attrs,
+            }
+
+        # --- expand to (timepoint, setup) maps for overlap checks ---
+        viewSizes = {}
+        viewVoxelSizes = {}
+        for tp in sorted(timepoints):
+            for sid, meta in by_id.items():
+                if meta["size"] != (None, None, None):
+                    viewSizes[(tp, sid)] = meta["size"]
+                if meta["voxelSize"] != (None, None, None):
+                    viewVoxelSizes[(tp, sid)] = meta["voxelSize"]
+
+        return {
+            "byId": by_id,
+            "viewSizes": viewSizes,
+            "viewVoxelSizes": viewVoxelSizes,
+        }
     
     def parse_image_loader(self, root):
         image_loader_data = []
         
-        if self.input_type == "zarr":
-
-            s3bucket = root.findtext(".//s3bucket", default="").strip()
-            zarr_base = root.findtext(".//zarr", default="").strip()
-            
+        if self.input_type == "zarr":       
             for il in root.findall(".//ImageLoader/zgroups/zgroup"):
                 view_setup = il.get("setup")
-                timepoint = il.get("timepoint")
-                file_path = il.find("path").text if il.find("path") is not None else None
-
-                full_path = f"s3://{s3bucket}/{zarr_base}/{file_path}"
+                timepoint = il.get('timepoint') if 'timepoint' in il else il.get('tp')
+                file_path = (il.get("path") or il.findtext("path") or "").strip()
                 image_loader_data.append(
                     {
                         "view_setup": view_setup,
                         "timepoint": timepoint,
                         "series": 1,
                         "channel": 1,
-                        "file_path": full_path,
+                        "file_path": file_path,
                     }
                 )
         elif self.input_type == "tiff":
@@ -115,7 +183,8 @@ class XMLParser:
                 'basePathURI': root.find(".//BasePath").text if root.find(".//BasePath") is not None else "",
                 'viewRegistrations': self._parse_view_registrations(root),
                 'viewsInterestPoints': self._parse_view_paths(root),
-                'imageLoader': self.parse_image_loader(root)
+                'imageLoader': self.parse_image_loader(root),
+                'viewSetup': self.parse_view_setup(root)
             }
             return self.data_global
             
@@ -182,36 +251,24 @@ class XMLParser:
         """Parse view interest point file paths"""
         view_paths = {}
         for vip in root.findall(".//ViewInterestPointsFile"):
-            # Parse attributes correctly - setup is a string, convert timepoint to int
-            setup_id = int(vip.attrib['setup'])  # Convert setup to int for consistency
+            setup_id = int(vip.attrib['setup']) 
             timepoint = int(vip.attrib['timepoint'])
-            label = vip.attrib.get('label', 'beads')  # Default to 'beads' if not specified
+            label = vip.attrib.get('label', 'beads') 
             params = vip.attrib.get('params', '')
+            path = (vip.text or '').strip().split('/', 1)[0]
             
-            # Get the path text and clean it
-            path = vip.text.strip()
-            
-            # Remove /beads suffix if present to get base path
-            if path.endswith("/beads"):
-                path = path[:-len("/beads")]
-            
-            # Create key as tuple (timepoint, setup_id)
             key = (timepoint, setup_id)
             
-            # Store comprehensive view information
-            view_paths[key] = {
-                'timepoint': timepoint, 
-                'setup': setup_id,
-                'label': label,
-                'params': params,
-                'path': path
-            }
-            
-        print(f"Parsed {len(view_paths)} ViewInterestPointsFile entries")
-        for key, info in list(view_paths.items())[:3]:  # Show first 3 entries
-            print(f"  View {key}: timepoint={info['timepoint']}, setup={info['setup']}, label={info['label']}")
-        if len(view_paths) > 3:
-            print(f"  ... and {len(view_paths) - 3} more views")
+            if key in view_paths and label not in view_paths[key]['label']:
+                view_paths[key]['label'].append(label)
+            else:
+                view_paths[key] = {
+                    'timepoint': timepoint, 
+                    'setup': setup_id,
+                    'label': [label],
+                    'params': params,
+                    'path': path
+                }
             
         return view_paths
     
@@ -234,7 +291,7 @@ class XMLParser:
         # Determine the directory and interest points folder based on path type
         if self.xml_input_path.startswith('s3://'):
             # Parse S3 URL components
-            s3_path = self.xml_input_path[5:]  # Remove 's3://'
+            s3_path = self.xml_input_path[5:]  
             parts = s3_path.split('/', 1)
             bucket_name = parts[0]
             file_key = parts[1]
