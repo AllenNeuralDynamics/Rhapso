@@ -32,7 +32,7 @@ from Rhapso.image_split.split_views import collect_image_sizes, find_min_step_si
 from Rhapso.image_split.splitting_tools import split_images
 
 
-# ============================================================================
+# ============================================================================ 
 # Utility Functions
 # ============================================================================
 
@@ -291,7 +291,7 @@ def save_xml_output(new_data, xml_output):
         else:
             # Handle local output
             format_xml_output(new_tree, xml_output)
-            print("XML saved to local file successfully")
+            print("XML saved to local file successfully") 
             
     except PermissionError as e:
         print(f"Error: Permission denied when saving output file. {e}", file=sys.stderr)
@@ -362,7 +362,7 @@ def create_n5_files_for_fake_interest_points(xml_data, n5_output_path):
                 # Create sub-datasets
                 id_dataset = f"{n5_dataset_path}/id"
                 loc_dataset = f"{n5_dataset_path}/loc"
-                intensities_dataset = f"{n5_dataset_path}/intensities"
+                intensities_dataset = f"{n5_dataset_path}/intensities" 
                 
                 # Create empty datasets for fake interest points
                 if id_dataset not in root:

@@ -9,7 +9,7 @@ from itertools import product
 from Rhapso.image_split.split_views import next_multiple
 
 
-# ============================================================================
+# ============================================================================ 
 # Utility Functions
 # ============================================================================
 
@@ -797,7 +797,7 @@ def _rebuild_xml_structure(xml_tree, old_setups, new_setups, new2old_setup_id,
         
         # Generate ViewInterestPointsFile for each label and each split tile
         for label in labels:
-            for setup_id in range(total_split_tiles):
+            for setup_id in range(total_split_tiles): 
                 # Create the path text like Java BSS output
                 path_text = f"tpId_{timepoint_id}_viewSetupId_{setup_id}/{label}"
                 
@@ -812,7 +812,7 @@ def _rebuild_xml_structure(xml_tree, old_setups, new_setups, new2old_setup_id,
                         "params": f"Fake points for image splitting: overlapPx={targetSize}, targetSize={targetSize}, minStepSize={targetSize}, optimize=False, pointDensity=0.0, minPoints=0, maxPoints=0, error=0.0, excludeRadius=0.0"
                     }
                 )
-                vip_file.text = path_text
+                vip_file.text = path_text 
         
         logging.info(f"Created {len(labels) * total_split_tiles} ViewInterestPointsFile items ({len(labels)} labels × {total_split_tiles} split tiles)")
         
