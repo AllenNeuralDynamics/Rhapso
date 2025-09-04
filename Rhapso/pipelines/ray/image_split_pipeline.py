@@ -9,13 +9,13 @@ from Rhapso.image_split.split_datasets import main
 # Configuration Variables
 
 # Local Input/Output Paths
-# XML_INPUT = "/mnt/c/Users/marti/Documents/allen/data/exaSPIM_686951 EXAMPLE/ip_affine_alignment/bigstitcher_affine.xml"
-# XML_OUTPUT = "/mnt/c/Users/marti/Documents/allen/data/exaSPIM_686951 EXAMPLE/results/bigstitcher_affine_split.xml"
-# N5_OUTPUT = "/mnt/c/Users/marti/Documents/allen/data/exaSPIM_686951 EXAMPLE/results/interestpoints.n5"
+XML_INPUT = "/mnt/c/Users/marti/Documents/allen/rhapso-e2e-testing/split_verification/ip_affine_alignment/bigstitcher_affine.xml"
+XML_OUTPUT = "/mnt/c/Users/marti/Documents/allen/rhapso-e2e-testing/split_verification/ip_affine_alignment/bigstitcher_affine_split.xml"
+N5_OUTPUT = "/mnt/c/Users/marti/Documents/allen/rhapso-e2e-testing/split_verification/ip_affine_alignment/interestpoints.n5"
 
-XML_INPUT = "/Users/seanfite/Desktop/interest_point_detection/rhapso-solver-affine.xml"
-XML_OUTPUT = "/Users/seanfite/Desktop/interest_point_detection/rhapso-solver-split-affine.xml"
-N5_OUTPUT = "/Users/seanfite/Desktop/interest_point_detection/interestpoints.n5"
+# XML_INPUT = "/Users/seanfite/Desktop/interest_point_detection/rhapso-solver-affine.xml"
+# XML_OUTPUT = "/Users/seanfite/Desktop/interest_point_detection/rhapso-solver-split-affine.xml"
+# N5_OUTPUT = "/Users/seanfite/Desktop/interest_point_detection/interestpoints.n5"
 
 # AWS S3 Input/Output Paths
 # XML_INPUT = "s3://martin-test-bucket/split_images_output/bigstitcher_affine.xml"
