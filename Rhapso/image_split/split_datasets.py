@@ -345,10 +345,43 @@ def create_n5_files_for_fake_interest_points(xml_data, n5_output_path):
         # Use a different attribute name to avoid N5 reserved keyword warning
         root.attrs['n5_version'] = '4.0.0'
         
+        # First, create correspondences folders for ALL labels (including original labels)
+        print("Creating correspondences folders for all labels...")
+        correspondences_created = 0
         for vip_file in vip_files:
             timepoint_attr = vip_file.get('timepoint', '0')
             setup_attr = vip_file.get('setup', '0')
             label_attr = vip_file.get('label', 'beads')
+            
+            # Create N5 path for this label (correspondences at same level as interestpoints)
+            n5_dataset_path = f"tpId_{timepoint_attr}_viewSetupId_{setup_attr}/{label_attr}"
+            correspondences_path = f"{n5_dataset_path}/correspondences"
+            
+            if correspondences_path not in root:
+                try:
+                    correspondences_group = root.create_group(correspondences_path)
+                    # Set correspondences attributes
+                    correspondences_group.attrs["correspondences"] = "1.0.0"
+                    correspondences_group.attrs["idMap"] = {}  # Empty idMap initially
+                    correspondences_created += 1
+                except Exception as e:
+                    print(f"Warning: Could not create correspondences folder {correspondences_path}: {e}")
+        
+        print(f"Created {correspondences_created} correspondences folders")
+        
+        # Then, create fake interest points for split labels only
+        print("Creating fake interest points for split labels...")
+        skipped_original = 0
+        fake_points_created = 0
+        for vip_file in vip_files:
+            timepoint_attr = vip_file.get('timepoint', '0')
+            setup_attr = vip_file.get('setup', '0')
+            label_attr = vip_file.get('label', 'beads')
+            
+            # Only create fake interest points for split labels
+            if not (label_attr.endswith('_split') or label_attr.startswith('splitPoints_')):
+                skipped_original += 1
+                continue
             
             # Create N5 path for this label
             n5_dataset_path = f"tpId_{timepoint_attr}_viewSetupId_{setup_attr}/{label_attr}/interestpoints"
@@ -401,8 +434,11 @@ def create_n5_files_for_fake_interest_points(xml_data, n5_output_path):
                 
                 # Log the creation of fake interest point directories
                 saved_path = f"file:{n5_output_path}/{n5_dataset_path}"
-                print(f"Saved: {saved_path}")
+                fake_points_created += 1
         
+        if skipped_original > 0:
+            print(f"Skipped {skipped_original} original labels (no fake interest points needed)")
+        print(f"Created {fake_points_created} fake interest point datasets")
         print("Fake interest points N5 files created successfully")
         
     except Exception as e:
@@ -497,6 +533,56 @@ def main(
 # ============================================================================
 
 @ray.remote
+def create_correspondences_folder(correspondences_data, n5_output_path, is_s3=False):
+    """
+    Create a correspondences folder for a single label.
+    This function is designed to be used as a Ray remote task.
+    
+    Args:
+        correspondences_data: Dictionary containing timepoint, setup, and label info
+        n5_output_path: Path to the N5 output file
+        is_s3: Whether the output is to S3 storage
+        
+    Returns:
+        Dictionary with success status and path
+    """
+    try:
+        timepoint = correspondences_data['timepoint']
+        setup = correspondences_data['setup']
+        label = correspondences_data['label']
+        
+        # Create N5 path for this label (correspondences at same level as interestpoints)
+        n5_dataset_path = f"tpId_{timepoint}_viewSetupId_{setup}/{label}"
+        correspondences_path = f"{n5_dataset_path}/correspondences"
+        
+        if is_s3:
+            # Handle S3 path - use zarr with s3fs
+            s3_fs = s3fs.S3FileSystem()
+            store = s3fs.S3Map(root=n5_output_path, s3=s3_fs, check=False)
+            root = zarr.group(store=store, overwrite=False)
+        else:
+            # Handle local path - use zarr with N5Store
+            os.makedirs(os.path.dirname(n5_output_path), exist_ok=True)
+            store = zarr.N5Store(n5_output_path)
+            root = zarr.group(store=store, overwrite=False)
+        
+        # Create correspondences folder
+        if correspondences_path not in root:
+            correspondences_group = root.create_group(correspondences_path)
+            # Set correspondences attributes
+            correspondences_group.attrs["correspondences"] = "1.0.0"
+            correspondences_group.attrs["idMap"] = {}  # Empty idMap initially
+        
+        return {
+            "success": True, 
+            "path": correspondences_path
+        }
+        
+    except Exception as e:
+        return {"success": False, "error": str(e), "path": correspondences_path}
+
+
+@ray.remote
 def create_single_n5_dataset(vip_file_data, n5_output_path, is_s3=False, fip_density=100.0, fip_min_num_points=20, fip_max_num_points=500):
     """
     Create a single N5 dataset for fake interest points.
@@ -544,6 +630,7 @@ def create_single_n5_dataset(vip_file_data, n5_output_path, is_s3=False, fip_den
             dataset.attrs["pointcloud"] = "1.0.0"
             dataset.attrs["type"] = "list"
             dataset.attrs["list version"] = "1.0.0"
+                
         except Exception as e:
             # If there's a race condition or other error, try to continue
             print(f"Warning: Could not create group {n5_dataset_path}: {e}")
@@ -704,15 +791,55 @@ def create_n5_files_for_fake_interest_points_ray(xml_data, n5_output_path, fip_d
         if not ray.is_initialized():
             ray.init(num_cpus=4)  # Use 4 CPUs to reduce file system contention
         
-        # Prepare data for parallel processing
-        vip_file_data_list = []
+        # First, create correspondences folders for ALL labels using Ray for speed
+        print("Creating correspondences folders for all labels using Ray...")
+        
+        # Prepare data for parallel correspondences folder creation
+        correspondences_data_list = []
         for vip_file in vip_files:
-            vip_file_data = {
-                'timepoint': vip_file.get('timepoint', '0'),
-                'setup': vip_file.get('setup', '0'),
-                'label': vip_file.get('label', 'beads')
+            timepoint = vip_file.get('timepoint', '0')
+            setup = vip_file.get('setup', '0')
+            label = vip_file.get('label', 'beads')
+            
+            correspondences_data = {
+                'timepoint': timepoint,
+                'setup': setup,
+                'label': label
             }
-            vip_file_data_list.append(vip_file_data)
+            correspondences_data_list.append(correspondences_data)
+        
+        # Create Ray remote tasks for correspondences folder creation
+        correspondences_futures = []
+        for correspondences_data in correspondences_data_list:
+            future = create_correspondences_folder.remote(correspondences_data, n5_output_path, is_s3)
+            correspondences_futures.append(future)
+        
+        # Collect results
+        correspondences_results = ray.get(correspondences_futures)
+        
+        # Count successful correspondences folder creation
+        successful_correspondences = sum(1 for result in correspondences_results if result['success'])
+        print(f"Created {successful_correspondences}/{len(correspondences_results)} correspondences folders")
+        
+        # Then, prepare data for parallel processing of fake interest points
+        # Only create fake interest points for split labels, not original labels
+        vip_file_data_list = []
+        skipped_original = 0
+        for vip_file in vip_files:
+            label = vip_file.get('label', 'beads')
+            # Only process labels that end with "_split" or start with "splitPoints_"
+            if label.endswith('_split') or label.startswith('splitPoints_'):
+                vip_file_data = {
+                    'timepoint': vip_file.get('timepoint', '0'),
+                    'setup': vip_file.get('setup', '0'),
+                    'label': label
+                }
+                vip_file_data_list.append(vip_file_data)
+            else:
+                skipped_original += 1
+        
+        if skipped_original > 0:
+            print(f"Skipped {skipped_original} original labels (no fake interest points needed)")
         
         # Create Ray remote tasks for parallel execution
         futures = []

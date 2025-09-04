@@ -764,6 +764,10 @@ def _rebuild_xml_structure(xml_tree, old_setups, new_setups, new2old_setup_id,
         # Determine labels dynamically following Java implementation
         labels = []
         
+        # Add original labels (like Java: keep original labels)
+        for original_label in original_labels:
+            labels.append(original_label)
+        
         # Add original labels with "_split" suffix (like Java: label + "_split")
         for original_label in original_labels:
             labels.append(original_label + "_split")
