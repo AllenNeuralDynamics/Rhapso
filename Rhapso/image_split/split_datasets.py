@@ -789,7 +789,7 @@ def create_n5_files_for_fake_interest_points_ray(xml_data, n5_output_path, fip_d
         
         # Initialize Ray if not already initialized
         if not ray.is_initialized():
-            ray.init(num_cpus=4)  # Use 4 CPUs to reduce file system contention
+            ray.init()  # Don't specify num_cpus when connecting to existing cluster
         
         # First, create correspondences folders for ALL labels using Ray for speed
         print("Creating correspondences folders for all labels using Ray...")
@@ -901,9 +901,9 @@ def main_with_ray(xml_input, xml_output, n5_output=None, target_image_size_strin
         fip_error: Error threshold for fake points
     """
     try:
-        # Initialize Ray if available
+        # Initialize Ray if available and not already initialized
         if RAY_AVAILABLE and not ray.is_initialized():
-            ray.init(num_cpus=4)  # Use 4 CPUs to reduce file system contention
+            ray.init()  # Don't specify num_cpus when connecting to existing cluster
         
         # Run the main splitting pipeline
         main(
@@ -926,7 +926,7 @@ def main_with_ray(xml_input, xml_output, n5_output=None, target_image_size_strin
         if fake_interest_points and n5_output:
             print("Creating fake interest points with Ray distribution...")
             # Load the output XML to get the view information
-            xml_data = ET.parse(xml_output)
+            xml_data = load_xml_data(xml_output)
             create_n5_files_for_fake_interest_points_ray(
                 xml_data, n5_output, fip_density, fip_min_num_points, fip_max_num_points
             )
