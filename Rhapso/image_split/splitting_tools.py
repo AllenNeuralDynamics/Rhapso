@@ -739,13 +739,17 @@ def _rebuild_xml_structure(xml_tree, old_setups, new_setups, new2old_setup_id,
     # 3) Rebuild ViewInterestPoints from new_interestpoints
     try:
         vip_parent = xml_tree.find(".//{*}ViewInterestPoints") or xml_tree.find("ViewInterestPoints")
+        original_labels = set()
+        
         if vip_parent is not None:
             # Extract original labels from existing ViewInterestPoints before removing
-            original_labels = set()
             for vip_file in vip_parent.findall(".//{*}ViewInterestPointsFile") or vip_parent.findall("ViewInterestPointsFile"):
                 label_attr = _get_attr_safe(vip_file, "label")
                 if label_attr:
                     original_labels.add(label_attr)
+            
+            # Store original VIP files for parameter extraction
+            original_vip_files = vip_parent.findall(".//{*}ViewInterestPointsFile") or vip_parent.findall("ViewInterestPointsFile")
             
             # Replace for simplicity
             root = xml_tree
@@ -754,7 +758,7 @@ def _rebuild_xml_structure(xml_tree, old_setups, new_setups, new2old_setup_id,
             root.remove(vip_parent)
         else:
             parent = xml_tree
-            original_labels = set()
+            original_vip_files = []
         
         new_vip_parent = ET.SubElement(parent, "ViewInterestPoints")
 
@@ -764,11 +768,8 @@ def _rebuild_xml_structure(xml_tree, old_setups, new_setups, new2old_setup_id,
         # Determine labels dynamically following Java implementation
         labels = []
         
-        # Add original labels (like Java: keep original labels)
-        for original_label in original_labels:
-            labels.append(original_label)
-        
         # Add original labels with "_split" suffix (like Java: label + "_split")
+        # These should have the original DOG parameters
         for original_label in original_labels:
             labels.append(original_label + "_split")
         
@@ -805,6 +806,27 @@ def _rebuild_xml_structure(xml_tree, old_setups, new_setups, new2old_setup_id,
                 # Create the path text like Java BSS output
                 path_text = f"tpId_{timepoint_id}_viewSetupId_{setup_id}/{label}"
                 
+                # Determine parameters based on label type (following Java logic)
+                if label.endswith("_split"):
+                    # For "_split" labels, use original DOG parameters from the input XML
+                    # Extract original parameters from the input XML
+                    original_params = "DOG (Spark) s=2.0 t=0.005 overlappingOnly=true min=false max=true downsampleXY=16 downsampleZ=16 minIntensity=1.0 maxIntensity=5.0"
+                    
+                    # Try to find original parameters from the input XML
+                    if original_vip_files:
+                        for orig_vip_file in original_vip_files:
+                            orig_label = _get_attr_safe(orig_vip_file, "label")
+                            if orig_label and label == orig_label + "_split":
+                                orig_params = _get_attr_safe(orig_vip_file, "params")
+                                if orig_params:
+                                    original_params = orig_params
+                                break
+                    
+                    params = original_params
+                else:
+                    # For fake points (splitPoints_*), use fake parameters
+                    params = f"Fake points for image splitting: overlapPx={targetSize}, targetSize={targetSize}, minStepSize={targetSize}, optimize=False, pointDensity=0.0, minPoints=0, maxPoints=0, error=0.0, excludeRadius=0.0"
+                
                 # Create the ViewInterestPointsFile element
                 vip_file = ET.SubElement(
                     new_vip_parent,
@@ -813,7 +835,7 @@ def _rebuild_xml_structure(xml_tree, old_setups, new_setups, new2old_setup_id,
                         "timepoint": timepoint_id,
                         "setup": str(setup_id),
                         "label": label,
-                        "params": f"Fake points for image splitting: overlapPx={targetSize}, targetSize={targetSize}, minStepSize={targetSize}, optimize=False, pointDensity=0.0, minPoints=0, maxPoints=0, error=0.0, excludeRadius=0.0"
+                        "params": params
                     }
                 )
                 vip_file.text = path_text 
