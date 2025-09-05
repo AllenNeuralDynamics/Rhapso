@@ -563,7 +563,8 @@ def split_images(spimData, overlapPx, targetSize, minStepSize, assingIlluminatio
 
         # Rebuild XML structure
         _rebuild_xml_structure(xml_tree, old_setups, new_setups, new2old_setup_id, 
-                              new_setup_id2_interval, max_interval_spread_value, targetSize, original_xml_tree)
+                              new_setup_id2_interval, max_interval_spread_value, targetSize, original_xml_tree,
+                              overlapPx, minStepSize, optimize, pointDensity, minPoints, maxPoints, error, excludeRadius)
         
         return xml_tree
         
@@ -573,7 +574,9 @@ def split_images(spimData, overlapPx, targetSize, minStepSize, assingIlluminatio
 
 
 def _rebuild_xml_structure(xml_tree, old_setups, new_setups, new2old_setup_id, 
-                          new_setup_id2_interval, max_interval_spread_value, targetSize, original_xml_tree=None):
+                          new_setup_id2_interval, max_interval_spread_value, targetSize, original_xml_tree=None,
+                          overlapPx=None, minStepSize=None, optimize=False, pointDensity=0.0, 
+                          minPoints=0, maxPoints=0, error=0.0, excludeRadius=0.0):
     """Rebuild the XML structure with split tiles."""
     
     # 1) MissingViews: remap old missing views to all new setup ids derived from them
@@ -824,8 +827,11 @@ def _rebuild_xml_structure(xml_tree, old_setups, new_setups, new2old_setup_id,
                     
                     params = original_params
                 else:
-                    # For fake points (splitPoints_*), use fake parameters
-                    params = f"Fake points for image splitting: overlapPx={targetSize}, targetSize={targetSize}, minStepSize={targetSize}, optimize=False, pointDensity=0.0, minPoints=0, maxPoints=0, error=0.0, excludeRadius=0.0"
+                    # For fake points (splitPoints_*), use actual parameters (matching Java)
+                    overlapPx_str = str(list(overlapPx)) if overlapPx is not None else str(list(targetSize))
+                    targetSize_str = str(list(targetSize))
+                    minStepSize_str = str(list(minStepSize)) if minStepSize is not None else str(list(targetSize))
+                    params = f"Fake points for image splitting: overlapPx={overlapPx_str}, targetSize={targetSize_str}, minStepSize={minStepSize_str}, optimize={optimize}, pointDensity={pointDensity}, minPoints={minPoints}, maxPoints={maxPoints}, error={error}, excludeRadius={excludeRadius}"
                 
                 # Create the ViewInterestPointsFile element
                 vip_file = ET.SubElement(

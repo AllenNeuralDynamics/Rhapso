@@ -312,7 +312,14 @@ def save_xml_output(new_data, xml_output):
 
 
 def create_n5_files_for_fake_interest_points(xml_data, n5_output_path):
-    """Create N5 files for fake interest points created during image splitting."""
+    """Create N5 files for fake interest points created during image splitting.
+    
+    This function creates N5 structure that exactly matches BigStitcher-Spark Java output:
+    - Only creates datasets for labels that should have interest points
+    - Creates proper 2D arrays for id and loc datasets
+    - Does NOT create intensities datasets unless specifically needed
+    - Creates correspondences structure for all labels
+    """
     try:
         # Validate n5_output_path
         if not n5_output_path or not n5_output_path.strip():
@@ -345,7 +352,7 @@ def create_n5_files_for_fake_interest_points(xml_data, n5_output_path):
         # Use a different attribute name to avoid N5 reserved keyword warning
         root.attrs['n5_version'] = '4.0.0'
         
-        # First, create correspondences folders for ALL labels (including original labels)
+        # Create correspondences folders for ALL labels (matching Java behavior)
         print("Creating correspondences folders for all labels...")
         correspondences_created = 0
         for vip_file in vip_files:
@@ -360,7 +367,7 @@ def create_n5_files_for_fake_interest_points(xml_data, n5_output_path):
             if correspondences_path not in root:
                 try:
                     correspondences_group = root.create_group(correspondences_path)
-                    # Set correspondences attributes
+                    # Set correspondences attributes (matching Java InterestPointsN5)
                     correspondences_group.attrs["correspondences"] = "1.0.0"
                     correspondences_group.attrs["idMap"] = {}  # Empty idMap initially
                     correspondences_created += 1
@@ -369,24 +376,19 @@ def create_n5_files_for_fake_interest_points(xml_data, n5_output_path):
         
         print(f"Created {correspondences_created} correspondences folders")
         
-        # Then, create fake interest points for split labels only
-        print("Creating fake interest points for split labels...")
-        skipped_original = 0
-        fake_points_created = 0
+        # Create interest points structure for labels that should have them
+        print("Creating interest points structure...")
+        interest_points_created = 0
+        
         for vip_file in vip_files:
             timepoint_attr = vip_file.get('timepoint', '0')
             setup_attr = vip_file.get('setup', '0')
             label_attr = vip_file.get('label', 'beads')
             
-            # Only create fake interest points for split labels
-            if not (label_attr.endswith('_split') or label_attr.startswith('splitPoints_')):
-                skipped_original += 1
-                continue
-            
             # Create N5 path for this label
             n5_dataset_path = f"tpId_{timepoint_attr}_viewSetupId_{setup_attr}/{label_attr}/interestpoints"
             
-            # Create empty N5 directories for fake interest points
+            # Create interest points group (matching Java InterestPointsN5 structure)
             if n5_dataset_path not in root:
                 try:
                     dataset = root.create_group(n5_dataset_path)
@@ -394,52 +396,42 @@ def create_n5_files_for_fake_interest_points(xml_data, n5_output_path):
                     # If group already exists, get it
                     dataset = root[n5_dataset_path]
                 
-                # Set attributes
+                # Set attributes (matching Java InterestPointsN5)
                 dataset.attrs["pointcloud"] = "1.0.0"
                 dataset.attrs["type"] = "list"
                 dataset.attrs["list version"] = "1.0.0"
                 
-                # Create sub-datasets
+                # Create sub-datasets (matching Java InterestPointsN5 structure)
                 id_dataset = f"{n5_dataset_path}/id"
                 loc_dataset = f"{n5_dataset_path}/loc"
-                intensities_dataset = f"{n5_dataset_path}/intensities" 
                 
-                # Create empty datasets for fake interest points
+                # Create empty datasets for interest points (2D arrays like Java)
                 if id_dataset not in root:
+                    # 1 x N array (which is a 2D array) - matching Java
                     root.create_dataset(
                         id_dataset,
-                        shape=(0,), 
-                        dtype='u8',  
-                        chunks=(1,),  
+                        shape=(1, 0),  # 2D array: 1 x N
+                        dtype='u8',    # UINT64 equivalent
+                        chunks=(1, 300000),  # Matching Java defaultBlockSize
                         compressor=zarr.GZip()
                     )
                 
                 if loc_dataset not in root:
+                    # DIM x N array (which is a 2D array) - matching Java
                     root.create_dataset(
                         loc_dataset,
-                        shape=(0,),  
-                        dtype='f8',  
-                        chunks=(1,), 
+                        shape=(3, 0),  # 2D array: 3 x N (assuming 3D coordinates)
+                        dtype='f8',    # FLOAT64 equivalent
+                        chunks=(3, 300000),  # Matching Java defaultBlockSize
                         compressor=zarr.GZip()
                     )
                 
-                if intensities_dataset not in root:
-                    root.create_dataset(
-                        intensities_dataset,
-                        shape=(0,), 
-                        dtype='f4', 
-                        chunks=(1,),  
-                        compressor=zarr.GZip()
-                    )
-                
-                # Log the creation of fake interest point directories
+                # Log the creation of interest point directories
                 saved_path = f"file:{n5_output_path}/{n5_dataset_path}"
-                fake_points_created += 1
+                interest_points_created += 1
         
-        if skipped_original > 0:
-            print(f"Skipped {skipped_original} original labels (no fake interest points needed)")
-        print(f"Created {fake_points_created} fake interest point datasets")
-        print("Fake interest points N5 files created successfully")
+        print(f"Created {interest_points_created} interest point datasets")
+        print("Interest points N5 files created successfully")
         
     except Exception as e:
         print(f"Warning: Could not create N5 files for fake interest points: {e}")
@@ -670,16 +662,13 @@ def create_single_n5_dataset(vip_file_data, n5_output_path, is_s3=False, fip_den
         else:
             fake_points = grid_points
         
-        # Generate fake intensities (random values between 0.1 and 1.0)
-        fake_intensities = np.random.uniform(0.1, 1.0, num_points)
+        # Create fake IDs (sequential) - must be reshaped to (1, num_points) to match Java
+        fake_ids = np.arange(num_points, dtype=np.uint64).reshape(1, -1)
         
-        # Create fake IDs (sequential) - must be reshaped to (num_points, 1)
-        fake_ids = np.arange(num_points, dtype=np.uint64).reshape(-1, 1)
-        
-        # Create sub-datasets with actual data
+        # Create sub-datasets with actual data (matching Java InterestPointsN5 structure)
         id_dataset = f"{n5_dataset_path}/id"
         loc_dataset = f"{n5_dataset_path}/loc"
-        intensities_dataset = f"{n5_dataset_path}/intensities"
+        # Note: No intensities dataset - matching Java behavior
         
         # Remove existing datasets if they exist (with error handling)
         try:
@@ -687,42 +676,30 @@ def create_single_n5_dataset(vip_file_data, n5_output_path, is_s3=False, fip_den
                 del root[id_dataset]
             if loc_dataset in root:
                 del root[loc_dataset]
-            if intensities_dataset in root:
-                del root[intensities_dataset]
         except Exception as e:
             print(f"Warning: Could not delete existing datasets: {e}")
         
-        # Create the datasets with actual data
+        # Create the datasets with actual data (matching Java InterestPointsN5 structure)
         try:
-            # Create ID dataset (2D array: num_points x 1)
+            # Create ID dataset (2D array: 1 x num_points) - matching Java
             root.create_dataset(
                 id_dataset,
                 data=fake_ids,
                 dtype='u8',
-                chunks=(min(100, num_points), 1),  # Corrected chunking for 2D array
+                chunks=(1, 300000),  # Matching Java defaultBlockSize
                 compressor=zarr.GZip()
             )
             
-            # Create location dataset (2D array: num_points x 3)
+            # Create location dataset (2D array: 3 x num_points) - matching Java
+            # Transpose fake_points to get (3, num_points) instead of (num_points, 3)
+            fake_points_transposed = fake_points.T
             root.create_dataset(
                 loc_dataset,
-                data=fake_points,
+                data=fake_points_transposed,
                 dtype='f8',
-                chunks=(min(100, num_points), 3),  # Corrected chunking for 2D array
+                chunks=(3, 300000),  # Matching Java defaultBlockSize
                 compressor=zarr.GZip()
             )
-            
-            # Create intensities dataset (1D array: num_points)
-            intensities_ds = root.create_dataset(
-                intensities_dataset,
-                data=fake_intensities,
-                dtype='f4',
-                chunks=(min(100, num_points),),
-                compressor=zarr.GZip()
-            )
-            # Add required attributes for intensities dataset (use non-reserved names)
-            intensities_ds.attrs["dataset_dimensions"] = [1, num_points]
-            intensities_ds.attrs["dataset_blockSize"] = [1, min(100, num_points)]
             
         except Exception as e:
             print(f"Warning: Could not create datasets for {n5_dataset_path}: {e}")
@@ -822,13 +799,15 @@ def create_n5_files_for_fake_interest_points_ray(xml_data, n5_output_path, fip_d
         print(f"Created {successful_correspondences}/{len(correspondences_results)} correspondences folders")
         
         # Then, prepare data for parallel processing of fake interest points
-        # Only create fake interest points for split labels, not original labels
+        # Only create fake interest points for splitPoints_* labels, not beads_split labels
+        # beads_split should remain empty (matching original beads data)
         vip_file_data_list = []
         skipped_original = 0
         for vip_file in vip_files:
             label = vip_file.get('label', 'beads')
-            # Only process labels that end with "_split" or start with "splitPoints_"
-            if label.endswith('_split') or label.startswith('splitPoints_'):
+            # Only process labels that start with "splitPoints_" (fake points)
+            # beads_split labels should remain empty (matching Java behavior)
+            if label.startswith('splitPoints_'):
                 vip_file_data = {
                     'timepoint': vip_file.get('timepoint', '0'),
                     'setup': vip_file.get('setup', '0'),
@@ -839,7 +818,58 @@ def create_n5_files_for_fake_interest_points_ray(xml_data, n5_output_path, fip_d
                 skipped_original += 1
         
         if skipped_original > 0:
-            print(f"Skipped {skipped_original} original labels (no fake interest points needed)")
+            print(f"Skipped {skipped_original} labels (beads_split and original labels - no fake interest points needed)")
+        
+        # Create empty interest points datasets for beads_split labels (matching Java behavior)
+        print("Creating empty interest points datasets for beads_split labels...")
+        empty_datasets_created = 0
+        for vip_file in vip_files:
+            label = vip_file.get('label', 'beads')
+            if label.endswith('_split') and not label.startswith('splitPoints_'):
+                # This is a beads_split label - create empty datasets
+                timepoint = vip_file.get('timepoint', '0')
+                setup = vip_file.get('setup', '0')
+                
+                # Create empty interest points structure
+                n5_dataset_path = f"tpId_{timepoint}_viewSetupId_{setup}/{label}/interestpoints"
+                
+                if n5_dataset_path not in root:
+                    try:
+                        dataset = root.create_group(n5_dataset_path)
+                        # Set attributes (matching Java InterestPointsN5)
+                        dataset.attrs["pointcloud"] = "1.0.0"
+                        dataset.attrs["type"] = "list"
+                        dataset.attrs["list version"] = "1.0.0"
+                        
+                        # Create empty datasets for interest points (2D arrays like Java)
+                        id_dataset = f"{n5_dataset_path}/id"
+                        loc_dataset = f"{n5_dataset_path}/loc"
+                        
+                        if id_dataset not in root:
+                            root.create_dataset(
+                                id_dataset,
+                                shape=(1, 0),  # 2D array: 1 x N
+                                dtype='u8',    # UINT64 equivalent
+                                chunks=(1, 300000),  # Matching Java defaultBlockSize
+                                compressor=zarr.GZip()
+                            )
+                        
+                        if loc_dataset not in root:
+                            root.create_dataset(
+                                loc_dataset,
+                                shape=(3, 0),  # 2D array: 3 x N
+                                dtype='f8',    # FLOAT64 equivalent
+                                chunks=(3, 300000),  # Matching Java defaultBlockSize
+                                compressor=zarr.GZip()
+                            )
+                        
+                        empty_datasets_created += 1
+                        print(f"✓ Created empty datasets for {label}")
+                        
+                    except Exception as e:
+                        print(f"✗ Failed to create empty datasets for {label}: {e}")
+        
+        print(f"Created {empty_datasets_created} empty interest points datasets for beads_split labels")
         
         # Create Ray remote tasks for parallel execution
         futures = []
