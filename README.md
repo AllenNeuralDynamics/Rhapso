@@ -13,6 +13,7 @@
 <br>
 
 ## Table of Contents
+- [Getting Started](#getting-started)
 - [Summary](#summary)
 - [Features](#features)
 - [Performance](#performance)
@@ -26,6 +27,86 @@
 - [Tuning Guide](#tuning-guide)
 - [Build Package](#build-package)
   - [Using the Built `.whl` File](#using-the-built-whl-file)
+
+---
+
+<br>
+
+## Getting Started
+
+> [!IMPORTANT]
+> **Quick Start Guide**: Follow these 4 steps to run Rhapso on your dataset.
+
+### Step 1: Get Your AWS Credentials
+
+> [!NOTE]
+> You'll need a `.pem` file to access your AWS cluster. Here's how to get one:
+
+- **Create a new key pair** in AWS EC2 Console → Key Pairs → Create key pair
+- **Download the `.pem` file** to your local machine
+- **Note the file path** - you'll need it for the cluster config
+
+### Step 2: Configure Your Cluster
+
+Create a cluster configuration file by copying the template:
+
+```bash
+cp Rhapso/pipelines/ray/aws/config/alignment_cluster_martin.yml Rhapso/pipelines/ray/aws/config/alignment_cluster_yourname.yml
+```
+
+Edit `alignment_cluster_yourname.yml` and update these **two critical settings**:
+
+1. **PEM file location**:
+   ```yaml
+   head_node:
+     ssh_private_key: "/your/path/to/your-key.pem"  # Update this path
+   ```
+
+2. **Rhapso wheel file**:
+   ```yaml
+   setup_commands:
+     - aws s3 cp s3://rhapso/version.whl /tmp/rhapso.whl  # Use published version
+   ```
+
+> [!TIP]
+> We have a published version available at `s3://rhapso/version.whl` - no need to build your own!
+
+### Step 3: Configure Your Dataset
+
+Edit your dataset configuration file (e.g., `Rhapso/pipelines/ray/param/exaSPIM_720164.yml`):
+
+```yaml
+# Update these paths for your dataset
+input_path: "s3://your-bucket/input-data/"     # Your input data location
+output_path: "s3://your-bucket/output-data/"   # Your desired output location
+
+# Adjust parameters as needed
+sigma: 1.5
+threshold: 0.01
+```
+
+> [!NOTE]
+> **Smart Path Detection**: The script automatically detects if you're using local or AWS S3 paths:
+> - Paths starting with `s3://` → runs on AWS cluster
+> - Local paths → runs locally with Ray
+
+### Step 4: Run the Pipeline
+
+Update the pipeline script to use your configurations:
+
+```python
+# In alignment_pipeline.py, update these two lines:
+unified_yml = "alignment_cluster_yourname.yml"  # Your cluster config
+config_file = "exaSPIM_720164.yml"             # Your dataset config
+```
+
+Then run:
+```bash
+python Rhapso/pipelines/ray/aws/alignment_pipeline.py
+```
+
+> [!WARNING]
+> The pipeline automatically shuts down the cluster when complete. Always verify in AWS Console that resources are properly terminated.
 
 ---
 
