@@ -9,7 +9,7 @@ from itertools import product
 from Rhapso.image_split.split_views import next_multiple
 
 
-# ============================================================================
+# ============================================================================ 
 # Utility Functions
 # ============================================================================
 
@@ -359,6 +359,7 @@ def split_images(spimData, overlapPx, targetSize, minStepSize, assingIlluminatio
     try:
         new_spim_data = copy.deepcopy(spimData)
         xml_tree = new_spim_data
+        original_xml_tree = spimData  # Keep reference to original XML for zarr path extraction
         
         sequence_description = xml_tree.find(".//{*}SequenceDescription") or xml_tree.find("SequenceDescription")
         
@@ -562,7 +563,7 @@ def split_images(spimData, overlapPx, targetSize, minStepSize, assingIlluminatio
 
         # Rebuild XML structure
         _rebuild_xml_structure(xml_tree, old_setups, new_setups, new2old_setup_id, 
-                              new_setup_id2_interval, max_interval_spread_value, targetSize)
+                              new_setup_id2_interval, max_interval_spread_value, targetSize, original_xml_tree)
         
         return xml_tree
         
@@ -572,7 +573,7 @@ def split_images(spimData, overlapPx, targetSize, minStepSize, assingIlluminatio
 
 
 def _rebuild_xml_structure(xml_tree, old_setups, new_setups, new2old_setup_id, 
-                          new_setup_id2_interval, max_interval_spread_value, targetSize):
+                          new_setup_id2_interval, max_interval_spread_value, targetSize, original_xml_tree=None):
     """Rebuild the XML structure with split tiles."""
     
     # 1) MissingViews: remap old missing views to all new setup ids derived from them
@@ -763,6 +764,10 @@ def _rebuild_xml_structure(xml_tree, old_setups, new_setups, new2old_setup_id,
         # Determine labels dynamically following Java implementation
         labels = []
         
+        # Add original labels (like Java: keep original labels)
+        for original_label in original_labels:
+            labels.append(original_label)
+        
         # Add original labels with "_split" suffix (like Java: label + "_split")
         for original_label in original_labels:
             labels.append(original_label + "_split")
@@ -796,7 +801,7 @@ def _rebuild_xml_structure(xml_tree, old_setups, new_setups, new2old_setup_id,
         
         # Generate ViewInterestPointsFile for each label and each split tile
         for label in labels:
-            for setup_id in range(total_split_tiles):
+            for setup_id in range(total_split_tiles): 
                 # Create the path text like Java BSS output
                 path_text = f"tpId_{timepoint_id}_viewSetupId_{setup_id}/{label}"
                 
@@ -811,7 +816,7 @@ def _rebuild_xml_structure(xml_tree, old_setups, new_setups, new2old_setup_id,
                         "params": f"Fake points for image splitting: overlapPx={targetSize}, targetSize={targetSize}, minStepSize={targetSize}, optimize=False, pointDensity=0.0, minPoints=0, maxPoints=0, error=0.0, excludeRadius=0.0"
                     }
                 )
-                vip_file.text = path_text
+                vip_file.text = path_text 
         
         logging.info(f"Created {len(labels) * total_split_tiles} ViewInterestPointsFile items ({len(labels)} labels × {total_split_tiles} split tiles)")
         
@@ -828,7 +833,7 @@ def _rebuild_xml_structure(xml_tree, old_setups, new_setups, new2old_setup_id,
             seq_desc.remove(existing_loader)
 
         # Extract zarr path and zgroups from input XML using improved extraction
-        input_zarr_path = _extract_zarr_path_from_xml(xml_tree)
+        input_zarr_path = _extract_zarr_path_from_xml(original_xml_tree) if original_xml_tree else "PLACEHOLDER_ZARR_PATH"
         
         # Look for the original ImageLoader in the root XML tree
         input_img_loader = xml_tree.find(".//{*}ImageLoader") or xml_tree.find("ImageLoader")
@@ -850,7 +855,27 @@ def _rebuild_xml_structure(xml_tree, old_setups, new_setups, new2old_setup_id,
         # Nested ImageLoader for zarr
         nested_img_loader = ET.SubElement(main_img_loader, "ImageLoader", {"format": "bdv.multimg.zarr", "version": "3.0"})
         zarr_elem = ET.SubElement(nested_img_loader, "zarr", {"type": "absolute"})
-        zarr_elem.text = input_zarr_path
+        
+        # Use the extracted zarr path, or fallback to a reasonable default
+        if input_zarr_path and input_zarr_path != "PLACEHOLDER_ZARR_PATH":
+            zarr_elem.text = input_zarr_path
+        else:
+            # Try to extract from the original XML more thoroughly
+            if original_xml_tree:
+                original_zarr_path = _extract_original_zarr_path(original_xml_tree)
+                if original_zarr_path and original_zarr_path != "PLACEHOLDER_ZARR_PATH":
+                    zarr_elem.text = original_zarr_path
+                else:
+                    # Try one more time with a different approach - look for s3bucket and zarr in the original XML
+                    s3_zarr_path = _extract_s3_zarr_path_from_original(original_xml_tree)
+                    if s3_zarr_path and s3_zarr_path != "PLACEHOLDER_ZARR_PATH":
+                        zarr_elem.text = s3_zarr_path
+                    else:
+                        # Use a placeholder that indicates the path needs to be manually set
+                        zarr_elem.text = "REQUIRES_MANUAL_ZARR_PATH_SETTING"
+            else:
+                # Use a placeholder that indicates the path needs to be manually set
+                zarr_elem.text = "REQUIRES_MANUAL_ZARR_PATH_SETTING"
 
         # zgroups: use input zgroups if available, else synthesize from old_setups
         zgroups_elem = ET.SubElement(nested_img_loader, "zgroups")
@@ -865,24 +890,15 @@ def _rebuild_xml_structure(xml_tree, old_setups, new_setups, new2old_setup_id,
         else:
             # Use old_setups for zgroups since these represent the original tiles
             for i, old_setup in enumerate(old_setups):
-                # Create the zgroup element with more realistic path
-                channel_id = "561"  # default
-                if "channel" in old_setup:
-                    if isinstance(old_setup["channel"], dict) and "id" in old_setup["channel"]:
-                        channel_id = str(old_setup["channel"]["id"])
-                    elif isinstance(old_setup["channel"], (int, str)):
-                        channel_id = str(old_setup["channel"])
+                # Extract channel ID from the old setup
+                channel_id = "488"  # default based on input XML
+                channel_el = old_setup.find(".//{*}channel") or old_setup.find("channel")
+                if channel_el is not None and channel_el.text:
+                    channel_id = str(channel_el.text.strip())
                 
-                # Create a more realistic path that matches the input zarr structure
-                if input_zarr_path != "unknown" and input_zarr_path.endswith(".zarr"):
-                    # If we have a zarr path, create a relative path
-                    base_path = input_zarr_path.rstrip("/")
-                    if base_path.endswith(".zarr"):
-                        base_path = base_path[:-5]  # remove .zarr
-                    path = f"{base_path}_tile_{i:06d}_ch_{channel_id}.zarr"
-                else:
-                    # Fallback to the original pattern
-                    path = f"tile_{i:06d}_ch_{channel_id}.zarr"
+                # Create the zgroup element with the original tile path pattern
+                # This should match the input XML pattern: tile_000000_ch_488.zarr
+                path = f"tile_{i:06d}_ch_{channel_id}.zarr"
                 
                 zg = ET.SubElement(zgroups_elem, "zgroup", {
                     "setup": str(i),
@@ -1186,14 +1202,109 @@ def _extract_zarr_path_from_xml(xml_tree):
                 img_loader = nested_loader
             
             zarr_elem = img_loader.find(".//{*}zarr") or img_loader.find("zarr")
+            s3bucket_elem = img_loader.find(".//{*}s3bucket") or img_loader.find("s3bucket")
+            
             if zarr_elem is not None and zarr_elem.text and zarr_elem.text.strip():
-                return zarr_elem.text.strip()
+                zarr_path = zarr_elem.text.strip()
+                
+                # If there's an s3bucket, combine them into a proper S3 URL
+                if s3bucket_elem is not None and s3bucket_elem.text and s3bucket_elem.text.strip():
+                    s3bucket = s3bucket_elem.text.strip()
+                    # Remove leading slash from zarr_path if present
+                    if zarr_path.startswith('/'):
+                        zarr_path = zarr_path[1:]
+                    return f"s3://{s3bucket}/{zarr_path}"
+                else:
+                    return zarr_path
         
-        return "unknown"
+        # If no zarr path found, try to construct one from the input XML
+        # Look for any existing zarr references in the original data
+        base_path_elem = xml_tree.find(".//{*}BasePath") or xml_tree.find("BasePath")
+        if base_path_elem is not None and base_path_elem.text:
+            base_path = base_path_elem.text.strip()
+            if base_path.endswith('.zarr') or base_path.endswith('.zarr/'):
+                return base_path
+            elif 'zarr' in base_path.lower():
+                return base_path
+        
+        # Fallback: return a placeholder that indicates the path needs to be set
+        return "PLACEHOLDER_ZARR_PATH"
         
     except Exception as e:
         logging.error(f"Error extracting zarr path: {str(e)}")
-        return "unknown"
+        return "PLACEHOLDER_ZARR_PATH"
+
+
+def _extract_original_zarr_path(xml_tree):
+    """Extract the original zarr path from the input XML before any modifications."""
+    try:
+        # Look for zarr paths in the original XML structure
+        # This should find the zarr path from the input XML before any splitting
+        img_loader = xml_tree.find(".//{*}ImageLoader") or xml_tree.find("ImageLoader")
+        if img_loader is not None:
+            # Check if this is already a split loader
+            if img_loader.get("format") == "split.viewerimgloader":
+                # This is already a split loader, look for the nested one
+                nested_loader = img_loader.find(".//{*}ImageLoader") or img_loader.find("ImageLoader")
+                if nested_loader is not None:
+                    zarr_elem = nested_loader.find(".//{*}zarr") or nested_loader.find("zarr")
+                    if zarr_elem is not None and zarr_elem.text and zarr_elem.text.strip():
+                        return zarr_elem.text.strip()
+            else:
+                # This is the original loader, extract the zarr path
+                zarr_elem = img_loader.find(".//{*}zarr") or img_loader.find("zarr")
+                s3bucket_elem = img_loader.find(".//{*}s3bucket") or img_loader.find("s3bucket")
+                
+                if zarr_elem is not None and zarr_elem.text and zarr_elem.text.strip():
+                    zarr_path = zarr_elem.text.strip()
+                    
+                    # If there's an s3bucket, combine them into a proper S3 URL
+                    if s3bucket_elem is not None and s3bucket_elem.text and s3bucket_elem.text.strip():
+                        s3bucket = s3bucket_elem.text.strip()
+                        # Remove leading slash from zarr_path if present
+                        if zarr_path.startswith('/'):
+                            zarr_path = zarr_path[1:]
+                        return f"s3://{s3bucket}/{zarr_path}"
+                    else:
+                        return zarr_path
+        
+        # Try to find any zarr references in the XML
+        zarr_elements = xml_tree.findall(".//{*}zarr") or xml_tree.findall("zarr")
+        for zarr_elem in zarr_elements:
+            if zarr_elem.text and zarr_elem.text.strip():
+                text = zarr_elem.text.strip()
+                if text and text != "unknown" and text != "PLACEHOLDER_ZARR_PATH":
+                    return text
+        
+        return "PLACEHOLDER_ZARR_PATH"
+        
+    except Exception as e:
+        logging.error(f"Error extracting original zarr path: {str(e)}")
+        return "PLACEHOLDER_ZARR_PATH"
+
+
+def _extract_s3_zarr_path_from_original(xml_tree):
+    """Extract S3 zarr path by looking for s3bucket and zarr elements in the original XML."""
+    try:
+        # Look for s3bucket and zarr elements in the original XML structure
+        s3bucket_elem = xml_tree.find(".//{*}s3bucket") or xml_tree.find("s3bucket")
+        zarr_elem = xml_tree.find(".//{*}zarr") or xml_tree.find("zarr")
+        
+        if s3bucket_elem is not None and s3bucket_elem.text and zarr_elem is not None and zarr_elem.text:
+            s3bucket = s3bucket_elem.text.strip()
+            zarr_path = zarr_elem.text.strip()
+            
+            # Remove leading slash from zarr_path if present
+            if zarr_path.startswith('/'):
+                zarr_path = zarr_path[1:]
+            
+            return f"s3://{s3bucket}/{zarr_path}"
+        
+        return "PLACEHOLDER_ZARR_PATH"
+        
+    except Exception as e:
+        logging.error(f"Error extracting S3 zarr path: {str(e)}")
+        return "PLACEHOLDER_ZARR_PATH"
 
 
 def _validate_final_xml_structure(xml_tree, expected_zgroups_count):

@@ -20,6 +20,16 @@
             "python": "venv/bin/python",
             "args": [],
             "justMyCode": true
+        },
+        { 
+            "name": "Image Split Pipeline",
+            "type": "debugpy",
+            "request": "launch",
+            "program": "${workspaceFolder}/Rhapso/pipelines/ray/image_split_pipeline.py",
+            "cwd": "${workspaceFolder}",
+            "python": "venv/bin/python",
+            "args": [],
+            "justMyCode": true
         }
     ]
 }

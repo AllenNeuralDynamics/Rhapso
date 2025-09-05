@@ -1,4 +1,4 @@
-cluster_name: ray-cluster-rhapso-alignment-martin-01
+cluster_name: ray-cluster-rhapso-alignment-martin-07
 max_workers: 10
 min_workers: 10
 
@@ -10,7 +10,7 @@ provider:
 
 auth:
   ssh_user: ubuntu
-  ssh_private_key: ~/.ssh/rhapso-ray-ssh-martin.pem
+  ssh_private_key: ~/.ssh/rhapso-ray-ssh-martin.pem 
 
 available_node_types:
   ray.head.default:
@@ -47,10 +47,10 @@ setup_commands:
   - sudo python3 -m pip install awscli
   - sudo python3 -m pip install "ray[default]==2.9.1"  
   - sudo python3 -m pip install protobuf==4.23.4 
-  - aws s3 cp s3://martin-test-bucket/rhapso-0.1.13-py3-none-any.whl /tmp/Rhapso-0.1.13-py3-none-any.whl  
+  - aws s3 cp s3://martin-test-bucket/rhapso-0.1.8-py3-none-any.whl /tmp/rhapso-0.1.8-py3-none-any.whl  
   - echo 'export PATH=$HOME/.local/bin:$PATH' >> ~/.bashrc
   - source ~/.bashrc
-  - pip install --force-reinstall /tmp/Rhapso-0.1.13-py3-none-any.whl    
+  - pip install --force-reinstall /tmp/rhapso-0.1.8-py3-none-any.whl    
 
 head_start_ray_commands:
   - ray stop
