@@ -5,7 +5,7 @@ import json
 import base64, json
 from pathlib import Path
 
-with open("Rhapso/pipelines/ray/param/dev/zarr_local_sean.yml", "r") as file:
+with open("Rhapso/pipelines/ray/param/dev/zarr_s3_sean.yml", "r") as file:
     config = yaml.safe_load(file)
 
 serialized_config = base64.b64encode(json.dumps(config).encode()).decode()
@@ -120,6 +120,27 @@ matching_cmd_split_affine = (
     "\""
 )
 
+# Split run command
+split_cmd = (
+    "bash -lc \""
+    "python3 - <<\\\"PY\\\"\n"
+    "import sys, json, base64\n"
+    "from Rhapso.pipelines.ray.split_dataset import SplitDataset\n"
+    f"cfg = json.loads(base64.b64decode(\\\"{serialized_config}\\\").decode())\n"
+    "split = SplitDataset(\n"
+    "    xml_file_path=cfg[\\\"xml_file_path_split\\\"],\n"
+    "    xml_output_file_path=cfg[\\\"xml_output_file_path_split\\\"],\n"
+    "    n5_path=cfg[\\\"n5_path_split\\\"], point_density=cfg[\\\"point_density\\\"], min_points=cfg[\\\"min_points\\\"],\n"
+    "    max_points=cfg[\\\"max_points\\\"],\n"
+    "    error=cfg[\\\"error\\\"],\n"
+    "    exclude_radius=cfg[\\\"exclude_radius\\\"], target_image_size=cfg[\\\"target_image_size\\\"],\n"
+    "    target_overlap=cfg[\\\"target_overlap\\\"],\n"
+    ")\n"
+    "split.run()\n"
+    "PY\n"
+    "\""
+)
+
 # Rigid solver run command
 solver_rigid = Solver(
     xml_file_path_output=config['xml_file_path_output_rigid'],
@@ -152,7 +173,23 @@ solver_affine = Solver(
     metrics_output_path=config['metrics_output_path'],
 )
 
-prefix = (Path(__file__).resolve().parent / "config").as_posix()
+# SOLVER SPLIT AFFINE
+solver_split_affine = Solver(
+    xml_file_path_output=config['xml_file_path_output_split_affine'],
+    n5_input_path=config['n5_input_path'],
+    xml_file_path=config['xml_file_path_solver_split_affine'],
+    run_type=config['run_type_solver_split_affine'],  
+    relative_threshold=config['relative_threshold'],
+    absolute_threshold=config['absolute_threshold'],
+    min_matches=config['min_matches'],
+    damp=config['damp'],
+    max_iterations=config['max_iterations'],
+    max_allowed_error=config['max_allowed_error'],
+    max_plateauwidth=config['max_plateauwidth'],
+    metrics_output_path=config['metrics_output_path'],
+)
+
+prefix = (Path(__file__).resolve().parent / "config/dev").as_posix()
 unified_yml = "alignment_cluster_sean.yml"
 
 def exec_on_cluster(name, yml, cmd, cwd):
@@ -170,11 +207,15 @@ try:
     solver_rigid.run()
     exec_on_cluster("Matching (affine)", unified_yml, matching_cmd_affine, prefix)
     solver_affine.run()
-    # exec_on_cluster("Matching (split_affine)", unified_yml, matching_cmd_split_affine, prefix)
+    exec_on_cluster("Split Dataset", unified_yml, split_cmd, prefix)
+    exec_on_cluster("Matching (split_affine)", unified_yml, matching_cmd_split_affine, prefix)
+    solver_split_affine.run()
     print("\n✅ Pipeline complete.")
+
 except subprocess.CalledProcessError as e:
     print(f"❌ Pipeline error: {e}")
     raise
+
 finally:
     print("\n=== Tear down cluster ===")
     print("$", " ".join(["ray", "down", unified_yml, "-y"]))

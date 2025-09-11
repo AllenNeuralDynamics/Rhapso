@@ -1,3 +1,4 @@
+pandas
 dask[array]==2024.12.1
 zarr==2.18.3
 scipy==1.13.1
@@ -11,8 +12,5 @@ numcodecs==0.13.1
 matplotlib==3.10.0
 memory-profiler==0.61.0
 s3fs==2024.12.0
-pandas
 ray==2.47.1
-
-# Matching
 scikit-learn

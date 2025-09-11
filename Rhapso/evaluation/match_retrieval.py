@@ -1,11 +1,9 @@
-
-
+from Rhapso.data_prep.xml_to_dataframe import XMLToDataFrame
 import boto3
 import zarr
 import s3fs
 import numpy as np
 import pandas as pd
-from Rhapso.data_prep.xml_to_dataframe import XMLToDataFrame
 
 class MatchProcessor:
     def __init__(self, base_path, xml_file_path):

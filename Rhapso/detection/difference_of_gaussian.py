@@ -6,7 +6,7 @@ from scipy.linalg import lu_factor, lu_solve
 import numpy as np
 
 """
-Utility class to compute difference of gaussian on a 3D image chunk, collecting interest points and intensities
+Difference of Gaussian computes the difference of gaussian on a 3D image chunk, collecting interest points and intensities
 """
 
 class DifferenceOfGaussian:
@@ -31,6 +31,9 @@ class DifferenceOfGaussian:
         return peaks
 
     def upsample_coordinates(self, points):
+        """
+        Map 3D points from downsampled (mipmap) space back to full-res
+        """
         P = np.asarray(points, dtype=np.float32)        
         T = np.asarray(self.mip_map_downsample, dtype=np.float32)
 
@@ -65,6 +68,9 @@ class DifferenceOfGaussian:
         return g.ravel()
 
     def quadratic_fit(self, image, position):
+        """
+        Compute the gradient vector (g) and Hessian matrix (H) at an integer voxel using second-order central
+        """
         n = len(position)
         g = np.zeros(n, dtype=np.float64)
         H = np.zeros((n, n), dtype=np.float64)
@@ -98,6 +104,10 @@ class DifferenceOfGaussian:
         return g, H, a1
 
     def refine_peaks(self, peaks, image):
+        """
+        Quadratic peak refinement - iteratively refine integer-voxel peaks to subpixel locations using a 
+        quadratic (Newton) update from the local gradient/Hessian, with step capping and boundary checks
+        """
         max_moves=10
         maxima_tolerance=0.1
         threshold=0.0        
@@ -154,6 +164,9 @@ class DifferenceOfGaussian:
         return np.vstack(refined_positions).astype(np.float32)
 
     def find_peaks(self, dog, min_initial_peak_value):
+        """
+        Find 3D peak candidates as strict local maxima (26-neighborhood)
+        """
         L = np.asarray(dog, dtype=np.float32)
 
         # skip outer 1-voxel border 
@@ -167,16 +180,19 @@ class DifferenceOfGaussian:
         strict_max = L > neigh_max
 
         strong = L >= float(min_initial_peak_value)
-        # strong = np.abs(L) >= float(min_initial_peak_value)
-
         cand = interior & strict_max & strong
+        
         if not cand.any():
             return np.empty((0, 3), dtype=np.int32)
 
         peaks = np.column_stack(np.nonzero(cand)).astype(np.int32)
+        
         return peaks
 
     def apply_gaussian_blur(self, img, sigma):
+        """
+        Apply an N-D Gaussian blur with per-axis sigmas using reflect padding at the borders
+        """
         sigma = tuple(float(s) for s in sigma)
         blurred_image = gaussian_filter(img, sigma=sigma, mode='reflect')
         
@@ -262,16 +278,10 @@ class DifferenceOfGaussian:
          
         return final_peak_values
 
-    # def background_subtract_xy(self, image_chunk):
-    #     r = int(self.median_filter or 0)
-    #     img = image_chunk.astype(np.float32, copy=False)
-    #     if r <= 0:
-    #         return img
-    #     k = 2*r + 1
-    #     bg = median_filter(img, size=(k, k, 1), mode='nearest')  # X,Y,Z -> XY-only
-    #     return img - bg
-
     def background_subtract_xy(self, image_chunk):
+        """
+        Remove slow-varying background in XY by subtracting a medianfilter
+        """
         r = int(self.median_filter or 0)
         img = image_chunk.astype(np.float32, copy=False)
         if r <= 0:
@@ -288,6 +298,7 @@ class DifferenceOfGaussian:
 
         # 3) Subtract and crop back to original core
         sub = img_pad - bg
+        
         return sub[r:-r, r:-r, :]
 
     def run(self, image_chunk, offset, lb):

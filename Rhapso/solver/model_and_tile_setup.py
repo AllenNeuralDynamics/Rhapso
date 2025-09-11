@@ -2,7 +2,7 @@ import numpy as np
 import copy
 
 """
-Utility class to initialize models, tiles and view pair matches
+Model and Tile Setup initializes models, tiles and view pair matches
 """
 
 class ModelAndTileSetup():
@@ -43,61 +43,62 @@ class ModelAndTileSetup():
                 
                 if mA is None or mB is None: continue
 
-                # Get corresponding interest points for view_id A
-                cp_a = self.corresponding_interest_points[key_i]
+                for label_a in self.label_map[key_i]:
+                    for label_b in self.label_map[key_j]:
 
-                # Get interest points for view_id A and B
-                ip_list_a = self.interest_points[key_i]
-                ip_list_b = self.interest_points[key_j]
+                        cp_a = [it for it in self.corresponding_interest_points.get(key_i, []) if it.get('label') == label_a]
 
-                inliers = []
-                for p in cp_a:
-                    
-                    # verify corresponding point is in ip_list_b
-                    if p['corresponding_view_id'] == key_j:
+                        ip_list_a = self.interest_points.get(key_i, {}).get(label_a, [])
+                        ip_list_b = self.interest_points.get(key_j, {}).get(label_b, [])
 
-                        ip_a = ip_list_a[p['detection_id']]
-                        ip_b = ip_list_b[p['corresponding_detection_id']]
+                        inliers = []
+                        for p in cp_a:
+                            
+                            # verify corresponding point is in ip_list_b
+                            if label_a == label_b and p['corresponding_view_id'] == key_j:
 
-                        interest_point_a = {
-                            'l': copy.deepcopy(ip_a),  
-                            'w': copy.deepcopy(ip_a),
-                            'index': p['detection_id']
-                        }
-                        interest_point_b = {
-                            'l': copy.deepcopy(ip_b),
-                            'w': copy.deepcopy(ip_b),
-                            'index': p['corresponding_detection_id']
-                        }
+                                ip_a = ip_list_a[p['detection_id']]
+                                ip_b = ip_list_b[p['corresponding_detection_id']]
 
-                        transformed_l_a = self.apply_transform(interest_point_a['l'], mA)
-                        transformed_w_a = self.apply_transform(interest_point_a['w'], mA)
-                        transformed_l_b = self.apply_transform(interest_point_b['l'], mB)
-                        transformed_w_b = self.apply_transform(interest_point_b['w'], mB)
+                                interest_point_a = {
+                                    'l': copy.deepcopy(ip_a),  
+                                    'w': copy.deepcopy(ip_a),
+                                    'index': p['detection_id']
+                                }
+                                interest_point_b = {
+                                    'l': copy.deepcopy(ip_b),
+                                    'w': copy.deepcopy(ip_b),
+                                    'index': p['corresponding_detection_id']
+                                }
 
-                        interest_point_a['l'] = transformed_l_a
-                        interest_point_a['w'] = transformed_w_a
-                        interest_point_b['l'] = transformed_l_b
-                        interest_point_b['w'] = transformed_w_b
+                                transformed_l_a = self.apply_transform(interest_point_a['l'], mA)
+                                transformed_w_a = self.apply_transform(interest_point_a['w'], mA)
+                                transformed_l_b = self.apply_transform(interest_point_b['l'], mB)
+                                transformed_w_b = self.apply_transform(interest_point_b['w'], mB)
 
-                        interest_point_a['weight'] = 1
-                        interest_point_a['strength'] = 1
-                        interest_point_b['weight'] = 1
-                        interest_point_b['strength'] = 1
+                                interest_point_a['l'] = transformed_l_a
+                                interest_point_a['w'] = transformed_w_a
+                                interest_point_b['l'] = transformed_l_b
+                                interest_point_b['w'] = transformed_w_b
 
-                        inliers.append({
-                            'p1': interest_point_a,
-                            'p2': interest_point_b,
-                            'weight': 1,
-                            'strength': 1
-                        })
-                    
-                if inliers:
-                    self.pairs.append({
-                        'view': (key_i, key_j),
-                        'inliers': inliers,
-                        'flipped': None 
-                    })
+                                interest_point_a['weight'] = 1
+                                interest_point_a['strength'] = 1
+                                interest_point_b['weight'] = 1
+                                interest_point_b['strength'] = 1
+
+                                inliers.append({
+                                    'p1': interest_point_a,
+                                    'p2': interest_point_b,
+                                    'weight': 1,
+                                    'strength': 1
+                                })
+                            
+                        if inliers:
+                            self.pairs.append({
+                                'view': (key_i, key_j),
+                                'inliers': inliers,
+                                'flipped': None 
+                            })
     
     def run(self):
         """

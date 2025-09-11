@@ -6,7 +6,7 @@ import dask.array as da
 import s3fs
 
 """
-Utility class to load and downsample Zarr and TIFF OME data
+Image Reader loads and downsamples Zarr and TIFF OME data
 """
 
 class CustomBioImage(BioImage):
@@ -24,6 +24,9 @@ class ImageReader:
         self.file_type = file_type
 
     def downsample(self, arr, axis):
+        """
+        Reduce size by 2 along `axis` by averaging adjacent elements
+        """
         s0 = [slice(None)] * arr.ndim
         s1 = [slice(None)] * arr.ndim
         s0[axis] = slice(0, None, 2)
@@ -40,6 +43,10 @@ class ImageReader:
         return (a0 + a1) * 0.5
 
     def interface_downsampling(self, data, dsxy, dsz):
+        """
+        Downsample a 3D volume by powers of two by repeatedly halving along each axis
+        """
+        # Process X dimension
         f = dsxy
         while f > 1:
             data = self.downsample(data, axis=0)  
@@ -87,8 +94,6 @@ class ImageReader:
         # Downsample Dask array
         downsampled_stack = self.interface_downsampling(dask_array, dsxy, dsz)
 
-        # interval_key = ((0, 0, 0), (250, 250, 120), (250, 250, 120))
-
         # Get lower and upper bounds
         lb = list(interval_key[0])
         ub = list(interval_key[1])
@@ -105,5 +110,8 @@ class ImageReader:
         return view_id, interval_key, downsampled_image_chunk, offset, lower_bound
 
     def run(self, metadata_df, dsxy, dsz):
-            return self.fetch_image_data(metadata_df, dsxy, dsz)
+        """
+        Executes the entry point of the script.
+        """
+        return self.fetch_image_data(metadata_df, dsxy, dsz)
 

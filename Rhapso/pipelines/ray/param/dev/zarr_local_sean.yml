@@ -8,16 +8,16 @@ xml_output_file_path: &detection_xml_output_file_path '/Users/seanfite/Desktop/R
 n5_output_file_prefix: &n5_output_file_prefix '/Users/seanfite/Desktop/Rhapso-Output/' 
 detection_run_type: 'ray' 
 file_type: 'zarr' 
-dsxy: 16
-dsz: 16
+dsxy: 16                                  # downsampling xy
+dsz: 16                                   # downsampling z
 min_intensity: 1                          # normalize - dog
 max_intensity: 5                          # normalize - dog
 sigma: 1.8                                # blur - dog
 threshold: 0.005                          # find peaks (min initial peak value) / 3 - dog
-median_filter: 10                         # xysubtract - predog
-combine_distance: .5
+median_filter: 9                          # xysubtract - predog
+combine_distance: .5                      # kd tree radius 
 chunks_per_bound: 14                      # chunks per bound
-max_spots: 10000                          # max points per bound
+max_spots: 8000                           # max points per bound
 
 # SOLVER
 # -----------------------------------
@@ -44,8 +44,24 @@ xml_file_path_output_affine: &affine_solver_xml_output '/Users/seanfite/Desktop/
 
 # -- SPLIT AFFINE --
 run_type_solver_split_affine: 'split-affine'
-xml_file_path_solver_split_affine: '/Users/seanfite/Desktop/ip_split_affine_alignment/bigstitcher_affine.split.xml'
-xml_file_path_output_split_affine: '/Users/seanfite/Desktop/ip_split_affine_alignment/rhapso-split-solver-affine.xml'
+xml_file_path_solver_split_affine: '/Users/seanfite/Desktop/Rhapso-Output/rhapso-solver-split.xml'
+xml_file_path_output_split_affine: '/Users/seanfite/Desktop/Rhapso-Output/rhapso-solver-split-affine.xml'
+
+
+# SPLIT DATASET
+# -----------------------------------
+
+xml_file_path_split: *affine_solver_xml_output
+xml_output_file_path_split: &affine_split_solver_xml_output "/Users/seanfite/Desktop/Rhapso-Output/rhapso-solver-split.xml"
+n5_path_split: *n5_output_file_prefix
+point_density: 100.0 
+min_points: 20
+max_points: 500 
+error: 0.5 
+exclude_radius: 200.0
+target_image_size: [7000, 7000, 4000]
+target_overlap: [128, 128, 128]
+
 
 # INTEREST POINT MATCHING
 # -----------------------------------
@@ -91,7 +107,7 @@ regularization_weight_affine: 1.0
 
 # -- SPLIT AFFINE -- 
 match_type_split_affine: 'split-affine'  
-xml_file_path_matching_split_affine: '/Users/seanfite/Desktop/Rhapso-Output/rhapso-split-solver-affine.xml'               
+xml_file_path_matching_split_affine: *affine_split_solver_xml_output                
 
 # Candidates
 num_neighbors_split_affine: 3

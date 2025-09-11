@@ -1,7 +1,7 @@
 import numpy as np
 
 """
-Utility class to construct list of pathways to each image chunk needed for interest point detection
+Metadata Builder constructs lists of pathways to each image chunk needed for interest point detection
 """
 
 class MetadataBuilder:

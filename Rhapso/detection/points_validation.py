@@ -1,7 +1,7 @@
 import numpy as np
 
 """
-Utility class to print out metrics of points detected
+Points Validation prints out the metrics for the results of interest point detection
 """
 
 class PointsValidation:
@@ -9,7 +9,6 @@ class PointsValidation:
         self.consolidated_data = consolidated_data
 
     def validation_suite(self):
-        # Print total points found
         total_points = sum(len(points) for points in self.consolidated_data.values())
         print(f"\nTotal Interest Points Found: {total_points}")
 
@@ -44,4 +43,7 @@ class PointsValidation:
             print("-----------------------\n")
     
     def run(self):
+        """
+        Executes the entry point of the script.
+        """
         self.validation_suite()

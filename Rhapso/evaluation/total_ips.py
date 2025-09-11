@@ -1,12 +1,8 @@
-import os
-import json
-import numpy as np
 import pandas as pd
 import s3fs
 import zarr
 from Rhapso.evaluation.save_metrics import JSONFileHandler
 from Rhapso.data_prep.xml_to_dataframe import XMLToDataFrame
-
 
 class DetectionOutput:
     def __init__(self, base_path, xml_file_path, output_path):
