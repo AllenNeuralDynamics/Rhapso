@@ -1,4 +1,4 @@
-cluster_name: rhapso-ray-alignment-cluster-sean-0033120
+cluster_name: create-any-name         # Update with any cluster name
 max_workers: 5
 min_workers: 5
 
@@ -10,34 +10,34 @@ provider:
 
 auth:
   ssh_user: ubuntu
-  ssh_private_key: /Users/seanfite/Desktop/AllenInstitute/Rhapso/Auth/AWS/EC2-SSH-Key/sean-rhapso.pem
+  ssh_private_key: /Path/To/Your/Auth/AWS/EC2-SSH-Key/ec2-ssh-key.pem   # Update this with your local path
 
 available_node_types:
   ray.head.default:
     node_config:
       InstanceType: r5.4xlarge
       ImageId: ami-0ec1bf4a8f92e7bd1
-      KeyName: sean-rhapso
+      KeyName: your-key-name                      # Update this with your auth key name
       IamInstanceProfile:
-        Name: RhapsoInstanceProfile
+        Name: your-iam-instance-profile-name      # Update this with your iam instance profile name   
       TagSpecifications:
         - ResourceType: instance
           Tags:
-            - Key: project
-              Value: rhapso
+            - Key: key                            # Update this with your resource tag key
+              Value: value                        # Update this with your resource tag value
 
   ray.worker.default:
     node_config:
       InstanceType: r5.4xlarge
       ImageId: ami-0ec1bf4a8f92e7bd1 
-      KeyName: sean-rhapso
+      KeyName: your-key-name                      # Update this with your auth key name (same as above)
       IamInstanceProfile:
-        Name: RhapsoInstanceProfile
+        Name: your-iam-instance-profile-name      # Update this with your iam instance profile name  (same as above)
       TagSpecifications:
         - ResourceType: instance
           Tags:
-            - Key: project
-              Value: rhapso
+            - Key: key                            # Update this with your resource tag key
+              Value: value                        # Update this with your resource tag value
 
 head_node_type: ray.head.default
 
@@ -49,10 +49,11 @@ setup_commands:
   - sudo python3 -m pip install awscli
   - sudo python3 -m pip install "ray[default]==2.9.1"  
   - sudo python3 -m pip install protobuf==4.23.4 
+    # Update this line to point to your whl file (s3://rhapso-whl-v2/Rhapso-0.1.8-py3-none-any.whl)
   - aws s3 cp s3://rhapso-whl-v2/Rhapso-0.1.8-py3-none-any.whl /tmp/Rhapso-0.1.8-py3-none-any.whl  
   - echo 'export PATH=$HOME/.local/bin:$PATH' >> ~/.bashrc
   - source ~/.bashrc
-  - pip install /tmp/Rhapso-0.1.8-py3-none-any.whl   
+  - pip install /tmp/Rhapso-0.1.8-py3-none-any.whl   # ensure this whl version number matches the one above 
 
 head_start_ray_commands:
   - ray stop
@@ -68,15 +69,10 @@ worker_start_ray_commands:
 # python setup.py bdist_wheel 
 
 # RAY UP / DOWN / CLEAR CACHE COMMANDS
-# ray up alignment_cluster_sean.yml --no-config-cache
-# ray down alignment_cluster_sean.yml
+# ray up your-cluster-name.yml --no-config-cache
+# ray down your-cluster-name.yml
 # rm -rf ~/.cache/ray
 
 # ACCESS RAY DASHBOARD
-# ssh -i /Users/seanfite/Desktop/AllenInstitute/Rhapso/Auth/AWS/EC2-SSH-Key/sean-rhapso.pem -L 8265:localhost:8265 ubuntu@35.92.150.181
-# http://localhost:8265
-
-# TO FIX
-# ---------------------
-# awscli 1.40.25 requires botocore==1.38.26, but you have botocore 1.35.93 which is incompatible
-# awscli 1.40.25 requires s3transfer<0.14.0,>=0.13.0, but you have s3transfer 0.10.4 which is incompatible 
+# ssh -i /Path/To/Your/Auth/AWS/EC2-SSH-Key/ec2-ssh-key.pem -L your-port-num:localhost:your-port-num ubuntu@head.node.public.ip
+# http://localhost:your-port-number

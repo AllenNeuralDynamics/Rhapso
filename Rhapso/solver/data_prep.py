@@ -2,9 +2,10 @@ import zarr
 import json
 import os
 import s3fs
+import numpy as np
 
 """
-This class fetches and preps n5 interest points data
+Data Prep fetches and preps n5 interest points data
 """
 
 class DataPrep():
@@ -33,17 +34,20 @@ class DataPrep():
                 store = s3fs.S3Map(root=path, s3=s3)
                 root = zarr.open(store, mode='r')
                 correspondences_key = f"{row['path']}/correspondences"
+                try:
+                    self.connected_views[view_id] = root[correspondences_key].attrs["idMap"]
+                except:
+                    print(f"No connected views for tile {view_id}")
 
             else:
                 n5_root = os.path.join(self.n5_input_path, "interestpoints.n5")
                 store = zarr.N5Store(n5_root)
                 root = zarr.open(store, mode="r")
                 correspondences_key = f"{row['path']}/correspondences"
-
-            if correspondences_key in root:
-                self.connected_views[view_id] = root[correspondences_key].attrs["idMap"]
-            else:
-                print(f"Attributes file not found for view {view_id}")
+                try:
+                    self.connected_views[view_id] = self.load_json_data(correspondences_key)
+                except:
+                    print(f"No connected views for tile {view_id}")            
     
     def load_json_data(self, json_path):
         try:
@@ -98,13 +102,14 @@ class DataPrep():
             for ip_index, corr_index, corr_group_id in interest_points_index_map:
                 if corr_group_id == view_id:
                     continue
+
                 corresponding_view_id = next((k for k, v in id_map.items() if v == int(corr_group_id)), None)
                 parts = corresponding_view_id.split(',')
                 timepoint, setup, label = parts[0], parts[1], parts[2]
                 corresponding_view_id = f"timepoint: {timepoint}, setup: {setup}"
 
-                ip = self.interest_points[view_id][int(ip_index)]
-                corr_ip = self.interest_points[corresponding_view_id][int(corr_index)]
+                ip = self.interest_points[view_id][label][int(ip_index)]
+                corr_ip = self.interest_points[corresponding_view_id][label][int(corr_index)]
 
                 if view_id not in self.corresponding_interest_points:
                     self.corresponding_interest_points[view_id] = [] 
@@ -137,13 +142,9 @@ class DataPrep():
             view_id = f"timepoint: {row['timepoint']}, setup: {row['setup']}"  
             interestpoints_prefix = f"{row['path']}/interestpoints/loc/"
             interest_points = root[interestpoints_prefix][:]
-            
-            if view_id in self.interest_points:
-                print("duplicated viewID, skipping.")
-                continue
-            else:
-                self.interest_points[view_id] = []
-                self.interest_points[view_id] = interest_points
+            # interest_points = root[interestpoints_prefix][:] if interestpoints_prefix in root else np.empty((0, 3), dtype=np.float32)
+            label = str(row['path']).replace('\\','/').lstrip('/').split('/', 2)[1]
+            self.interest_points.setdefault(view_id, {})[label] = interest_points
                             
     def build_label_map(self):
         """

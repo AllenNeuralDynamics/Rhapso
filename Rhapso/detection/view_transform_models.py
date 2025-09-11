@@ -2,7 +2,7 @@ import pandas as pd
 import numpy as np
 
 """
-Utility class to parse and combine view registrations matrices
+View Transform Models parses and combines view registrations matrices
 """
 
 class ViewTransformModels:
@@ -65,18 +65,3 @@ class ViewTransformModels:
         self.create_transform_matrices()
         self.concatenate_matrices_by_view_id()
         return self.concatenated_matrices
-
-# DEBUG
-# ---------------
-
-# def print_matrices(self):
-#     """
-#     Debug function to print all concatenated affine matrices in a formatted string.
-#     """
-#     for key, matrix in self.concatenated_matrices.items():
-#         affine_format = (
-#             "3d-affine: ("
-#             + ", ".join(f"{item:.6f}" for row in matrix for item in row)
-#             + ")"
-#         )
-#         print(f"{key}: {affine_format}")

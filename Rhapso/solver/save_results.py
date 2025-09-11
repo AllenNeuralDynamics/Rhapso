@@ -58,7 +58,7 @@ class SaveResults:
             name = ET.SubElement(new_view_transform, 'Name')
             if self.run_type == "rigid":
                 name.text = 'RigidModel3D, lambda = 0.5'
-            elif self.run_type == "affine":
+            elif self.run_type == "affine" or self.run_type == "split-affine":
                 name.text = 'AffineModel3D regularized with a RigidModel3D, lambda = 0.05'
             name.tail = "\n\t\t\t"
 

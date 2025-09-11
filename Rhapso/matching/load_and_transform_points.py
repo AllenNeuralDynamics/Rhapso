@@ -4,19 +4,20 @@ import s3fs
 from itertools import combinations
 
 """
-Utility class to load interest points from n5 and transform them into global space
+Load and Transform Points loads interest points from n5 and transforms them into global space
 """
 
 class LoadAndTransformPoints:
     def __init__(self, data_global, xml_input_path, n5_output_path, match_type):
-        """Initialize data loader with base path"""
         self.data_global = data_global
         self.xml_input_path = xml_input_path
         self.n5_output_path = n5_output_path
         self.match_type = match_type
     
     def transform_interest_points(self, points, transformation_matrix):
-        """Transform interest points using the given transformation matrix"""
+        """
+        Transform interest points using the given transformation matrix
+        """
         if len(points) == 0: return []
         
         # Convert points to homogeneous coordinates (add 1 as 4th coordinate)
@@ -31,7 +32,9 @@ class LoadAndTransformPoints:
         return transformed_points.astype(np.float64)
 
     def _parse_affine_matrix(self, affine_text):
-        """Parse affine transformation matrix from text string"""
+        """
+        Parse affine transformation matrix from text string
+        """
         try:
             # Split the affine text into float values
             values = [float(x) for x in affine_text.strip().split()]
@@ -55,8 +58,7 @@ class LoadAndTransformPoints:
         
     def get_transformation_matrix(self, view_id, view_registrations):
         """
-        Compose all affine ViewTransforms for a given view (timepoint, setup).
-        Returns a 4x4 numpy matrix.
+        Compose all affine ViewTransforms for a given view (timepoint, setup)
         """
         try:
             transforms = view_registrations.get(view_id, [])
@@ -89,7 +91,9 @@ class LoadAndTransformPoints:
             raise
     
     def load_interest_points_from_path(self, base_path, loc_path):
-        """Load data from any N5 dataset path"""
+        """
+        Load data from any N5 dataset path
+        """
         try:      
             if self.n5_output_path.startswith("s3://"):
                 path = base_path.rstrip("/")
@@ -111,7 +115,9 @@ class LoadAndTransformPoints:
             return []
     
     def get_transformed_points(self, view_id, view_data, view_registrations, label):
-        """Retrieve and transform interest points for a given view."""
+        """
+        Retrieve and transform interest points for a given view
+        """
         view_info = view_data[view_id]
         path = view_info['path']
         loc_path = f"{path}/{label}/interestpoints/loc"
@@ -128,7 +134,9 @@ class LoadAndTransformPoints:
         return transformed_points
     
     def load_and_transform_points(self, pair, view_data, view_registrations, label):
-        """Process a single matching task"""
+        """
+        Process a single matching task
+        """
         viewA, viewB = pair
         try:
             # Retrieve and transform interest points for both views
@@ -155,11 +163,15 @@ class LoadAndTransformPoints:
             import traceback
             traceback.print_exc()
             return []
-        
+    
+    # TODO - eventually handle if more than 1 timepoint
     def merge_sets(self, v_sets, pair_sets, i1, i2):
         return [], []
     
     def set_id(self, v1, v_sets):
+        """
+        Find the index of the component in `v_sets` that contains `v1`
+        """
         i = -1
         for j in range(len(v_sets)):
             if v1 in v_sets[j]:
@@ -168,6 +180,9 @@ class LoadAndTransformPoints:
         return i
     
     def subsets(self, pairs):
+        """
+        Cluster views into connected components based on the given pairs
+        """
         views = list(self.data_global['viewsInterestPoints'].keys())
         v_sets: list[set] = []
         pair_sets: list[list[tuple]] = []       
@@ -239,6 +254,9 @@ class LoadAndTransformPoints:
         }
 
     def get_bounding_boxes(self, M, dims):
+        """
+        Compute world-space AABB (min/max corners) of a voxel-aligned box
+        """
         M = np.asarray(M, float)
         if M.shape == (3, 4):
             M = np.vstack([M, [0.0, 0.0, 0.0, 1.0]])
@@ -278,12 +296,18 @@ class LoadAndTransformPoints:
         return rMin, rMax
 
     def bounding_boxes(self, M, dims):
+        """
+        Compute an integer, padded axis-aligned bounding box from the real-valued bounds
+        """
         rMin, rMax = self.get_bounding_boxes(M, dims['size'])
         min_i = np.rint(rMin).astype(int) - 1
         max_i = np.rint(rMax).astype(int) + 1
         return (min_i.tolist(), max_i.tolist())
     
     def transform_matrices(self, view): 
+        """
+        Compose the per-view 4x4 world transform by chaining all affine models in order
+        """
         M = np.eye(4, dtype=float)   
         for model in self.data_global['viewRegistrations'][view]:
             vals = np.fromstring(str(model['affine']).replace(',', ' '), sep=' ', dtype=float)
@@ -292,6 +316,9 @@ class LoadAndTransformPoints:
         return M
     
     def overlaps(self, bba, bbb):
+        """
+        Boolean check if two axis-aligned boxes overlap in every dimension
+        """
         (minA, maxA) = bba
         (minB, maxB) = bbb
         for d in range(len(minA)):  
@@ -301,6 +328,9 @@ class LoadAndTransformPoints:
         return True
 
     def overlap(self, view_a, dims_a, view_b, dims_b):
+        """
+        Build each view's transform, derive their axis-aligned bounding boxes, then test for intersection
+        """
         ma = self.transform_matrices(view_a)
         mb = self.transform_matrices(view_b)
 
@@ -310,6 +340,9 @@ class LoadAndTransformPoints:
         return self.overlaps(bba, bbb)   
 
     def setup_groups_split(self):
+        """
+        Generate all unique view pairs and keep only those whose setups overlap
+        """
         views = list(self.data_global['viewsInterestPoints'].keys())
         pairs = list(combinations(views, 2))
         final_pairs = []
@@ -326,9 +359,9 @@ class LoadAndTransformPoints:
         return final_pairs
     
     def setup_groups(self):
-        """Set up view groups for pairwise matching"""
-        # Get all views from viewsInterestPoints
-
+        """
+        Group views by timepoint and generate all unique unordered intra-timepoint pairs
+        """
         views = list(self.data_global['viewsInterestPoints'].keys())
 
         # Group views by timepoint
@@ -358,6 +391,9 @@ class LoadAndTransformPoints:
         return x if isinstance(x, list) else [x]
 
     def expand_pairs_with_labels(self, base_pairs, view_ids_global):
+        """
+        Add a label for each pair
+        """
         out = []
         for va, vb in base_pairs:
             la = self.as_list(view_ids_global[va].get('label', []))
@@ -375,6 +411,9 @@ class LoadAndTransformPoints:
         return out
     
     def run(self):
+        """
+        Executes the entry point of the script.
+        """
         view_ids_global = self.data_global['viewsInterestPoints']
         view_registrations = self.data_global['viewRegistrations']
 
@@ -386,7 +425,6 @@ class LoadAndTransformPoints:
             setup = self.setup_groups()
         
         setup['pairs'] = self.expand_pairs_with_labels(setup['pairs'], view_ids_global)
-
         process_pairs = []
         for view_a, view_b, label in setup['pairs']:
             # Unpack for clarity
@@ -403,6 +441,6 @@ class LoadAndTransformPoints:
             
             # Run the matching task for the current pair and get results
             pointsA, pointsB, viewA_str, viewB_str = self.load_and_transform_points((view_a, view_b), view_ids_global, view_registrations, label)
-            process_pairs.append((pointsA, pointsB, viewA_str, viewB_str))
+            process_pairs.append((pointsA, pointsB, viewA_str, viewB_str, label))
 
         return process_pairs, view_registrations

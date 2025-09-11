@@ -111,7 +111,7 @@ regularization_weight_split_affine: 1.0
 # -----------------------------------
 
 xml_file: *rigid_solver_xml_output
-base_path: *n5_output_file_prefix "/interestpoints.n5"
+base_path: s3://rhapso-matching-test/interestpoints.n5"
 metrics_output_path: "/Users/ai/Desktop/rhapso_test/TEST5_Rh/aind-open-data/exaSPIM_730223_2025-04-25_14-44-58_alignment_2025-05-13_23-58-19/interest_point_detection/metrics.json"
 
 # KDE 

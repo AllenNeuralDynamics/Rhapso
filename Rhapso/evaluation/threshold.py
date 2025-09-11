@@ -2,7 +2,6 @@ import json
 import os
 import sys
 
-
 class Threshold:
     def __init__(
         self,

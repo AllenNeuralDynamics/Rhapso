@@ -7,7 +7,7 @@ import dask.array as da
 import math
 
 """
-Utility class to detect regions of overlap between image tiles based on transformation matrices in view registrations
+Overlap Detection figures out where image tile overlap. 
 """
 
 # TIFF reader wants to be used as an abstract class
@@ -33,6 +33,9 @@ class OverlapDetection():
         self.max_interval_size = 0
     
     def create_mipmap_transform(self):
+        """
+        Build a 4×4 homogeneous scaling matrix for the mipmap level
+        """
         scale_matrix = np.array([
             [self.dsxy, 0, 0, 0],  
             [0, self.dsxy, 0, 0],  
@@ -87,6 +90,9 @@ class OverlapDetection():
     #     return ((0, 0, 0), (x_new, y_new, z_new)), mipmap_transform
     
     def open_and_downsample(self, shape, dsxy, dsz):
+        """
+        Downsample a 3D volume by powers of two by repeatedly halving along each axis
+        """
         dsx = dsxy
         dsy = dsxy
 
@@ -111,6 +117,9 @@ class OverlapDetection():
         return ((0, 0, 0), (x_new, y_new, z_new))
     
     def get_inverse_mipmap_transform(self, mipmap_transform):
+        """
+        Compute the inverse of the given mipmap transform
+        """
         try:
             inverse_scale_matrix = np.linalg.inv(mipmap_transform)
         except np.linalg.LinAlgError:
@@ -120,8 +129,9 @@ class OverlapDetection():
         return inverse_scale_matrix    
     
     def estimate_bounds(self, a, interval):
-        assert len(interval) >= 6, "Interval dimensions do not match." 
-
+        """
+        Transform an axis-aligned box through a 4x4 affine
+        """
         # set lower bounds
         t0, t1, t2 = 0, 0, 0
         
@@ -161,12 +171,18 @@ class OverlapDetection():
         return r_min[:3], r_max[:3]
 
     def calculate_intersection(self, bbox1, bbox2):
+        """
+        Compute the axis-aligned intersection of two 3D boxes given as (min, max) coordinates
+        """
         intersect_min = np.maximum(bbox1[0], bbox2[0])
         intersect_max = np.minimum(bbox1[1], bbox2[1])
         
         return (intersect_min, intersect_max)
 
     def calculate_new_dims(self, lower_bound, upper_bound):
+        """
+        Compute per-axis lengths from bounds
+        """
         new_dims = []
         for lb, ub in zip(lower_bound, upper_bound):
             if lb == 0:
@@ -177,9 +193,15 @@ class OverlapDetection():
         return new_dims
     
     def floor_log2(self, n):
+        """
+        Return ⌊log2(n)⌋ - clamps n ≤ 1 to 1 so the result is 0 for n ≤ 1
+        """
         return max(0, int(math.floor(math.log2(max(1, n)))))
 
     def choose_zarr_level(self):
+        """
+        pick the highest power-of-two pyramid level ( ≤ 7) compatible with dsxy/dsz
+        """
         max_level = 7
         lvl_xy = self.floor_log2(self.dsxy)
         lvl_z  = self.floor_log2(self.dsz)
@@ -189,10 +211,15 @@ class OverlapDetection():
         return best, leftovers
     
     def affine_with_half_pixel_shift(self, sx, sy, sz):
+        """
+        Build a 4x4 scaling affine that also shifts by 0.5·(scale-1) per axis so voxel centers stay aligned after 
+        resampling (half-pixel compensation)
+        """
         # translation = 0.5 * (scale - 1) per axis
         tx = 0.5 * (sx - 1.0)
         ty = 0.5 * (sy - 1.0)
         tz = 0.5 * (sz - 1.0)
+        
         return np.array([
             [sx, 0.0, 0.0, tx],
             [0.0, sy, 0.0, ty],
@@ -201,11 +228,17 @@ class OverlapDetection():
         ], dtype=float)
     
     def size_interval(self, lb, ub):
+        """
+        Find the number of voxels in a 3D box with inclusive bounds
+        """
         return int((int(ub[0]) - int(lb[0]) + 1) *
                 (int(ub[1]) - int(lb[1]) + 1) *
                 (int(ub[2]) - int(lb[2]) + 1))
 
     def find_overlapping_area(self):
+        """
+        Compute XY Z overlap intervals against every other view, accounting for mipmap/downsampling and per-view affine transforms
+        """
         for i, row_i in self.image_loader_df.iterrows():
             view_id = f"timepoint: {row_i['timepoint']}, setup: {row_i['view_setup']}"
             
@@ -251,8 +284,6 @@ class OverlapDetection():
                     mipmap_of_downsample_other = self.affine_with_half_pixel_shift(s, s, s)
                 elif self.file_type == 'tiff':
                     mipmap_of_downsample_other = self.create_mipmap_transform()
-                else:
-                    print("break")
 
                 inverse_mipmap_of_downsample_other = self.get_inverse_mipmap_transform(mipmap_of_downsample_other)
                 inverse_matrix = self.get_inverse_mipmap_transform(matrix)
@@ -289,5 +320,8 @@ class OverlapDetection():
         return dsxy, dsz, level, mipmap_of_downsample
                 
     def run(self):
+        """
+        Executes the entry point of the script.
+        """
         dsxy, dsz, level, mipmap_of_dowsample = self.find_overlapping_area()
         return self.to_process, dsxy, dsz, level, self.max_interval_size, mipmap_of_dowsample

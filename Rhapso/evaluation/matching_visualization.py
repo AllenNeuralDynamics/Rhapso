@@ -2,9 +2,6 @@ import json
 import zarr
 import matplotlib.pyplot as plt
 import numpy as np
-from pathlib import Path
-from typing import Tuple, Dict, List
-import os
 import s3fs
 
 def extract_id_from_path(path, key):
@@ -20,16 +17,14 @@ def load_id_map(corr_path, cords_prefix, prefix):
     attr_path = corr_path + "/attributes.json"
     if attr_path.startswith("s3://"):
         s3 = s3fs.S3FileSystem(anon=False)
-        store = s3fs.S3Map(root=cords_prefix, s3=s3)  # top-level: interestpoints.n5
-        root = zarr.open(store, mode='r')  # open the root group
+        store = s3fs.S3Map(root=cords_prefix, s3=s3) 
+        root = zarr.open(store, mode='r')  
 
         target_path = f"{prefix}/beads/correspondences"
 
-        # Make sure path exists
         if target_path not in root:
             return None
-
-        # Access attributes
+        
         zgroup = root[target_path]
         attrs = dict(zgroup.attrs)
 
@@ -96,7 +91,6 @@ def get_match_coordinates(cords_path, corr_path, cords_prefix, prefix):
         return None
 
 def plot_matches(matches, tp_id, setup_id):
-    dim = 2
     points_a = np.array([a for a, _, _ in matches])
 
     # Assign unique color per view key
@@ -104,7 +98,7 @@ def plot_matches(matches, tp_id, setup_id):
     colormap = plt.get_cmap("tab20")
     view_color_map = {key: colormap(i % 20) for i, key in enumerate(unique_views)}
 
-    fig, ax = plt.subplots(figsize=(10, 10))
+    _, ax = plt.subplots(figsize=(10, 10))
     ax.scatter(points_a[:, 0], points_a[:, 1], c='red', label=f'View A (tp={tp_id}, setup={setup_id})', s=10)
 
     # Group matches by view key

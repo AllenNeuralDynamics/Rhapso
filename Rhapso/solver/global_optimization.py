@@ -1,10 +1,9 @@
 import numpy as np
 import copy
 import math
-from Rhapso.evaluation.save_metrics import JSONFileHandler
 
 """
-This class creates alignment matrices to represent proper alignment of tiles
+GlobalOptimization iteratively refines per-tile transforms to achieve sub-pixel alignment using matched point correspondences. 
 """
 
 class GlobalOptimization:
@@ -41,7 +40,7 @@ class GlobalOptimization:
             'var': 0,
             'var_0': 0,     
         }
-        self.save_metrics = JSONFileHandler(self.metrics_output_path)
+        # self.save_metrics = JSONFileHandler(self.metrics_output_path)
     
     def update_observer(self, new_value):
         obs = self.observer
@@ -114,20 +113,16 @@ class GlobalOptimization:
                 max_error = tile['distance']
             total_distance += tile['distance']
 
-        average_error = total_distance / len(self.tiles)
+        average_error = total_distance / len(self.tiles)  
 
-        # print( f"({datetime.datetime.now()}): Min Error: {min_error}px")
-        # print( f"({datetime.datetime.now()}): Max Error: {max_error}px")
-        # print( f"({datetime.datetime.now()}): Mean Error: {average_error}px")  
-
-        self.save_metrics.update(
-            "alignment errors",
-            {
-                "min_error": min_error,
-                "max_error": max_error,
-                "mean_error": average_error,
-            },
-        )  
+        # self.save_metrics.update(
+        #     "alignment errors",
+        #     {
+        #         "min_error": min_error,
+        #         "max_error": max_error,
+        #         "mean_error": average_error,
+        #     },
+        # )  
         
         return average_error 
 
@@ -358,7 +353,7 @@ class GlobalOptimization:
     
     def apply(self):     
         for tile in self.tiles:
-            if self.run_type == 'affine':
+            if self.run_type == 'affine' or self.run_type == 'split-affine':
                 model = tile['model']['regularized']
             elif self.run_type == 'rigid':
                 model = tile['model']['b']
@@ -380,21 +375,15 @@ class GlobalOptimization:
         self.apply()
 
         while proceed:
-
             if not self.tiles:
                 return
             
-            for tile in self.tiles:
-                # if tile['view'] in self.fixed_views:
-                #     continue
-                
+            for tile in self.tiles:         
                 self.fit(tile)
                 self.apply_damp(tile)
 
             error = self.update_errors()
             self.update_observer(error)
-
-            # before appending, ensure the nested dict/list exist
             self.validation_stats.setdefault('solver_metrics_per_tile', {}).setdefault('stats', []).append({
                 'iteration': i,
                 'observer': copy.deepcopy(self.observer),
@@ -410,38 +399,12 @@ class GlobalOptimization:
             
             i += 1
             if i >= self.max_iterations:
-                proceed = False 
-    
-    def two_round_simple(self):
-        self.optimize_silently
-        # TODO - start second round
-    
-    def one_round_simple(self):
-        self.optimize_silently()
-        
-    def compute_tiles(self):
-        """
-        Interface the types of optimization set with user params
-        """
-        if(self.run_type == "affine" or self.run_type == "rigid"):
-            self.one_round_simple()
-        
-        if(self.run_type == "split-affine"):
-            self.two_round_simple()
+                proceed = False
 
     def run(self):
         """
         Executes the entry point of the script.
         """
+        self.optimize_silently()
 
-        # DEBUG tool to align tile order with Big Stitcher for debugging
-        # Set new tile order
-        # target_match_order = [
-        #     759, 962, 1125, 60, 1055, 264, 2073, 66, 602,
-        #     926, 612, 1226, 483, 911, 582, 720, 2205, 294, 1219, 34
-        # ]
-        # match_length_to_tile = {len(tile['matches']): tile for tile in self.tiles}
-        # self.tiles = [match_length_to_tile[match_len] for match_len in target_match_order]
-
-        self.compute_tiles()
         return self.tiles, self.validation_stats

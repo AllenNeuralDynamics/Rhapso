@@ -9,25 +9,19 @@ def visualize_points(full_path):
         store = s3fs.S3Map(root=full_path, s3=s3)
         zarray = zarr.open_array(store, mode='r')
         data = zarray[:] 
-
-        # store = s3fs.S3Map(root=path_int, s3=s3)
-        # zarray = zarr.open_array(store, mode='r')
-        # data_int = zarray[:] 
     
     else:
-        full_path = full_path.rstrip("/")  # remove trailing slash if any
+        full_path = full_path.rstrip("/")  
         components = full_path.split("/")
 
-        # Find index of the N5 root (assumes .n5 marks the root)
         try:
             n5_index = next(i for i, c in enumerate(components) if c.endswith(".n5"))
         except StopIteration:
             raise ValueError("No .n5 directory found in path")
 
-        dataset_path = "/".join(components[:n5_index + 1])            # the store root
-        dataset_rel_path = "/".join(components[n5_index + 1:])        # relative dataset path
+        dataset_path = "/".join(components[:n5_index + 1])           
+        dataset_rel_path = "/".join(components[n5_index + 1:])      
 
-        # Open N5 store and dataset
         store = zarr.N5Store(dataset_path)
         root = zarr.open(store, mode='r')
 
@@ -38,21 +32,14 @@ def visualize_points(full_path):
         zarray = root[dataset_rel_path]
         data = zarray[:]
 
-        # store = zarr.N5Store(path_int)
-        # root = zarr.open(store, mode='r')
+        zarray = root[dataset_rel_path]
+        data_int = zarray[:]
 
-        # if dataset_rel_path not in root:
-        #     print(f"Skipping: {dataset_rel_path} (not found)")
-        #     return
-
-        # zarray = root[dataset_rel_path]
-        # data_int = zarray[:]
-
-    # intensities = data_int
+    intensities = data_int
 
     print("\n--- Detection Stats (Raw Rhapso Output) ---")
     print(f"Total Points: {len(data)}")
-    # print(f"Intensity: min={intensities.min():.2f}, max={intensities.max():.2f}, mean={intensities.mean():.2f}, std={intensities.std():.2f}")
+    print(f"Intensity: min={intensities.min():.2f}, max={intensities.max():.2f}, mean={intensities.mean():.2f}, std={intensities.std():.2f}")
 
     for dim, name in zip(range(3), ['X', 'Y', 'Z']):
         values = data[:, dim]
@@ -77,8 +64,8 @@ def visualize_points(full_path):
     plt.tight_layout()
     plt.show()
 
-base_path = "s3://rhapso-matching-test/interestpoints.n5"
-# base_path = "/Users/seanfite/Desktop/Rhapso-Output/interestpoints.n5"
+# base_path = "s3://rhapso-matching-test/interestpoints.n5"
+base_path = "/Users/seanfite/Desktop/Rhapso-Output/interestpoints.n5"
 
 for tp_id in [0]:
     for setup_id in range(20):  

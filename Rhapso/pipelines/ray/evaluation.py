@@ -1,9 +1,4 @@
-import argparse
 import json
-import yaml
-from Rhapso.pipelines.ray.interest_point_matching import InterestPointMatching
-from Rhapso.pipelines.ray.solver import Solver
-
 
 class MetricReviewCLI:
     def __init__(self, file_path, matching_affine, solve_affine, matching_rigid, solve_rigid):

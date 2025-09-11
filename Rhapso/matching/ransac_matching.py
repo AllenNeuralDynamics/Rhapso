@@ -59,7 +59,7 @@ class RansacMatching:
             temp = copy.deepcopy(inliers)
             num_inliers = len(inliers)
     
-            point_pairs = [(m[1], m[4]) for m in inliers]
+            point_pairs = [(m[1], m[5]) for m in inliers]
             model_copy = self.model_regularization(point_pairs)
             
             # Apply model and collect errors
@@ -185,13 +185,13 @@ class RansacMatching:
     
     def test(self, candidates, model, max_epsilon, min_inlier_ratio, min_num_inliers):
         inliers = []
-        for idxA, pointA, view_a, idxB, pointB, view_b in candidates:
+        for idxA, pointA, view_a, label_a, idxB, pointB, view_b, label_b in candidates:
             p1_hom = np.append(pointA, 1.0)            
             transformed = model @ p1_hom                       
             distance = np.linalg.norm(transformed[:3] - pointB)
 
             if distance < max_epsilon:
-                inliers.append((idxA, pointA, view_a, idxB, pointB, view_b))
+                inliers.append((idxA, pointA, view_a, label_a, idxB, pointB, view_b, label_b))
         
         ir = len(inliers) / len(candidates)
         is_good = len(inliers) >= min_num_inliers and ir > min_inlier_ratio
@@ -247,7 +247,7 @@ class RansacMatching:
             min_matches = [candidates[i] for i in indices]
 
             try:
-                point_pairs = [(m[1], m[4]) for m in min_matches]
+                point_pairs = [(m[1], m[5]) for m in min_matches]
                 regularized_model = self.model_regularization(point_pairs)
             except Exception as e:
                 print(e)
@@ -257,7 +257,7 @@ class RansacMatching:
 
             while is_good and num_inliers < len(tmp_inliers):
                 num_inliers = len(tmp_inliers)
-                point_pairs = [(i[1], i[4]) for i in tmp_inliers]
+                point_pairs = [(i[1], i[5]) for i in tmp_inliers]
                 regularized_model = self.model_regularization(point_pairs)
                 is_good, tmp_inliers = self.test(candidates, regularized_model, self.max_epsilon, self.min_inlier_ratio, self.model_min_matches)
 
@@ -343,7 +343,7 @@ class RansacMatching:
 
         return descriptors
 
-    def get_candidates(self, points_a, points_b, view_a, view_b):
+    def get_candidates(self, points_a, points_b, view_a, view_b, label):
         difference_threshold = 3.4028235e+38
         max_value = float("inf")
         
@@ -417,9 +417,11 @@ class RansacMatching:
                     desc_a['point_index'],        
                     desc_a['point'],               
                     view_a,
+                    label,
                     best_match['point_index'],    
                     best_match['point'],            
-                    view_b
+                    view_b,
+                    label
                 ))
                 passed_lowes += 1
 

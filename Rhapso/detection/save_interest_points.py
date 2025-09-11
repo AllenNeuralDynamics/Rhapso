@@ -8,7 +8,7 @@ import io
 import json
 
 """
-Utility class to save interest points as N5 and update xml with paths
+Save Interest Points saves interest points as N5 and updates the xml with pathways
 """
 
 class SaveInterestPoints:
@@ -25,7 +25,6 @@ class SaveInterestPoints:
         self.max_intensity = max_intensity
         self.sigma = sigma
         self.threshold = threshold
-
         self.s3_filesystem = s3fs.S3FileSystem()
         self.overlappingOnly = "true"
         self.findMin = "true"
@@ -42,6 +41,9 @@ class SaveInterestPoints:
         return response['Body'].read().decode('utf-8')
     
     def save_to_xml(self):
+        """
+        Rebuild the <ViewInterestPoints> section and write the updated XML back
+        """
         if self.xml_file_path.startswith("s3://"):
             bucket, key = self.xml_file_path.replace("s3://", "", 1).split("/", 1)
             s3 = boto3.client('s3')
@@ -97,6 +99,9 @@ class SaveInterestPoints:
             tree.write(self.xml_output_file_path, encoding='utf-8', xml_declaration=True)
         
     def write_json_to_s3(self, id_dataset_path, loc_dataset_path, attributes):
+        """
+        Write attributes file into both the ID and LOC dataset directories on S3
+        """
         bucket, key = id_dataset_path.replace("s3://", "", 1).split("/", 1)
         json_path = key + '/attributes.json'
         json_bytes = json.dumps(attributes).encode('utf-8')
@@ -110,6 +115,9 @@ class SaveInterestPoints:
         s3.put_object(Bucket=bucket, Key=json_path, Body=json_bytes)
 
     def save_intensities_to_n5(self, view_id, n5_path):
+        """
+        Write intensities into an N5 group
+        """
         if self.n5_output_file_prefix.startswith("s3://"):
             output_path = self.n5_output_file_prefix + n5_path + "/interestpoints"
             store = s3fs.S3Map(root=output_path, s3=self.s3_filesystem, check=False)
@@ -153,6 +161,9 @@ class SaveInterestPoints:
             print(f"Error creating intensities dataset at {intensities_path}: {e}")
 
     def save_interest_points_to_n5(self, view_id, n5_path): 
+        """
+        Write interest point IDs and 3D locations into an N5 group
+        """
         if self.n5_output_file_prefix.startswith("s3://"):
             output_path = self.n5_output_file_prefix + n5_path + "/interestpoints"
             store = s3fs.S3Map(root=output_path, s3=self.s3_filesystem, check=False)
@@ -225,6 +236,9 @@ class SaveInterestPoints:
             )
 
     def save_points(self):
+        """
+        Orchestrate interest points and intensities into an N5 layout - inject attributes file
+        """
         for _, row in self.image_loader_df.iterrows():
             view_id = f"timepoint: {row['timepoint']}, setup: {row['view_setup']}"
             n5_path = f"interestpoints.n5/tpId_{row['timepoint']}_viewSetupId_{row['view_setup']}/beads"
@@ -244,5 +258,8 @@ class SaveInterestPoints:
             root.attrs['n5'] =  '4.0.0'
 
     def run(self):
+        """
+        Executes the entry point of the script.
+        """
         self.save_points()
         self.save_to_xml()
