@@ -2,6 +2,7 @@ import zarr
 import numpy as np
 import s3fs
 from itertools import combinations
+import ray
 
 """
 Load and Transform Points loads interest points from n5 and transforms them into global space
@@ -424,23 +425,34 @@ class LoadAndTransformPoints:
         else:
             setup = self.setup_groups()
         
-        setup['pairs'] = self.expand_pairs_with_labels(setup['pairs'], view_ids_global)
-        process_pairs = []
-        for view_a, view_b, label in setup['pairs']:
-            # Unpack for clarity
+        # Distribute points loading (very helpful with split-affine)
+        @ray.remote
+        def process_pair(view_a, view_b, label, view_ids_global, view_registrations):
             if isinstance(view_a, tuple) and len(view_a) == 2:
                 tpA, setupA = view_a
                 viewA_str = f"(tpId={tpA}, setupId={setupA})"
             else:
                 viewA_str = str(view_a)
+
             if isinstance(view_b, tuple) and len(view_b) == 2:
                 tpB, setupB = view_b
                 viewB_str = f"(tpId={tpB}, setupId={setupB})"
             else:
                 viewB_str = str(view_b)
-            
-            # Run the matching task for the current pair and get results
-            pointsA, pointsB, viewA_str, viewB_str = self.load_and_transform_points((view_a, view_b), view_ids_global, view_registrations, label)
-            process_pairs.append((pointsA, pointsB, viewA_str, viewB_str, label))
+
+            pointsA, pointsB, viewA_str, viewB_str = self.load_and_transform_points(
+                (view_a, view_b), view_ids_global, view_registrations, label
+            )
+            return pointsA, pointsB, viewA_str, viewB_str, label
+
+        setup['pairs'] = self.expand_pairs_with_labels(setup['pairs'], view_ids_global)
+
+        # launch Ray tasks
+        futures = [
+            process_pair.remote(view_a, view_b, label, view_ids_global, view_registrations)
+            for view_a, view_b, label in setup['pairs']
+        ]
+
+        process_pairs = ray.get(futures)
 
         return process_pairs, view_registrations

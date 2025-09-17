@@ -26,7 +26,7 @@ detection_cmd = (
     "    xml_output_file_path=cfg[\\\"xml_output_file_path\\\"], n5_output_file_prefix=cfg[\\\"n5_output_file_prefix\\\"],\n"
     "    combine_distance=cfg[\\\"combine_distance\\\"],\n"
     "    chunks_per_bound=cfg[\\\"chunks_per_bound\\\"], run_type=cfg[\\\"detection_run_type\\\"],\n"
-    "    max_spots=cfg[\\\"max_spots\\\"], median_filter=cfg[\\\"median_filter\\\"]\n"
+    "    max_spots=cfg[\\\"max_spots\\\"], median_filter=cfg[\\\"median_filter\\\"],\n"
     ")\n"
     "ipd.run()\n"
     "PY\n"

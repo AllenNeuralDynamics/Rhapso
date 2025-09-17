@@ -2,7 +2,6 @@ import zarr
 import json
 import os
 import s3fs
-import numpy as np
 
 """
 Data Prep fetches and preps n5 interest points data
