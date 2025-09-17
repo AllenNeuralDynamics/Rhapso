@@ -7,9 +7,9 @@ XML Parser Matching parses xml content into memory
 
 class XMLParserMatching:
     def __init__(self, xml_input_path, input_type):
-        self.xml_input_path = xml_input_path
-        self.data_global = None  
+        self.xml_input_path = xml_input_path  
         self.input_type = input_type
+        self.data_global = None
     
     def check_labels(self, root):
         """
@@ -120,15 +120,18 @@ class XMLParserMatching:
                 view_setup = il.get("setup")
                 timepoint = il.get('timepoint') if 'timepoint' in il else il.get('tp')
                 file_path = (il.get("path") or il.findtext("path") or "").strip()
+                channel = file_path.split("_ch_", 1)[1].split(".ome.zarr", 1)[0]
+
                 image_loader_data.append(
                     {
                         "view_setup": view_setup,
                         "timepoint": timepoint,
                         "series": 1,
-                        "channel": 1,
+                        "channel": channel,
                         "file_path": file_path,
                     }
                 )
+                
         elif self.input_type == "tiff":
             if not root.findall(".//ImageLoader/files/FileMapping"):
                 raise Exception("There are no files in this XML")

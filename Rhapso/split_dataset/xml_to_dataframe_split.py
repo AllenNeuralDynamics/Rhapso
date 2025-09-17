@@ -20,12 +20,14 @@ class XMLToDataFrameSplit:
             timepoint = il.get("timepoint")
             file_path = il.find("path").text if il.find("path") is not None else None
 
+            channel = file_path.split("_ch_", 1)[1].split(".ome.zarr", 1)[0]
+
             image_loader_data.append(
                 {
                     "view_setup": view_setup,
                     "timepoint": timepoint,
                     "series": 1,
-                    "channel": 1,
+                    "channel": channel,
                     "file_path": file_path,
                 }
             )

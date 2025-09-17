@@ -68,7 +68,7 @@ class InterestPointDetection:
         print("Metadata has loaded")
 
         # Use Ray to distribute peak detection to image chunking metadata 
-        @ray.remote(num_cpus=2)
+        @ray.remote
         def process_peak_detection_task(chunk_metadata, new_dsxy, new_dsz, min_intensity, max_intensity, sigma, threshold,
                                         median_filter, mip_map_downsample):
             try:

@@ -2,8 +2,6 @@ from Rhapso.pipelines.ray.interest_point_detection import InterestPointDetection
 from Rhapso.pipelines.ray.interest_point_matching import InterestPointMatching
 from Rhapso.pipelines.ray.solver import Solver
 from Rhapso.pipelines.ray.split_dataset import SplitDataset
-from Rhapso.pipelines.ray.matching_stats import StatsPipeline
-from Rhapso.pipelines.ray.evaluation import MetricReviewCLI
 import yaml
 import ray
 
@@ -11,7 +9,7 @@ import ray
 ray.init()
 
 # Point to param file
-with open("Rhapso/pipelines/ray/param/dev/zarr_local_sean.yml", "r") as file:
+with open("Rhapso/pipelines/ray/param/dev/zarr_s3_sean.yml", "r") as file:
     config = yaml.safe_load(file)
 
 # -- INITIALIZE EACH COMPONENT --
@@ -33,7 +31,7 @@ interest_point_detection = InterestPointDetection(
     chunks_per_bound=config['chunks_per_bound'],
     run_type=config['detection_run_type'],
     max_spots=config['max_spots'],
-    median_filter=config['median_filter']
+    median_filter=config['median_filter'],
 )
 
 # INTEREST POINT MATCHING RIGID
@@ -52,7 +50,7 @@ interest_point_matching_rigid = InterestPointMatching(
     lambda_value=config['lambda_value_rigid'],
     num_iterations=config['num_iterations_rigid'],
     regularization_weight=config['regularization_weight_rigid'],
-    image_file_prefix=config['image_file_prefix']
+    image_file_prefix=config['image_file_prefix'],
 )             
 
 # INTEREST POINT MATCHING AFFINE
@@ -71,7 +69,7 @@ interest_point_matching_affine = InterestPointMatching(
     lambda_value=config['lambda_value_affine'],
     num_iterations=config['num_iterations_affine'],
     regularization_weight=config['regularization_weight_affine'],
-    image_file_prefix=config['image_file_prefix']
+    image_file_prefix=config['image_file_prefix'],
 )
 
 # INTEREST POINT MATCHING SPLIT AFFINE
@@ -90,7 +88,7 @@ interest_point_matching_split_affine = InterestPointMatching(
     lambda_value=config['lambda_value_split_affine'],
     num_iterations=config['num_iterations_split_affine'],
     regularization_weight=config['regularization_weight_split_affine'],
-    image_file_prefix=config['image_file_prefix']
+    image_file_prefix=config['image_file_prefix'],
 )
 
 # SOLVER RIGID
@@ -156,7 +154,6 @@ split_dataset = SplitDataset(
 )
 
 # -- ALIGNMENT PIPELINE --
-
 interest_point_detection.run()
 interest_point_matching_rigid.run()
 solver_rigid.run()
