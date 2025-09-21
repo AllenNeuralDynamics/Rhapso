@@ -1,4 +1,5 @@
 from Rhapso.solver.xml_to_dataframe_solver import XMLToDataFrameSolver
+from Rhapso.solver.get_xml import GetXML
 from Rhapso.solver.global_optimization import GlobalOptimization
 from Rhapso.solver.view_transforms import ViewTransformModels
 from Rhapso.solver.data_prep import DataPrep
@@ -15,11 +16,8 @@ This class implements the Solver pipeline for rigid, affine, and split-affine op
 """
 
 class Solver:
-    def __init__(self, xml_file_path_output, n5_input_path, xml_file_path, run_type, relative_threshold, absolute_threshold, 
-                 min_matches, damp, max_iterations, max_allowed_error, max_plateauwidth, metrics_output_path):
-        self.xml_file_path_output = xml_file_path_output
-        self.n5_input_path = n5_input_path
-        self.xml_file_path = xml_file_path
+    def __init__(self, run_type, relative_threshold, absolute_threshold, min_matches, damp, max_iterations, max_allowed_error,
+                 max_plateauwidth, metrics_output_path, **kwargs):
         self.run_type = run_type
         self.relative_threshold = relative_threshold
         self.absolute_threshold = absolute_threshold
@@ -29,23 +27,34 @@ class Solver:
         self.max_allowed_error = max_allowed_error
         self.max_plateauwidth = max_plateauwidth
         self.metrics_output_path = metrics_output_path
-        self.groups = None
+        
+        self.groups = False
         self.s3 = boto3.client('s3')
+        suffixes = sorted({
+            k.split('_c')[-1]
+            for k in kwargs
+            if ('_rigid_c' in k) and k.split('_c')[-1].isdigit()
+        }, key=int)
+
+        self.extra_xmls = []
+        for s in suffixes:
+            solver_xml = kwargs.get(f"xml_file_path_solver_rigid_c{s}")
+            output_xml = kwargs.get(f"xml_file_path_output_rigid_c{s}")
+            n5_path = kwargs.get(f"n5_input_path_c{s}")
+            if solver_xml or output_xml:
+                self.extra_xmls.append({
+                    "solver_xml": solver_xml,     
+                    "output_xml": output_xml, 
+                    "n5_path": n5_path    
+                })
 
     def solve(self):
-        # Get XML file
-        if self.xml_file_path.startswith("s3://"):
-            no_scheme = self.xml_file_path.replace("s3://", "", 1)
-            bucket, key = no_scheme.split("/", 1)
-            s3 = boto3.client("s3")
-            response = s3.get_object(Bucket=bucket, Key=key)
-            xml_file = response["Body"].read().decode("utf-8")
-        else:  
-            with open(self.xml_file_path, "r", encoding="utf-8") as f:
-                xml_file = f.read()
+        # Get XML file(s)
+        xml_fetcher = GetXML(self.extra_xmls)
+        xml = xml_fetcher.run()
 
-        # Load XML data into dataframes         
-        processor = XMLToDataFrameSolver(xml_file)
+        # Load XML data into dataframes        
+        processor = XMLToDataFrameSolver(xml)
         dataframes = processor.run()
         print("XML loaded")
 
@@ -55,15 +64,13 @@ class Solver:
         print("Transforms models have been created")
 
         # Get data from n5 folders
-        data_prep = DataPrep(dataframes['view_interest_points'], view_transform_matrices, self.xml_file_path,
-                             self.n5_input_path)
-        connected_views, corresponding_interest_points, interest_points, label_map_global, view_id_set = data_prep.run()
+        data_prep = DataPrep(view_transform_matrices)
+        data_map = data_prep.run()
         print("Data prep is complete")
 
         # Create models, tiles, and point matches
-        model_and_tile_setup = ModelAndTileSetup(connected_views, corresponding_interest_points, interest_points, 
-                                                view_transform_matrices, view_id_set, label_map_global)
-        pmc = model_and_tile_setup.run()
+        model_and_tile_setup = ModelAndTileSetup(data_map)
+        pmc, view_id_set = model_and_tile_setup.run()
         print("Models and tiles created")    
             
         # Find point matches and save to each tile
@@ -83,12 +90,13 @@ class Solver:
         print("Global optimization complete")
         
         if(self.run_type == "split-affine"):
-            
+            # TODO - Updated dataframes implementation to handle list
             # Combine splits into groups
             connected_graphs = ConnectedGraphs(tiles, dataframes)
             wlpmc, groups = connected_graphs.run()
             print("Tiles have been grouped")
 
+            # TODO - Updated dataframes implementation to handle list
             # Find point matches and save to each tile
             compute_tiles = ComputeTiles(wlpmc, view_id_set, groups, dataframes, self.run_type)
             tiles_round_2, view_map = compute_tiles.run()
@@ -111,7 +119,7 @@ class Solver:
             print("Models and metrics have been combined")
 
         # Save results to xml - one new affine matrix per view registration
-        save_results = SaveResults(tiles, xml_file, self.xml_file_path_output, self.run_type, validation_stats, self.n5_input_path)
+        save_results = SaveResults(tiles, xml, self.run_type, validation_stats)
         save_results.run()
         print("Results have been saved")
     

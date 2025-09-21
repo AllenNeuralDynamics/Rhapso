@@ -5,11 +5,11 @@ Compute Tiles prepares a set of tiles and pairwise correspondences for global al
 """
 
 class ComputeTiles:
-    def __init__(self, pmc, view_id_set, groups, dataframes, run_type):
+    def __init__(self, pmc, view_id_set, groups, dataframes_list, run_type):
         self.pmc = pmc
         self.view_id_set = view_id_set
         self.groups = groups
-        self.dataframes = dataframes
+        self.dataframes_list = dataframes_list
         self.run_type = run_type
     
     def flip_matches(self, matches):
@@ -220,14 +220,14 @@ class ComputeTiles:
 
         return target
     
-    def assign_weak_link_point_matches(self, view_map, groups):
+    def assign_weak_link_point_matches(self, view_map):
         """
         Create "weak-link" synthetic matches between tiles that belong to different groups but spatially overlap, then attach 
         those matches to all tiles in the two groups and connect the tile graphs (without duplicate edges)
         """
         group_map = {}
         for v in view_map: 
-            for group in groups:
+            for group in self.groups:
                 if v in group['views']:
                     group_map[v] = group
                     break
@@ -296,8 +296,8 @@ class ComputeTiles:
                         pm.append(match)
                     
 
-                    idx = next((i for i, g in enumerate(groups) if view_a['view'] in g.get('views', ())), None)
-                    views_a = groups[idx]['views'] if idx is not None else [view_a['view']]
+                    idx = next((i for i, g in enumerate(self.groups) if view_a['view'] in g.get('views', ())), None)
+                    views_a = self.groups[idx]['views'] if idx is not None else [view_a['view']]
 
                     for va in views_a:
                         tile_a = view_map.get(va)
@@ -305,8 +305,8 @@ class ComputeTiles:
                             tile_a['matches'].extend(pm)
 
                     flipped_matches = self.flip_matches(pm)
-                    idx = next((i for i, g in enumerate(groups) if view_b['view'] in g.get('views', ())), None)
-                    views_b = groups[idx]['views'] if idx is not None else [view_b['view']]
+                    idx = next((i for i, g in enumerate(self.groups) if view_b['view'] in g.get('views', ())), None)
+                    views_b = self.groups[idx]['views'] if idx is not None else [view_b['view']]
                     
                     for vb in views_b:
                         tile_b = view_map.get(vb)
@@ -400,15 +400,15 @@ class ComputeTiles:
             'lambda' : 0.100000
         }
 
-    def assign_views_to_tiles(self, groups):
+    def assign_views_to_tiles(self):
         """
         Create initial view_map entry for each view to be optimized.
         """
         view_map = {}   
-        if groups:
+        if self.groups:
             
             remaining_views = {f"timepoint: {tp}, setup: {vs}" for (tp, vs) in self.view_id_set}
-            for group in groups:
+            for group in self.groups:
                 for view in group['views']:
                     view_map[view] = {
                         'view': view,
@@ -449,57 +449,17 @@ class ComputeTiles:
                 }
             
         return view_map
-    
-    def merge_all_overlapping_groups(self):
-        """
-        Repeatedly merge any groups that share at least one view until no overlaps remain
-        """
-        g = [{'views': list(gr.get('views', []))} for gr in self.groups]
-
-        while True:
-            pair = None
-            n = len(g)
-
-            for a in range(n - 1):
-                va = set(g[a]['views'])
-                for b in range(a + 1, n):
-                    if va & set(g[b]['views']):  # overlaps?
-                        pair = (a, b)
-                        break
-                if pair:
-                    break
-
-            if not pair:
-                break
-
-            i, j = pair
-            ga, gb = g[i], g[j]
-
-            # remove indexB then indexA (j > i)
-            del g[j]
-            del g[i]
-
-            # merge(ga, gb): preserve order, dedup
-            merged_views = list(dict.fromkeys(ga['views'] + gb['views']))
-            g.append({'views': merged_views})
-
-        return g
 
     def init_global_opt(self):
         """
         Build the tile map and attach point matches 
         """
-        if self.groups is None:
-            groups = self.groups
-        else:
-            groups = self.groups
+        view_map = self.assign_views_to_tiles() 
 
-        view_map = self.assign_views_to_tiles(groups) 
-
-        if self.groups is None:
+        if not self.groups:
             view_map = self.assign_point_matches(view_map)
         else:
-            view_map = self.assign_weak_link_point_matches(view_map, groups)
+            view_map = self.assign_weak_link_point_matches(view_map)
 
         return view_map
     

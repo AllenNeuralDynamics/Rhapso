@@ -6,8 +6,8 @@ XML to Dataframe Solver is a Solver specific XML parsing tool
 """
 
 class XMLToDataFrameSolver:
-    def __init__(self, xml_file):
-        self.xml_content = xml_file
+    def __init__(self, xml_content_list):
+        self.xml_content_list = xml_content_list
 
     def parse_image_loader_zarr(self, root):
         """
@@ -199,15 +199,25 @@ class XMLToDataFrameSolver:
         """
         Executes the entry point of the script.
         """
-        root = ET.fromstring(self.xml_content)
-        image_loader_df = self.route_image_loader(root)
-        view_setups_df = self.parse_view_setups(root)
-        view_registrations_df = self.parse_view_registrations(root)
-        view_interest_points_df = self.parse_view_interest_points(root)
+        dataframe_list = []
+        for xml_content in self.xml_content_list:        
+            root = ET.fromstring(xml_content['xml_file'])
+            image_loader_df = self.route_image_loader(root)
+            view_setups_df = self.parse_view_setups(root)
+            view_registrations_df = self.parse_view_registrations(root)
+            view_interest_points_df = self.parse_view_interest_points(root)
 
-        return {
-            "image_loader": image_loader_df,
-            "view_setups": view_setups_df,
-            "view_registrations": view_registrations_df,
-            "view_interest_points": view_interest_points_df,
-        }
+            dataframes = {
+                "image_loader": image_loader_df,
+                "view_setups": view_setups_df,
+                "view_registrations": view_registrations_df,
+                "view_interest_points": view_interest_points_df,
+            }
+
+            dataframe_list.append({
+                'dataframes': dataframes,
+                'output_xml_path': xml_content['output_xml_path'],
+                'n5_path': xml_content['n5_path']
+            })
+        
+        return dataframe_list

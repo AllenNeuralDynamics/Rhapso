@@ -6,8 +6,9 @@ Utility class to parse and combine view registrations matrices
 """
 
 class ViewTransformModels:
-    def __init__(self, df):
-        self.view_registrations_df = df.get("view_registrations", pd.DataFrame())
+    def __init__(self, dataframes_list):
+        self.dataframes_list = dataframes_list
+        self.view_registrations_df = None
         self.calibration_matrices = {}
         self.rotation_matrices = {}
         self.concatenated_matrices = {}
@@ -70,6 +71,17 @@ class ViewTransformModels:
         """
         Executes the entry point of the script.
         """
-        self.create_transform_matrices()
-        self.concatenate_matrices_by_view_id()
-        return self.concatenated_matrices
+        view_transform_matrices_list = []
+        for dataframes in self.dataframes_list:
+            self.view_registrations_df = dataframes['dataframes']['view_registrations']
+            self.create_transform_matrices()
+            self.concatenate_matrices_by_view_id()
+       
+            view_transform_matrices_list.append({
+                'view_transform_matrices': self.concatenated_matrices,
+                'output_xml_path': dataframes['output_xml_path'],
+                'n5_path': dataframes['n5_path'],
+                'dataframes': dataframes['dataframes']
+            })
+
+        return view_transform_matrices_list

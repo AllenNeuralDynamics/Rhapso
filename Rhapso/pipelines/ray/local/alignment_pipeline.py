@@ -9,7 +9,7 @@ import ray
 ray.init()
 
 # Point to param file
-with open("Rhapso/pipelines/ray/param/dev/zarr_s3_sean.yml", "r") as file:
+with open("Rhapso/pipelines/ray/param/dev/zarr_local_sean.yml", "r") as file:
     config = yaml.safe_load(file)
 
 # -- INITIALIZE EACH COMPONENT --
@@ -76,7 +76,7 @@ interest_point_matching_affine = InterestPointMatching(
 interest_point_matching_split_affine = InterestPointMatching(
     xml_input_path=config['xml_file_path_matching_split_affine'],
     n5_output_path=config['n5_matching_output_path'],
-    input_type = config['input_type'],
+    input_type=config['input_type'],
     match_type=config['match_type_split_affine'],
     num_neighbors=config['num_neighbors_split_affine'],
     redundancy=config['redundancy_split_affine'],
@@ -93,10 +93,41 @@ interest_point_matching_split_affine = InterestPointMatching(
 
 # SOLVER RIGID
 solver_rigid = Solver(
-    xml_file_path_output=config['xml_file_path_output_rigid'],
-    n5_input_path=config['n5_input_path'],
-    xml_file_path=config['xml_file_path_solver_rigid'],
+    xml_file_path_solver_rigid_c1=config['xml_file_path_solver_rigid_c1'],
+    xml_file_path_output_rigid_c1=config['xml_file_path_solver_rigid_c1'],
+    n5_input_path_c1=config['n5_input_path_c1'],
     run_type=config['run_type_solver_rigid'],   
+    relative_threshold=config['relative_threshold'],
+    absolute_threshold=config['absolute_threshold'],
+    min_matches=config['min_matches'],
+    damp=config['damp'],
+    max_iterations=config['max_iterations'],
+    max_allowed_error=config['max_allowed_error'],
+    max_plateauwidth=config['max_plateauwidth'],
+    metrics_output_path=config['metrics_output_path'],
+)
+
+# SOLVER MULTI CHANNEL RIGID
+solver_multi_channel_rigid = Solver(
+    xml_file_path_solver_rigid_c1=config['xml_file_path_solver_rigid_c1'],
+    xml_file_path_output_rigid_c1=config['xml_file_path_output_rigid_c1'],
+    n5_input_path_c1=config['n5_input_path_c1'],
+    xml_file_path_solver_rigid_c2=config['xml_file_path_solver_rigid_c2'],
+    xml_file_path_output_rigid_c2=config['xml_file_path_output_rigid_c2'],
+    n5_input_path_c2=config['n5_input_path_c2'],
+    xml_file_path_solver_rigid_c3=config['xml_file_path_solver_rigid_c3'],
+    xml_file_path_output_rigid_c3=config['xml_file_path_output_rigid_c3'],
+    n5_input_path_c3=config['n5_input_path_c3'],
+    xml_file_path_solver_rigid_c4=config['xml_file_path_solver_rigid_c4'],
+    xml_file_path_output_rigid_c4=config['xml_file_path_output_rigid_c4'],
+    n5_input_path_c4=config['n5_input_path_c4'],
+    xml_file_path_solver_rigid_c5=config['xml_file_path_solver_rigid_c5'],
+    xml_file_path_output_rigid_c5=config['xml_file_path_output_rigid_c5'],
+    n5_input_path_c5=config['n5_input_path_c5'],
+    xml_file_path_solver_rigid_c6=config['xml_file_path_solver_rigid_c6'],
+    xml_file_path_output_rigid_c6=config['xml_file_path_output_rigid_c6'],
+    n5_input_path_c6=config['n5_input_path_c6'],
+    run_type=config['run_type_solver_rigid'],  
     relative_threshold=config['relative_threshold'],
     absolute_threshold=config['absolute_threshold'],
     min_matches=config['min_matches'],
@@ -109,9 +140,40 @@ solver_rigid = Solver(
 
 # SOLVER AFFINE
 solver_affine = Solver(
-    xml_file_path_output=config['xml_file_path_output_affine'],
-    n5_input_path=config['n5_input_path'],
-    xml_file_path=config['xml_file_path_solver_affine'],
+    xml_file_path_solver_affine_c1=config['xml_file_path_solver_affine_c1'],
+    xml_file_path_output_affine_c1=config['xml_file_path_solver_affine_c1'],
+    n5_input_path_c1=config['n5_input_path_c1'],
+    run_type=config['run_type_solver_affine'],  
+    relative_threshold=config['relative_threshold'],
+    absolute_threshold=config['absolute_threshold'],
+    min_matches=config['min_matches'],
+    damp=config['damp'],
+    max_iterations=config['max_iterations'],
+    max_allowed_error=config['max_allowed_error'],
+    max_plateauwidth=config['max_plateauwidth'],
+    metrics_output_path=config['metrics_output_path'],
+)
+
+# SOLVER MULTI CHANNEL AFFINE
+solver_multi_channel_affine = Solver(
+    xml_file_path_solver_affine_c1=config['xml_file_path_solver_affine_c1'],
+    xml_file_path_output_affine_c1=config['xml_file_path_output_affine_c1'],
+    n5_input_path_c1=config['n5_input_path_c1'],
+    xml_file_path_solver_affine_c2=config['xml_file_path_solver_affine_c2'],
+    xml_file_path_output_affine_c2=config['xml_file_path_output_affine_c2'],
+    n5_input_path_c2=config['n5_input_path_c2'],
+    xml_file_path_solver_affine_c3=config['xml_file_path_solver_affine_c3'],
+    xml_file_path_output_affine_c3=config['xml_file_path_output_affine_c3'],
+    n5_input_path_c3=config['n5_input_path_c3'],
+    xml_file_path_solver_affine_c4=config['xml_file_path_solver_affine_c4'],
+    xml_file_path_output_affine_c4=config['xml_file_path_output_affine_c4'],
+    n5_input_path_c4=config['n5_input_path_c4'],
+    xml_file_path_solver_affine_c5=config['xml_file_path_solver_affine_c5'],
+    xml_file_path_output_affine_c5=config['xml_file_path_output_affine_c5'],
+    n5_input_path_c5=config['n5_input_path_c5'],
+    xml_file_path_solver_affine_c6=config['xml_file_path_solver_affine_c6'],
+    xml_file_path_output_affine_c6=config['xml_file_path_output_affine_c6'],
+    n5_input_path_c6=config['n5_input_path_c6'],
     run_type=config['run_type_solver_affine'],  
     relative_threshold=config['relative_threshold'],
     absolute_threshold=config['absolute_threshold'],
@@ -125,9 +187,9 @@ solver_affine = Solver(
 
 # SOLVER SPLIT AFFINE
 solver_split_affine = Solver(
-    xml_file_path_output=config['xml_file_path_output_split_affine'],
-    n5_input_path=config['n5_input_path'],
-    xml_file_path=config['xml_file_path_solver_split_affine'],
+    xml_file_path_solver_split_affine_c1=config['xml_file_path_solver_split_affine_c1'],
+    xml_file_path_output_split_affine_c1=config['xml_file_path_solver_split_affine_c1'],
+    n5_input_path_c1=config['n5_input_path_c1'],
     run_type=config['run_type_solver_split_affine'],  
     relative_threshold=config['relative_threshold'],
     absolute_threshold=config['absolute_threshold'],
@@ -157,8 +219,10 @@ split_dataset = SplitDataset(
 interest_point_detection.run()
 interest_point_matching_rigid.run()
 solver_rigid.run()
+solver_multi_channel_rigid.run()
 interest_point_matching_affine.run()
 solver_affine.run()
-split_dataset.run()
-interest_point_matching_split_affine.run()
-solver_split_affine.run()
+solver_multi_channel_affine.run()
+# split_dataset.run()
+# interest_point_matching_split_affine.run()
+# solver_split_affine.run()

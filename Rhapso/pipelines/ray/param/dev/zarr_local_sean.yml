@@ -22,7 +22,6 @@ max_spots: 8000                           # max points per bound
 # SOLVER
 # -----------------------------------
 
-n5_input_path: *n5_output_file_prefix
 metrics_output_path: "metrics/metrics.json"
 relative_threshold: 3.5
 absolute_threshold: 7.0
@@ -34,18 +33,64 @@ max_plateauwidth: 200
 
 # -- RIGID --
 run_type_solver_rigid: 'rigid'
-xml_file_path_solver_rigid: *detection_xml_output_file_path
-xml_file_path_output_rigid: &rigid_solver_xml_output '/Users/seanfite/Desktop/Rhapso-Output/rhapso-solver-rigid.xml'
+xml_file_path_solver_rigid_c1: '/Users/seanfite/Desktop/rhapso_stitching/ch_488/rhapso-detection.xml'
+xml_file_path_output_rigid_c1:  &rigid_solver_xml_output '/Users/seanfite/Desktop/rhapso_stitching/ch_488/rhapso-grouped-rigid.xml'
+n5_input_path_c1: '/Users/seanfite/Desktop/rhapso_stitching/ch_488/'
+
+# -- RIGID MULTI CHANNEL GROUPING --
+xml_file_path_solver_rigid_c2: '/Users/seanfite/Desktop/rhapso_stitching/ch_514/rhapso-detection.xml'
+xml_file_path_output_rigid_c2: '/Users/seanfite/Desktop/rhapso_stitching/ch_514/rhapso-grouped-rigid.xml'
+n5_input_path_c2: '/Users/seanfite/Desktop/rhapso_stitching/ch_514/'
+xml_file_path_solver_rigid_c3: '/Users/seanfite/Desktop/rhapso_stitching/ch_561/rhapso-detection.xml'
+xml_file_path_output_rigid_c3: '/Users/seanfite/Desktop/rhapso_stitching/ch_561/rhapso-grouped-rigid.xml'
+n5_input_path_c3: '/Users/seanfite/Desktop/rhapso_stitching/ch_561/'
+xml_file_path_solver_rigid_c4: '/Users/seanfite/Desktop/rhapso_stitching/ch_594/rhapso-detection.xml'
+xml_file_path_output_rigid_c4: '/Users/seanfite/Desktop/rhapso_stitching/ch_594/rhapso-grouped-rigid.xml'
+n5_input_path_c4: '/Users/seanfite/Desktop/rhapso_stitching/ch_594/'
+xml_file_path_solver_rigid_c5: '/Users/seanfite/Desktop/rhapso_stitching/ch_638/rhapso-detection.xml'
+xml_file_path_output_rigid_c5: '/Users/seanfite/Desktop/rhapso_stitching/ch_638/rhapso-grouped-rigid.xml'
+n5_input_path_c5: '/Users/seanfite/Desktop/rhapso_stitching/ch_638/'
+xml_file_path_solver_rigid_c6: '/Users/seanfite/Desktop/rhapso_stitching/ch_405/rhapso-detection.xml'
+xml_file_path_output_rigid_c6: '/Users/seanfite/Desktop/rhapso_stitching/ch_405/rhapso-grouped-rigid.xml'
+n5_input_path_c6: '/Users/seanfite/Desktop/rhapso_stitching/ch_405/'
 
 # -- AFFINE --
 run_type_solver_affine: 'affine'
-xml_file_path_solver_affine: *rigid_solver_xml_output
-xml_file_path_output_affine: &affine_solver_xml_output '/Users/seanfite/Desktop/Rhapso-Output/rhapso-solver-affine.xml'
+xml_file_path_solver_affine_c1: *rigid_solver_xml_output
+xml_file_path_output_affine_c1: &affine_solver_xml_output '/Users/seanfite/Desktop/Rhapso-Output/rhapso-solver-affine.xml'
+
+# -- AFFINE MULTI CHANNEL GROUPING --
+xml_file_path_solver_affine_c2: '/Users/seanfite/Desktop/rhapso_stitching/ch_514/rhapso-rigid.xml'
+xml_file_path_output_affine_c2: '/Users/seanfite/Desktop/rhapso_stitching/ch_514/rhapso-affine.xml'
+n5_input_path_c2: '/Users/seanfite/Desktop/rhapso_stitching/ch_514/'
+xml_file_path_solver_affine_c3: '/Users/seanfite/Desktop/rhapso_stitching/ch_561/rhapso-rigid.xml'
+xml_file_path_output_affine_c3: '/Users/seanfite/Desktop/rhapso_stitching/ch_561/rhapso-affine.xml'
+n5_input_path_c3: '/Users/seanfite/Desktop/rhapso_stitching/ch_561/'
+xml_file_path_solver_affine_c4: '/Users/seanfite/Desktop/rhapso_stitching/ch_594/rhapso-rigid.xml'
+xml_file_path_output_affine_c4: '/Users/seanfite/Desktop/rhapso_stitching/ch_594/rhapso-affine.xml'
+n5_input_path_c4: '/Users/seanfite/Desktop/rhapso_stitching/ch_594/'
+xml_file_path_solver_affine_c5: '/Users/seanfite/Desktop/rhapso_stitching/ch_638/rhapso-rigid.xml'
+xml_file_path_output_affine_c5: '/Users/seanfite/Desktop/rhapso_stitching/ch_638/rhapso-affine.xml'
+n5_input_path_c5: '/Users/seanfite/Desktop/rhapso_stitching/ch_638/'
 
 # -- SPLIT AFFINE --
 run_type_solver_split_affine: 'split-affine'
-xml_file_path_solver_split_affine: '/Users/seanfite/Desktop/Rhapso-Output/rhapso-solver-split.xml'
-xml_file_path_output_split_affine: '/Users/seanfite/Desktop/Rhapso-Output/rhapso-solver-split-affine.xml'
+xml_file_path_solver_split_affine_c1: '/Users/seanfite/Desktop/Rhapso-Output/rhapso-solver-split.xml'
+xml_file_path_output_split_affine_c1: '/Users/seanfite/Desktop/Rhapso-Output/rhapso-solver-split-affine.xml'
+
+# -- SPLIT AFFINE MULTI CHANNEL GROUPING --
+xml_file_path_solver_split_affine_c2: '/Users/seanfite/Desktop/rhapso_stitching/ch_514/rhapso-split.xml'
+xml_file_path_output_split_affine_c2: '/Users/seanfite/Desktop/rhapso_stitching/ch_514/rhapso-split_affine.xml'
+n5_input_path_c2: '/Users/seanfite/Desktop/rhapso_stitching/ch_514/'
+xml_file_path_solver_split_affine_c3: '/Users/seanfite/Desktop/rhapso_stitching/ch_561/rhapso-split.xml'
+xml_file_path_output_split_affine_c3: '/Users/seanfite/Desktop/rhapso_stitching/ch_561/rhapso-split_affine.xml'
+n5_input_path_c3: '/Users/seanfite/Desktop/rhapso_stitching/ch_561/'
+xml_file_path_solver_split_affine_c4: '/Users/seanfite/Desktop/rhapso_stitching/ch_594/rhapso-split.xml'
+xml_file_path_output_split_affine_c4: '/Users/seanfite/Desktop/rhapso_stitching/ch_594/rhapso-split_affine.xml'
+n5_input_path_c4: '/Users/seanfite/Desktop/rhapso_stitching/ch_594/'
+xml_file_path_solver_split_affine_c5: '/Users/seanfite/Desktop/rhapso_stitching/ch_638/rhapso-split.xml'
+xml_file_path_output_split_affine_c5: '/Users/seanfite/Desktop/rhapso_stitching/ch_638/rhapso-spit_affine.xml'
+n5_input_path_c5: '/Users/seanfite/Desktop/rhapso_stitching/ch_638/'
 
 
 # SPLIT DATASET
@@ -67,7 +112,8 @@ target_overlap: [128, 128, 128]
 # -----------------------------------
 
 input_type: 'zarr'
-n5_matching_output_path: *n5_output_file_prefix 
+# n5_matching_output_path: *n5_output_file_prefix 
+n5_matching_output_path: '/Users/seanfite/Desktop/rhapso_stitching/ch_488/'
 
 # -- RIGID --
 match_type_rigid: 'rigid' 
@@ -89,7 +135,8 @@ regularization_weight_rigid: 1.0
 
 # -- AFFINE --
 match_type_affine: 'affine'  
-xml_file_path_matching_affine: *rigid_solver_xml_output 
+# xml_file_path_matching_affine: *rigid_solver_xml_output 
+xml_file_path_matching_affine: '/Users/seanfite/Desktop/rhapso_stitching/ch_488/rhapso-grouped-rigid.xml'
 
 # Candidates
 num_neighbors_affine: 3

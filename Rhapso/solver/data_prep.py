@@ -8,12 +8,10 @@ Data Prep fetches and preps n5 interest points data
 """
 
 class DataPrep():
-    def __init__(self, interest_points_df, view_transform_matrices, xml_file_path, n5_input_path):
-        self.interest_points_df = interest_points_df
-        self.view_transform_matrices = view_transform_matrices
-        self.xml_file_path = xml_file_path
-        self.n5_input_path = n5_input_path
-
+    def __init__(self, view_transform_matrices_list):
+        self.view_transform_matrices_list = view_transform_matrices_list
+        self.interest_points_df = None
+        self.n5_input_path = None
         self.connected_views = {} 
         self.corresponding_interest_points = {}
         self.interest_points = {}
@@ -141,7 +139,6 @@ class DataPrep():
             view_id = f"timepoint: {row['timepoint']}, setup: {row['setup']}"  
             interestpoints_prefix = f"{row['path']}/interestpoints/loc/"
             interest_points = root[interestpoints_prefix][:]
-            # interest_points = root[interestpoints_prefix][:] if interestpoints_prefix in root else np.empty((0, 3), dtype=np.float32)
             label = str(row['path']).replace('\\','/').lstrip('/').split('/', 2)[1]
             self.interest_points.setdefault(view_id, {})[label] = interest_points
                             
@@ -161,21 +158,38 @@ class DataPrep():
         """
         Executes the entry point of the script.
         """
-        self.build_label_map()
-        self.get_all_interest_points_from_n5()
-        self.get_corresponding_data_from_n5()
-        self.get_connected_views_from_n5()
+        data_map_list = []
+        for view_transform_matrices in self.view_transform_matrices_list:
+            self.interest_points_df = view_transform_matrices['dataframes']['view_interest_points']
+            self.n5_input_path = view_transform_matrices['n5_path']
+            self.view_transform_matrices = view_transform_matrices
 
-        view_id_set = set()
-        for k in self.corresponding_interest_points.keys():
-            try:
-                parts = [p.strip() for p in k.split(',')]
-                tp = parts[0].split(':')[-1].strip()
-                su = parts[1].split(':')[-1].strip()
-                view_id_set.add((str(tp), str(su)))
-            except Exception:
-                continue
+            self.build_label_map()
+            self.get_all_interest_points_from_n5()
+            self.get_corresponding_data_from_n5()
+            self.get_connected_views_from_n5()
 
-        self.view_id_set = sorted(view_id_set, key=lambda x: (int(x[0]), int(x[1])))
+            view_id_set = set()
+            for k in self.corresponding_interest_points.keys():
+                try:
+                    parts = [p.strip() for p in k.split(',')]
+                    tp = parts[0].split(':')[-1].strip()
+                    su = parts[1].split(':')[-1].strip()
+                    view_id_set.add((str(tp), str(su)))
+                except Exception:
+                    continue
 
-        return self.connected_views, self.corresponding_interest_points, self.interest_points, self.label_map_global, self.view_id_set
+            self.view_id_set = sorted(view_id_set, key=lambda x: (int(x[0]), int(x[1])))
+            
+            data_map_list.append({
+                'output_xml_path': view_transform_matrices['output_xml_path'],
+                'n5_path': view_transform_matrices['n5_path'],
+                'view_transform_matrices': view_transform_matrices['view_transform_matrices'],
+                'connected_views': self.connected_views, 
+                'corresponding_interest_points': self.corresponding_interest_points, 
+                'interest_points': self.interest_points, 
+                'label_map_global': self.label_map_global, 
+                'view_id_set': self.view_id_set}
+                )
+
+            return data_map_list
