@@ -16,7 +16,7 @@ import xmltodict
 import yaml
 from numcodecs import Blosc
 from io import BytesIO
-import fusion.aind_cloud_fusion.geometry as geometry
+import Rhapso.fusion.aind_cloud_fusion.geometry as geometry
 
 
 def read_config_yaml(yaml_path: str) -> dict:

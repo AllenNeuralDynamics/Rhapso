@@ -12,11 +12,11 @@ import tensorstore as ts
 import torch
 from torch.utils.data import Dataset
 import zarr
-import fusion.aind_cloud_fusion.blend as blend
-import fusion.aind_cloud_fusion.cloud_queue as cq
-import fusion.aind_cloud_fusion.geometry as geometry
-import fusion.aind_cloud_fusion.input_output as input_output
-import fusion.aind_cloud_fusion.fusion_utils as utils
+import Rhapso.fusion.aind_cloud_fusion.blend as blend
+import Rhapso.fusion.aind_cloud_fusion.cloud_queue as cq
+import Rhapso.fusion.aind_cloud_fusion.geometry as geometry
+import Rhapso.fusion.aind_cloud_fusion.input_output as input_output
+import Rhapso.fusion.aind_cloud_fusion.fusion_utils as utils
 
 def initialize_fusion(
     dataset: input_output.Dataset,

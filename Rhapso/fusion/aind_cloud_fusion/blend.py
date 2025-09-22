@@ -3,7 +3,7 @@ Interface for generic blending.
 """
 
 import torch
-import fusion.aind_cloud_fusion.geometry as geometry
+import Rhapso.fusion.aind_cloud_fusion.geometry as geometry
 
 
 class BlendingModule:
