@@ -103,19 +103,20 @@ def execute_job(yml_path, xml_path, output_path):
 
 if __name__ == '__main__':
 
-    # Force CPU-only execution
-    # os.environ["CUDA_VISIBLE_DEVICES"] = ""  # Hide all GPUs
-    # os.environ["PYTORCH_CUDA_ALLOC_CONF"] = "max_split_size_mb:32"
-    # print(f"Current multiprocessing start method: {mp.get_start_method(allow_none=False)}")
-    # print(f"Setting multiprocessing start method to 'forkserver': {mp.set_start_method('forkserver', force=True)}")
-    # print(f"New multiprocessing start method: {mp.get_start_method(allow_none=False)}")
-
+    # Force CPU-only execution settings
+    os.environ["CUDA_VISIBLE_DEVICES"] = ""  # Hide all GPUs
     os.environ["PYTORCH_CUDA_ALLOC_CONF"] = "max_split_size_mb:32"
-    print(mp.get_start_method(allow_none=False))
-    print(mp.set_start_method('forkserver', force=True))
-    print(mp.get_start_method(allow_none=False))
-    torch.cuda.empty_cache()
+    print(f"Current multiprocessing start method: {mp.get_start_method(allow_none=False)}")
+    print(f"Setting multiprocessing start method to 'forkserver': {mp.set_start_method('forkserver', force=True)}")
+    print(f"New multiprocessing start method: {mp.get_start_method(allow_none=False)}")
 
+    # Default worker.py settings
+    # os.environ["PYTORCH_CUDA_ALLOC_CONF"] = "max_split_size_mb:32"
+    # print(mp.get_start_method(allow_none=False))
+    # print(mp.set_start_method('forkserver', force=True))
+    # print(mp.get_start_method(allow_none=False))
+    # torch.cuda.empty_cache()
+    
     # Local Paths
     # xml_path = 'Rhapso/pipelines/fusion/data/BL6-R12_stitching_all_channels.xml'
     # yml_path = 'Rhapso/pipelines/fusion/data/worker_config.yml'
@@ -123,7 +124,6 @@ if __name__ == '__main__':
     # S3 Paths
     xml_path = "s3://martin-test-bucket/fusion/data/BL6-R12_stitching_all_channels.xml"
     yml_path = "s3://martin-test-bucket/fusion/data/worker_config.yml"
-
     output_path = 's3://martin-test-bucket/rhapso-fusion-01/results/'
 
     print(f'{xml_path=}')
