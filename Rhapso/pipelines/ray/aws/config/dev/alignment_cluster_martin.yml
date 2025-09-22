@@ -1,4 +1,4 @@
-cluster_name: ray-cluster-rhapso-alignment-martin-07
+cluster_name: martin-rhapso-ray-1
 max_workers: 10
 min_workers: 10
 

@@ -1,0 +1,3 @@
+channel: 2
+input_path: s3://aind-open-data/HCR_BL6-000_2023-07-11_00-01-00/radial_correction.ome.zarr/
+output_path: s3://martin-test-bucket/rhapso-fusion-01/results/HCR_BL6-000_2023-07-11_00-01-00/fused_full_res/channel_2.zarr
