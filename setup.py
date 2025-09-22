@@ -36,7 +36,15 @@ setup(
         'matplotlib==3.10.0',
         'memory-profiler==0.61.0',
         's3fs==2024.12.0',
-        'scikit-learn'
+        'scikit-learn',
+        # fusion
+        'tensorstore',
+        'torch',
+        'xmltodict',
+        'xarray',
+        'ome-zarr',
+        'toolz',
+        'nptyping'
     ],
     python_requires='>=3.7', 
     classifiers=[
