@@ -16,7 +16,15 @@ import xml.etree.ElementTree as ET
 import boto3
 from io import BytesIO
 import multiprocessing as mp
-import os 
+import os
+import torch
+import sys
+
+# Add the project root to Python path so we can import Rhapso
+# This works whether the script is run directly or as a module
+project_root = Path(__file__).parent.parent.parent.parent
+if str(project_root) not in sys.path:
+    sys.path.insert(0, str(project_root))
 
 def get_tile_zyx_resolution(input_xml_path: str) -> list[int]: 
     """
@@ -42,27 +50,41 @@ def get_tile_zyx_resolution(input_xml_path: str) -> list[int]:
     return res_zyx
 
 def execute_job(yml_path, xml_path, output_path):
+    print("📋 Reading configuration...")
     # Prep inputs
     configs = utils.read_config_yaml(yml_path)
     input_path = configs['input_path']
     output_s3_path = configs['output_path']
     channel = configs['channel']
+    print(f"   Input path: {input_path}")
+    print(f"   Output path: {output_s3_path}")
+    print(f"   Channel: {channel}")
 
     resolution_zyx = get_tile_zyx_resolution(xml_path)
+    print(f"   Resolution ZYX: {resolution_zyx}")
+    
     output_params = input_output.OutputParameters(
         path=output_s3_path,
         resolution_zyx=resolution_zyx
     )
     blend_option = 'weighted_linear_blending'
 
-    # Run fusion
+    print("🚀 Starting fusion process...")
+    start_time = time.time()
+    print(f"⏰ Fusion start time: {time.strftime('%Y-%m-%d %H:%M:%S', time.localtime(start_time))}")
+    sys.stdout.flush()  # Force output to be written immediately
+    
+    # Run fusion with configurable batch size
+    batch_size = 10  # Adjust this value as needed for your system
     fusion.run_fusion(
             input_path,
             xml_path,
             channel,
             output_params,
-            blend_option
+            blend_option,
+            batch_size=batch_size
     )
+    print("✅ Fusion process completed!")
 
     # Log 'done' file for next capsule in pipeline.
     # Unique log filename
@@ -82,20 +104,39 @@ def execute_job(yml_path, xml_path, output_path):
 if __name__ == '__main__':
 
     # Force CPU-only execution
-    os.environ["CUDA_VISIBLE_DEVICES"] = ""  # Hide all GPUs
-    os.environ["PYTORCH_CUDA_ALLOC_CONF"] = "max_split_size_mb:32"
-    print(f"Current multiprocessing start method: {mp.get_start_method(allow_none=False)}")
-    print(f"Setting multiprocessing start method to 'forkserver': {mp.set_start_method('forkserver', force=True)}")
-    print(f"New multiprocessing start method: {mp.get_start_method(allow_none=False)}")
+    # os.environ["CUDA_VISIBLE_DEVICES"] = ""  # Hide all GPUs
+    # os.environ["PYTORCH_CUDA_ALLOC_CONF"] = "max_split_size_mb:32"
+    # print(f"Current multiprocessing start method: {mp.get_start_method(allow_none=False)}")
+    # print(f"Setting multiprocessing start method to 'forkserver': {mp.set_start_method('forkserver', force=True)}")
+    # print(f"New multiprocessing start method: {mp.get_start_method(allow_none=False)}")
 
-    xml_path = 'Rhapso/pipelines/fusion/data/BL6-R12_stitching_all_channels.xml'
-    yml_path = 'Rhapso/pipelines/fusion/data/worker_config.yml'
+    os.environ["PYTORCH_CUDA_ALLOC_CONF"] = "max_split_size_mb:32"
+    print(mp.get_start_method(allow_none=False))
+    print(mp.set_start_method('forkserver', force=True))
+    print(mp.get_start_method(allow_none=False))
+    torch.cuda.empty_cache()
+
+    # Local Paths
+    # xml_path = 'Rhapso/pipelines/fusion/data/BL6-R12_stitching_all_channels.xml'
+    # yml_path = 'Rhapso/pipelines/fusion/data/worker_config.yml'
+
+    # S3 Paths
+    xml_path = "s3://martin-test-bucket/fusion/data/BL6-R12_stitching_all_channels.xml"
+    yml_path = "s3://martin-test-bucket/fusion/data/worker_config.yml"
+
     output_path = 's3://martin-test-bucket/rhapso-fusion-01/results/'
 
     print(f'{xml_path=}')
     print(f'{yml_path=}')
     print(f'{output_path=}')
 
-    execute_job(yml_path,
-                xml_path,
-                output_path)
+    try:
+        print("Starting fusion job...")
+        execute_job(yml_path, xml_path, output_path)
+        print("✅ Fusion job completed successfully!")
+    except Exception as e:
+        print(f"❌ Error during fusion job: {e}")
+        import traceback
+        print("Full traceback:")
+        traceback.print_exc()
+        sys.exit(1)

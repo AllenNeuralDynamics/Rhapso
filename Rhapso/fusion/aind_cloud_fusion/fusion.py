@@ -3,6 +3,8 @@
 from __future__ import annotations
 import logging
 import time
+import os
+import gc
 from typing import Optional
 import dask.array as da
 from dask import delayed
@@ -17,6 +19,10 @@ import Rhapso.fusion.aind_cloud_fusion.cloud_queue as cq
 import Rhapso.fusion.aind_cloud_fusion.geometry as geometry
 import Rhapso.fusion.aind_cloud_fusion.input_output as input_output
 import Rhapso.fusion.aind_cloud_fusion.fusion_utils as utils
+
+# Set up logging
+LOGGER = logging.getLogger(__name__)
+
 
 def initialize_fusion(
     dataset: input_output.Dataset,
@@ -288,7 +294,8 @@ def run_fusion(  # noqa: C901
     cpu_cell_size: Optional[tuple[int, int, int]] = None,
     gpu_cell_size: Optional[tuple[int, int, int]] = None,
     volume_sampler_stride: int = 1,
-    volume_sampler_start: int = 0
+    volume_sampler_start: int = 0,
+    batch_size: int = 10
 ):
     """
     Fusion algorithm.
@@ -301,12 +308,12 @@ def run_fusion(  # noqa: C901
     datastore: Option to swap to tensorstore reading.
     cpu/gpu cell_size: size of subvolume in output volume sent to each cpu/gpu worker.
     volume_sampler stride/start: options for partitioning work across capsules.
+    batch_size: number of cells to process in each batch (default: 10).
     """
 
     logging.basicConfig(
         format="%(asctime)s %(message)s", datefmt="%Y-%m-%d %H:%M"
     )
-    LOGGER = logging.getLogger(__name__)
     LOGGER.setLevel(logging.INFO)
 
     # Base Initalization
@@ -338,8 +345,9 @@ def run_fusion(  # noqa: C901
 
     # Set CPU/GPU cell_size
     DEFAULT_CHUNKSIZE = (1, 1, 128, 128, 128)
-    CPU_CELL_SIZE = (512, 256, 256)
+    CPU_CELL_SIZE = (256, 128, 128)  # Reduced cell size to use less memory
     GPU_CELL_SIZE = calculate_gpu_cell_size(output_volume_size)
+    
     if output_params.chunksize != DEFAULT_CHUNKSIZE:
         if cpu_cell_size is None or gpu_cell_size is None:
             raise ValueError('Custom CPU/GPU cell sizes must be provided for custom output chunksize.')
@@ -382,13 +390,18 @@ def run_fusion(  # noqa: C901
 
     batch_start = time.time()
     total_cells = len(overlap_volume_sampler)
-    batch_size = 200
     LOGGER.info(f"CPU Cell Size: {CPU_CELL_SIZE}")
     LOGGER.info(f"CPU Total Cells: {total_cells}")
     LOGGER.info(f"CPU Batch Size: {batch_size}")
 
     delayed_jobs = []
     for i, (curr_cell, src_ids) in enumerate(overlap_volume_sampler):
+        # Force garbage collection every 5 cells to free memory
+        if i % 5 == 0:
+            gc.collect()
+            if torch.cuda.is_available():
+                torch.cuda.empty_cache()
+        
         delayed_job = delayed(cpu_fusion)(tile_arrays,
                                         tile_transforms,
                                         tile_sizes_zyx,
@@ -404,20 +417,39 @@ def run_fusion(  # noqa: C901
 
         if len(delayed_jobs) == batch_size:
             LOGGER.info(f"CPU: Calculating up to {i}/{total_cells}...")
-            da.compute(*delayed_jobs)
-            delayed_jobs = []
-            LOGGER.info(
-                f"CPU: Finished up to {i}/{total_cells}. Batch time: {time.time() - batch_start}"
-            )
-            batch_start = time.time()
+            try:
+                da.compute(*delayed_jobs)
+                delayed_jobs = []
+                gc.collect()  # Force garbage collection after each batch
+                if torch.cuda.is_available():
+                    torch.cuda.empty_cache()
+                LOGGER.info(
+                    f"CPU: Finished up to {i}/{total_cells}. Batch time: {time.time() - batch_start}"
+                )
+                batch_start = time.time()
+            except Exception as e:
+                LOGGER.error(f"❌ Error during batch computation at {i}/{total_cells}: {e}")
+                LOGGER.error(f"   Error type: {type(e).__name__}")
+                import traceback
+                LOGGER.error(f"   Full traceback: {traceback.format_exc()}")
+                raise e
 
     # Compute remaining cells
-    LOGGER.info(f"CPU: Calculating up to {i}/{total_cells}...")
-    da.compute(*delayed_jobs)
-    delayed_jobs = []
-    LOGGER.info(
-        f"CPU: Finished up to {i}/{total_cells}. Batch time: {time.time() - batch_start}"
-    )
+    if delayed_jobs:  # Only process if there are remaining jobs
+        LOGGER.info(f"CPU: Calculating final batch up to {i}/{total_cells}...")
+        try:
+            da.compute(*delayed_jobs)
+            delayed_jobs = []
+            gc.collect()  # Force garbage collection after final batch
+            if torch.cuda.is_available():
+                torch.cuda.empty_cache()
+            LOGGER.info(f"CPU: Finished final batch. Total time: {time.time() - batch_start}")
+        except Exception as e:
+            LOGGER.error(f"❌ Error during final batch computation: {e}")
+            LOGGER.error(f"   Error type: {type(e).__name__}")
+            import traceback
+            LOGGER.error(f"   Full traceback: {traceback.format_exc()}")
+            raise e
 
     p.join()
     p.close()
