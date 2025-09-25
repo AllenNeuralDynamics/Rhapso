@@ -36,6 +36,7 @@ damp: 1.0
 max_iterations: 10000
 max_allowed_error: .inf
 max_plateauwidth: 200
+fixed_tile: False
 
 # -- RIGID --
 run_type_solver_rigid: 'rigid'
