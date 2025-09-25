@@ -155,6 +155,7 @@ solver_rigid = Solver(
     max_allowed_error=config['max_allowed_error'],
     max_plateauwidth=config['max_plateauwidth'],
     metrics_output_path=config['metrics_output_path'],
+    fixed_tile=config['fixed_tile']
 )
 
 # Affine solver run command
@@ -171,6 +172,7 @@ solver_affine = Solver(
     max_allowed_error=config['max_allowed_error'],
     max_plateauwidth=config['max_plateauwidth'],
     metrics_output_path=config['metrics_output_path'],
+    fixed_tile=config['fixed_tile']
 )
 
 # SOLVER SPLIT AFFINE
@@ -187,6 +189,7 @@ solver_split_affine = Solver(
     max_allowed_error=config['max_allowed_error'],
     max_plateauwidth=config['max_plateauwidth'],
     metrics_output_path=config['metrics_output_path'],
+    fixed_tile=config['fixed_tile']
 )
 
 prefix = (Path(__file__).resolve().parent / "config/dev").as_posix()

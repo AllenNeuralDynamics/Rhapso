@@ -6,9 +6,10 @@ Pre Align Tiles roughly align p1 with p2 to speed up global optimization rounds
 """
 
 class PreAlignTiles:
-    def __init__(self, min_matches, run_type):
+    def __init__(self, min_matches, run_type, fixed_tile):
         self.min_matches = min_matches
         self.run_type = run_type
+        self.fixed_tile = fixed_tile
         
     def rigid_fit_model(self, rigid_model, matches):
         """
@@ -255,6 +256,12 @@ class PreAlignTiles:
         Greedily seed an initial alignment
         """
         random.shuffle(tiles['tiles'])
+
+        if getattr(self, "fixed_tile", None):
+            seed = next((t for t in tiles['tiles'] if t.get('view') == self.fixed_tile), None)
+            if seed is None:
+                raise ValueError(f"Fixed tile '{self.fixed_tile}' not found in tiles.")
+            tiles['fixed_tiles'] = [seed]
 
         unaligned_tiles = []
         aligned_tiles = []

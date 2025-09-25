@@ -16,7 +16,7 @@ This class implements the Solver pipeline for rigid, affine, and split-affine op
 
 class Solver:
     def __init__(self, xml_file_path_output, n5_input_path, xml_file_path, run_type, relative_threshold, absolute_threshold, 
-                 min_matches, damp, max_iterations, max_allowed_error, max_plateauwidth, metrics_output_path):
+                 min_matches, damp, max_iterations, max_allowed_error, max_plateauwidth, metrics_output_path, fixed_tile):
         self.xml_file_path_output = xml_file_path_output
         self.n5_input_path = n5_input_path
         self.xml_file_path = xml_file_path
@@ -29,6 +29,7 @@ class Solver:
         self.max_allowed_error = max_allowed_error
         self.max_plateauwidth = max_plateauwidth
         self.metrics_output_path = metrics_output_path
+        self.fixed_tile = fixed_tile
         self.groups = None
         self.s3 = boto3.client('s3')
 
@@ -72,7 +73,7 @@ class Solver:
         print("Tiles are computed")
 
         # Use matches to update transformation matrices to represent rough alignment
-        pre_align_tiles = PreAlignTiles(self.min_matches, self.run_type)
+        pre_align_tiles = PreAlignTiles(self.min_matches, self.run_type, self.fixed_tile)
         tc = pre_align_tiles.run(tiles)
         print("Tiles are pre-aligned")
 
@@ -95,7 +96,7 @@ class Solver:
             print("Tiles are computed")
 
             # Use matches to update transformation matrices to represent rough alignment
-            pre_align_tiles = PreAlignTiles(self.min_matches, self.run_type)
+            pre_align_tiles = PreAlignTiles(self.min_matches, self.run_type, self.fixed_tile)
             tc = pre_align_tiles.run(tiles_round_2)
             print("Tiles are pre-aligned")
 
