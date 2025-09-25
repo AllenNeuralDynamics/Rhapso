@@ -1,4 +1,4 @@
-cluster_name: rhapso-ray-alignment-cluster-sean-001
+cluster_name: rhapso-ray-alignment-cluster-sean-12
 max_workers: 5
 min_workers: 5
 
@@ -47,12 +47,14 @@ setup_commands:
   - sudo apt-get -o Acquire::ForceIPv4=true -o Acquire::Retries=5 update -y
   - sudo DEBIAN_FRONTEND=noninteractive apt install -y python3-pip 
   - sudo python3 -m pip install awscli
+  - python3 -m pip uninstall -y click || true && sudo python3 -m pip install -U 'click==8.1.7'
   - sudo python3 -m pip install "ray[default]==2.9.1"  
   - sudo python3 -m pip install protobuf==4.23.4 
   - aws s3 cp s3://rhapso-whl-v2/Rhapso-0.1.8-py3-none-any.whl /tmp/Rhapso-0.1.8-py3-none-any.whl  
-  - echo 'export PATH=$HOME/.local/bin:$PATH' >> ~/.bashrc
-  - source ~/.bashrc
-  - pip install /tmp/Rhapso-0.1.8-py3-none-any.whl   
+  # - echo 'export PATH=$HOME/.local/bin:$PATH' >> ~/.bashrc
+  # - source ~/.bashrc
+  # - pip install /tmp/Rhapso-0.1.8-py3-none-any.whl  
+  - sudo python3 -m pip install /tmp/Rhapso-0.1.8-py3-none-any.whl 
 
 head_start_ray_commands:
   - ray stop
@@ -73,7 +75,7 @@ worker_start_ray_commands:
 # rm -rf ~/.cache/ray
 
 # ACCESS RAY DASHBOARD
-# ssh -i /Users/seanfite/Desktop/AllenInstitute/Rhapso/Auth/AWS/EC2-SSH-Key/sean-rhapso.pem -L 8265:localhost:8265 ubuntu@44.252.112.30
+# ssh -i /Users/seanfite/Desktop/AllenInstitute/Rhapso/Auth/AWS/EC2-SSH-Key/sean-rhapso.pem -L 8265:localhost:8265 ubuntu@52.40.191.92
 # http://localhost:8265
 
 # TO FIX

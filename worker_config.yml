@@ -1,0 +1,9 @@
+channel: 488
+
+# Old working XML format
+input_path: s3://aind-open-data/exaSPIM_708365_2024-04-29_12-46-15/SPIM.ome.zarr/
+
+# New not working XML format
+# input_path: s3://aind-open-data/exaSPIM_720164_2025-07-07_17-55-45_processed_2025-07-15_16-22-02/flatfield_correction/SPIM.ome.zarr/
+
+output_path: s3://rhapso-matching-test/fusion_output

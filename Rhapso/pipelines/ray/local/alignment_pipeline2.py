@@ -9,7 +9,7 @@ import ray
 ray.init()
 
 # Point to param file
-with open("Rhapso/pipelines/ray/param/HCR_s43_561.yml", "r") as file:
+with open("Rhapso/pipelines/ray/param/HCR_s43_488.yml", "r") as file:
     config = yaml.safe_load(file)
 
 # -- INITIALIZE EACH COMPONENT --
@@ -150,6 +150,18 @@ solver_multi_channel_affine = Solver(
     xml_file_path_solver_affine_c2=config['xml_file_path_solver_affine_c2'],
     xml_file_path_output_affine_c2=config['xml_file_path_output_affine_c2'],
     n5_input_path_c2=config['n5_input_path_c2'],
+    xml_file_path_solver_affine_c3=config['xml_file_path_solver_affine_c3'],
+    xml_file_path_output_affine_c3=config['xml_file_path_output_affine_c3'],
+    n5_input_path_c3=config['n5_input_path_c3'],
+    xml_file_path_solver_affine_c4=config['xml_file_path_solver_affine_c4'],
+    xml_file_path_output_affine_c4=config['xml_file_path_output_affine_c4'],
+    n5_input_path_c4=config['n5_input_path_c4'],
+    xml_file_path_solver_affine_c5=config['xml_file_path_solver_affine_c5'],
+    xml_file_path_output_affine_c5=config['xml_file_path_output_affine_c5'],
+    n5_input_path_c5=config['n5_input_path_c5'],
+    xml_file_path_solver_affine_c6=config['xml_file_path_solver_affine_c6'],
+    xml_file_path_output_affine_c6=config['xml_file_path_output_affine_c6'],
+    n5_input_path_c6=config['n5_input_path_c6'],
     run_type=config['run_type_solver_affine'],  
     relative_threshold=config['relative_threshold'],
     absolute_threshold=config['absolute_threshold'],
@@ -195,8 +207,8 @@ split_dataset = SplitDataset(
 # interest_point_detection.run()
 # interest_point_matching_rigid.run()
 # solver_rigid.run()
-solver_multi_channel_rigid.run()
-# interest_point_matching_affine.run()
+# solver_multi_channel_rigid.run()
+interest_point_matching_affine.run()
 # solver_affine.run()
 # solver_multi_channel_affine.run()
 # split_dataset.run()

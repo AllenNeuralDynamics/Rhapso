@@ -106,7 +106,7 @@ class SaveResults:
             root = self.add_new_view_transform(root)
             tree = ET.ElementTree(root)
             self.save_xml(xml_file_path, tree)
-            self.save_metrics(n5_path)
+            # self.save_metrics(n5_path)
         
         for printed_view in self.printed_views:
             print(printed_view)

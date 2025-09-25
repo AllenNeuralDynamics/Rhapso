@@ -1,0 +1,175 @@
+
+# INTEREST POINT DETECTION
+# -----------------------------------
+
+xml_file_path_detection: 's3://rhapso-matching-test/channel_488.xml'
+image_file_prefix: 's3://aind-open-data/HCR_000000-s43_2025-07-24_13-00-00_processed_2025-09-16_18-41-44/image_radial_correction/' 
+xml_output_file_path: &detection_xml_output_file_path 's3://rhapso-matching-test/488/rhapso-detection.xml'
+n5_output_file_prefix: &n5_output_file_prefix 's3://rhapso-matching-test/488/' 
+detection_run_type: 'ray' 
+file_type: 'zarr' 
+dsxy: 4
+dsz: 4
+min_intensity: 1                          # normalize - dog
+max_intensity: 5                          # normalize - dog
+sigma: 1.8                                # blur - dog
+threshold: 0.005                          # find peaks (min initial peak value) - dog (threshold / 3) 
+median_filter: 9                          # xysubtract - pre-dog
+combine_distance: .5
+chunks_per_bound: 14                      # chunks per bound
+max_spots: 8000                           # max points per bound
+
+# SOLVER
+# -----------------------------------
+
+metrics_output_path: "metrics/metrics.json"
+relative_threshold: 3.5
+absolute_threshold: 7.0
+min_matches: 3
+damp: 1.0
+max_iterations: 10000
+max_allowed_error: .inf
+max_plateauwidth: 200
+
+# -- RIGID --
+run_type_solver_rigid: 'rigid'
+xml_file_path_solver_rigid_c1: 's3://rhapso-matching-test/488/rhapso-detection.xml'
+xml_file_path_output_rigid_c1: &rigid_solver_xml_output 's3://rhapso-matching-test/488/rhapso-rigid.xml'
+n5_input_path_c1: 's3://rhapso-matching-test/488/'
+
+# -- MULTI CHANNEL GROUPING --
+xml_file_path_solver_rigid_c2: 's3://aind-open-data/HCR_000000-s43_2025-07-24_13-00-00_processed_2025-09-16_21-55-10/rhapso_stitching/ch_561/rhapso-detection.xml'
+xml_file_path_output_rigid_c2: 's3://rhapso-matching-test/rhapso-rigid-561.xml'
+n5_input_path_c2: 's3://aind-open-data/HCR_000000-s43_2025-07-24_13-00-00_processed_2025-09-16_21-55-10/rhapso_stitching/ch_561/'
+# xml_file_path_solver_rigid_c3: 's3://aind-open-data/HCR_000000-s43_2025-07-24_13-00-00_processed_2025-09-16_21-55-10/rhapso_stitching/ch_561/rhapso-detection.xml'
+# xml_file_path_output_rigid_c3: 's3://rhapso-matching-test/rhapso-rigid-561.xml'
+# n5_input_path_c3: 's3://aind-open-data/HCR_000000-s43_2025-07-24_13-00-00_processed_2025-09-16_21-55-10/rhapso_stitching/ch_561/'
+# xml_file_path_solver_rigid_c4: 's3://aind-open-data/HCR_000000-s43_2025-07-24_13-00-00_processed_2025-09-16_21-55-10/rhapso_stitching/ch_594/rhapso-detection.xml'
+# xml_file_path_output_rigid_c4: 's3://rhapso-matching-test/rhapso-rigid-594.xml'
+# n5_input_path_c4: 's3://aind-open-data/HCR_000000-s43_2025-07-24_13-00-00_processed_2025-09-16_21-55-10/rhapso_stitching/ch_594/'
+# xml_file_path_solver_rigid_c5: 's3://aind-open-data/HCR_000000-s43_2025-07-24_13-00-00_processed_2025-09-16_21-55-10/rhapso_stitching/ch_638/rhapso-detection.xml'
+# xml_file_path_output_rigid_c5: 's3://rhapso-matching-test/rhapso-rigid-638.xml'
+# n5_input_path_c5: 's3://aind-open-data/HCR_000000-s43_2025-07-24_13-00-00_processed_2025-09-16_21-55-10/rhapso_stitching/ch_638/'
+# xml_file_path_solver_rigid_c6: 's3://aind-open-data/HCR_000000-s43_2025-07-24_13-00-00_processed_2025-09-16_21-55-10/rhapso_stitching/ch_638/rhapso-detection.xml'
+# xml_file_path_output_rigid_c6: 's3://rhapso-matching-test/rhapso-rigid-638.xml'
+# n5_input_path_c6: 's3://aind-open-data/HCR_000000-s43_2025-07-24_13-00-00_processed_2025-09-16_21-55-10/rhapso_stitching/ch_638/'
+
+# -- AFFINE --
+run_type_solver_affine: 'affine'
+xml_file_path_solver_affine_c1: *rigid_solver_xml_output
+xml_file_path_output_affine_c1: &affine_solver_xml_output 's3://rhapso-matching-test/rhapso-solver-affine.xml'
+
+# -- MULTI CHANNEL GROUPING --
+xml_file_path_solver_affine_c2: 's3://aind-open-data/HCR_000000-s43_2025-07-24_13-00-00_processed_2025-09-16_21-55-10/rhapso_stitching/ch_514/rhapso-detection.xml'
+xml_file_path_output_affine_c2: 's3://rhapso-matching-test/rhapso-rigid-514.xml'
+n5_input_path_c2: 's3://aind-open-data/HCR_000000-s43_2025-07-24_13-00-00_processed_2025-09-16_21-55-10/rhapso_stitching/ch_514/'
+xml_file_path_solver_affine_c3: 's3://aind-open-data/HCR_000000-s43_2025-07-24_13-00-00_processed_2025-09-16_21-55-10/rhapso_stitching/ch_561/rhapso-detection.xml'
+xml_file_path_output_affine_c3: 's3://rhapso-matching-test/rhapso-rigid-561.xml'
+n5_input_path_c3: 's3://aind-open-data/HCR_000000-s43_2025-07-24_13-00-00_processed_2025-09-16_21-55-10/rhapso_stitching/ch_561/'
+xml_file_path_solver_affine_c4: 's3://aind-open-data/HCR_000000-s43_2025-07-24_13-00-00_processed_2025-09-16_21-55-10/rhapso_stitching/ch_594/rhapso-detection.xml'
+xml_file_path_output_affine_c4: 's3://rhapso-matching-test/rhapso-rigid-594.xml'
+n5_input_path_c4: 's3://aind-open-data/HCR_000000-s43_2025-07-24_13-00-00_processed_2025-09-16_21-55-10/rhapso_stitching/ch_594/'
+xml_file_path_solver_affine_c5: 's3://aind-open-data/HCR_000000-s43_2025-07-24_13-00-00_processed_2025-09-16_21-55-10/rhapso_stitching/ch_638/rhapso-detection.xml'
+xml_file_path_output_affine_c5: 's3://rhapso-matching-test/rhapso-rigid-638.xml'
+n5_input_path_c5: 's3://aind-open-data/HCR_000000-s43_2025-07-24_13-00-00_processed_2025-09-16_21-55-10/rhapso_stitching/ch_638/'
+xml_file_path_solver_affine_c6: 's3://aind-open-data/HCR_000000-s43_2025-07-24_13-00-00_processed_2025-09-16_21-55-10/rhapso_stitching/ch_638/rhapso-detection.xml'
+xml_file_path_output_affine_c6: 's3://rhapso-matching-test/rhapso-rigid-638.xml'
+n5_input_path_c6: 's3://aind-open-data/HCR_000000-s43_2025-07-24_13-00-00_processed_2025-09-16_21-55-10/rhapso_stitching/ch_638/'
+
+# -- SPLIT AFFINE --
+run_type_solver_split_affine: 'split-affine'
+xml_file_path_solver_split_affine_c1: 's3://rhapso-matching-test/rhapso-solver-split.xml'
+xml_file_path_output_split_affine_c1: 's3://rhapso-matching-test/rhapso-solver-split-affine.xml'
+
+# -- MULTI CHANNEL GROUPING --
+xml_file_path_solver_split_affine_c2: 's3://aind-open-data/HCR_000000-s43_2025-07-24_13-00-00_processed_2025-09-16_21-55-10/rhapso_stitching/ch_514/rhapso-detection.xml'
+xml_file_path_output_split_affine_c2: 's3://rhapso-matching-test/rhapso-rigid-514.xml'
+n5_input_path_c2: 's3://aind-open-data/HCR_000000-s43_2025-07-24_13-00-00_processed_2025-09-16_21-55-10/rhapso_stitching/ch_514/'
+xml_file_path_solver_split_affine_c3: 's3://aind-open-data/HCR_000000-s43_2025-07-24_13-00-00_processed_2025-09-16_21-55-10/rhapso_stitching/ch_561/rhapso-detection.xml'
+xml_file_path_output_split_affine_c3: 's3://rhapso-matching-test/rhapso-rigid-561.xml'
+n5_input_path_c3: 's3://aind-open-data/HCR_000000-s43_2025-07-24_13-00-00_processed_2025-09-16_21-55-10/rhapso_stitching/ch_561/'
+xml_file_path_solver_split_affine_c4: 's3://aind-open-data/HCR_000000-s43_2025-07-24_13-00-00_processed_2025-09-16_21-55-10/rhapso_stitching/ch_594/rhapso-detection.xml'
+xml_file_path_output_split_affine_c4: 's3://rhapso-matching-test/rhapso-rigid-594.xml'
+n5_input_path_c4: 's3://aind-open-data/HCR_000000-s43_2025-07-24_13-00-00_processed_2025-09-16_21-55-10/rhapso_stitching/ch_594/'
+xml_file_path_solver_split_affine_c5: 's3://aind-open-data/HCR_000000-s43_2025-07-24_13-00-00_processed_2025-09-16_21-55-10/rhapso_stitching/ch_638/rhapso-detection.xml'
+xml_file_path_output_split_affine_c5: 's3://rhapso-matching-test/rhapso-rigid-638.xml'
+n5_input_path_c5: 's3://aind-open-data/HCR_000000-s43_2025-07-24_13-00-00_processed_2025-09-16_21-55-10/rhapso_stitching/ch_638/'
+xml_file_path_solver_split_affine_c6: 's3://aind-open-data/HCR_000000-s43_2025-07-24_13-00-00_processed_2025-09-16_21-55-10/rhapso_stitching/ch_638/rhapso-detection.xml'
+xml_file_path_output_split_affine_c6: 's3://rhapso-matching-test/rhapso-rigid-638.xml'
+n5_input_path_c6: 's3://aind-open-data/HCR_000000-s43_2025-07-24_13-00-00_processed_2025-09-16_21-55-10/rhapso_stitching/ch_638/'
+
+
+# SPLIT DATASET
+# -----------------------------------
+
+xml_file_path_split: *affine_solver_xml_output
+xml_output_file_path_split: &affine_split_solver_xml_output 's3://rhapso-matching-test/rhapso-solver-split.xml'
+n5_path_split: *n5_output_file_prefix
+point_density: 100.0 
+min_points: 20
+max_points: 500 
+error: 0.5 
+exclude_radius: 200.0
+target_image_size: [7000, 7000, 4000]
+target_overlap: [128, 128, 128]
+
+
+# INTEREST POINT MATCHING
+# -----------------------------------
+
+input_type: 'zarr'
+n5_matching_output_path: *n5_output_file_prefix
+
+# -- RIGID --
+match_type_rigid: 'rigid' 
+xml_file_path_matching_rigid: *detection_xml_output_file_path
+
+# Candidates 
+num_neighbors_rigid: 3
+redundancy_rigid: 0
+significance_rigid: 3                    # ratio of distance
+search_radius_rigid: 300
+num_required_neighbors_rigid: 3
+
+# Ransac
+model_min_matches_rigid: 24              # inlier factor = 6
+inlier_factor_rigid: 100                 # max epsilon
+lambda_value_rigid: 0.1                  
+num_iterations_rigid: 10000
+regularization_weight_rigid: 1.0
+
+# -- AFFINE --
+match_type_affine: 'affine'  
+xml_file_path_matching_affine: *rigid_solver_xml_output               
+
+# Candidates
+num_neighbors_affine: 3
+redundancy_affine: 0
+significance_affine: 3                  # ratio of distance
+search_radius_affine: 100
+num_required_neighbors_affine: 3
+
+# Ransac     
+model_min_matches_affine: 24            # inlier factor = 6
+inlier_factor_affine: 30                # max epsilon
+lambda_value_affine: 0.05               
+num_iterations_affine: 10000
+regularization_weight_affine: 1.0
+
+# -- SPLIT AFFINE -- 
+match_type_split_affine: 'split-affine'  
+xml_file_path_matching_split_affine: *affine_split_solver_xml_output               
+
+# Candidates
+num_neighbors_split_affine: 3
+redundancy_split_affine: 1
+significance_split_affine: 3                  # ratio of distance
+search_radius_split_affine: 100
+num_required_neighbors_split_affine: 3
+
+# Ransac     
+model_min_matches_split_affine: 24            # min number inlier factor = 5
+inlier_factor_split_affine: 25                # max epsilon
+lambda_value_split_affine: 0.05               # min inlier ratio
+num_iterations_split_affine: 10000
+regularization_weight_split_affine: 1.0

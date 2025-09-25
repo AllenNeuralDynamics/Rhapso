@@ -33,13 +33,13 @@ class Solver:
         suffixes = sorted({
             k.split('_c')[-1]
             for k in kwargs
-            if ('_rigid_c' in k) and k.split('_c')[-1].isdigit()
+            if (f"_{self.run_type}_c" in k) and k.split('_c')[-1].isdigit()
         }, key=int)
 
         self.extra_xmls = []
         for s in suffixes:
-            solver_xml = kwargs.get(f"xml_file_path_solver_rigid_c{s}")
-            output_xml = kwargs.get(f"xml_file_path_output_rigid_c{s}")
+            solver_xml = kwargs.get(f"xml_file_path_solver_{self.run_type}_c{s}")
+            output_xml = kwargs.get(f"xml_file_path_output_{self.run_type}_c{s}")
             n5_path = kwargs.get(f"n5_input_path_c{s}")
             if solver_xml or output_xml:
                 self.extra_xmls.append({
@@ -119,9 +119,9 @@ class Solver:
             print("Models and metrics have been combined")
 
         # Save results to xml - one new affine matrix per view registration
-        save_results = SaveResults(tiles, xml, self.run_type, validation_stats)
-        save_results.run()
-        print("Results have been saved")
+        # save_results = SaveResults(tiles, xml, self.run_type, validation_stats)
+        # save_results.run()
+        # print("Results have been saved")
     
     def run(self):
         self.solve()

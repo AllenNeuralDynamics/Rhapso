@@ -3,7 +3,7 @@ import re
 import numpy as np
 import torch
 import xmltodict
-import fusion.aind_cloud_fusion.geometry as geometry
+from . import geometry as geometry
 import boto3
 from io import BytesIO
 import xmltodict

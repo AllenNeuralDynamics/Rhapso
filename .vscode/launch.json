@@ -5,31 +5,11 @@
             "name": "SPLIT",
             "type": "debugpy",
             "request": "launch",
-            "module": "Rhapso.image_split.split_datasets",
+            "module": "Rhapso.fusion.worker",
             "cwd": "${workspaceFolder}",
             "python": "venv/bin/python",
             "args": [],
             "justMyCode": true
         },
-        {
-            "name": "Python: N5Reader Script",
-            "type": "debugpy",
-            "request": "launch",
-            "program": "${workspaceFolder}/Rhapso/data_prep/n5_reader.py",
-            "cwd": "${workspaceFolder}",
-            "python": "venv/bin/python",
-            "args": [],
-            "justMyCode": true
-        },
-        { 
-            "name": "Image Split Pipeline",
-            "type": "debugpy",
-            "request": "launch",
-            "program": "${workspaceFolder}/Rhapso/pipelines/ray/image_split_pipeline.py",
-            "cwd": "${workspaceFolder}",
-            "python": "venv/bin/python",
-            "args": [],
-            "justMyCode": true
-        }
     ]
 }

@@ -9,9 +9,9 @@ import time
 from pathlib import Path
 import xml.etree.ElementTree as ET
 import yaml
-import fusion.aind_cloud_fusion.fusion as fusion
-import fusion.aind_cloud_fusion.input_output as input_output
-import fusion.aind_cloud_fusion.script_utils as utils
+import aind_cloud_fusion.fusion as fusion
+import aind_cloud_fusion.input_output as input_output
+import aind_cloud_fusion.script_utils as utils
 import xml.etree.ElementTree as ET
 import boto3
 from io import BytesIO
@@ -79,9 +79,9 @@ def execute_job(yml_path, xml_path, output_path):
 
 if __name__ == '__main__':
 
-    xml_path = 's3://rhapso-zarr-glue/output/dataset-solve.xml'
-    yml_path = 's3://rhapso-zarr-glue/output/worker_config.yml'
-    output_path = 's3://rhapso-zarr-glue/output/'
+    xml_path = 's3://rhapso-zar-sample/dataset.xml'
+    yml_path = 's3://rhapso-matching-test/worker_config.yml'
+    output_path = 's3://rhapso-zarr-glue/fusion'
 
     print(f'{xml_path=}')
     print(f'{yml_path=}')

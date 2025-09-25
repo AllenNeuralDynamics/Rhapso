@@ -12,11 +12,11 @@ import tensorstore as ts
 import torch
 from torch.utils.data import Dataset
 import zarr
-import fusion.aind_cloud_fusion.blend as blend
-import fusion.aind_cloud_fusion.cloud_queue as cq
-import fusion.aind_cloud_fusion.geometry as geometry
-import fusion.aind_cloud_fusion.input_output as input_output
-import fusion.aind_cloud_fusion.fusion_utils as utils
+from . import blend as blend
+from . import cloud_queue as cq
+from . import geometry as geometry
+from . import input_output as input_output
+from . import fusion_utils as utils
 
 def initialize_fusion(
     dataset: input_output.Dataset,
@@ -338,7 +338,9 @@ def run_fusion(  # noqa: C901
 
     # Set CPU/GPU cell_size
     DEFAULT_CHUNKSIZE = (1, 1, 128, 128, 128)
-    CPU_CELL_SIZE = (512, 256, 256)
+    # CPU_CELL_SIZE = (512, 256, 256)
+    CPU_CELL_SIZE = (128, 128, 128)
+
     GPU_CELL_SIZE = calculate_gpu_cell_size(output_volume_size)
     if output_params.chunksize != DEFAULT_CHUNKSIZE:
         if cpu_cell_size is None or gpu_cell_size is None:
@@ -351,19 +353,19 @@ def run_fusion(  # noqa: C901
         GPU_CELL_SIZE = gpu_cell_size
 
     # Start GPU Runtime
-    p = torch.multiprocessing.Process(
-        target=gpu_fusion,
-        args=(input_s3_path,
-            xml_path,
-            channel_num,
-            output_params,
-            tile_layout,
-            output_volume,
-            GPU_CELL_SIZE,
-            volume_sampler_stride,
-            volume_sampler_start,
-            datastore)
-    )
+    # p = torch.multiprocessing.Process(
+    #     target=gpu_fusion,
+    #     args=(input_s3_path,
+    #         xml_path,
+    #         channel_num,
+    #         output_params,
+    #         tile_layout,
+    #         output_volume,
+    #         GPU_CELL_SIZE,
+    #         volume_sampler_stride,
+    #         volume_sampler_start,
+    #         datastore)
+    # )
     # p.daemon = True
     # p.start()
 
@@ -419,8 +421,8 @@ def run_fusion(  # noqa: C901
         f"CPU: Finished up to {i}/{total_cells}. Batch time: {time.time() - batch_start}"
     )
 
-    p.join()
-    p.close()
+    # p.join()
+    # p.close()
 
 
 def cpu_fusion(
