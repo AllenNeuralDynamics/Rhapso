@@ -44,10 +44,10 @@ def get_tile_zyx_resolution(input_xml_path: str) -> list[int]:
 
 def execute_job(yml_path, xml_path, output_path):
     # Prep inputs
-    # configs = utils.read_config_yaml(yml_path)
-    input_path = "s3://aind-open-data/exaSPIM_708365_2024-04-29_12-46-15/SPIM.ome.zarr/"
-    output_s3_path = "s3://rhapso-matching-test/fusion-9-26/fused-output/"
-    channel = 488
+    configs = utils.read_config_yaml(yml_path)
+    input_path = configs['input_path']
+    output_s3_path = configs['output_path']
+    channel = configs['channel']
 
     resolution_zyx = get_tile_zyx_resolution(xml_path)
     output_params = input_output.OutputParameters(
@@ -58,6 +58,7 @@ def execute_job(yml_path, xml_path, output_path):
 
     # Run fusion
     print(f'Starting fusion at: {datetime.now()}')
+    print(f'Output fused zarr will be saved to: {output_s3_path}')
     fusion.run_fusion(
             input_path,
             xml_path,
@@ -65,6 +66,8 @@ def execute_job(yml_path, xml_path, output_path):
             output_params,
             blend_option
     )
+    print(f'Fusion completed at: {datetime.now()}')
+    print(f'Output fused zarr saved to: {output_s3_path}')
 
     # Log 'done' file for next capsule in pipeline.
     # Unique log filename
@@ -77,8 +80,24 @@ def execute_job(yml_path, xml_path, output_path):
     log_content['output_path'] = output_params.path.replace("fused_full_res", "fused")
     log_content['resolution_zyx'] = list(output_params.resolution_zyx)
 
-    with open(unique_file_name, "w") as file:
-        yaml.dump(log_content, file)
+    # Upload to S3 or write locally based on path
+    if output_path.startswith('s3://'):
+        # Upload to S3
+        s3 = boto3.client('s3')
+        bucket_name = output_path.split('/')[2]  # Extract bucket name from s3://bucket/path/
+        s3_key = '/'.join(output_path.split('/')[3:]) + f"file_{timestamp}_{unique_id}.yml"
+        
+        s3.put_object(
+            Bucket=bucket_name,
+            Key=s3_key,
+            Body=yaml.dump(log_content)
+        )
+        print(f"Log file uploaded to S3: s3://{bucket_name}/{s3_key}")
+    else:
+        # Write to local file
+        with open(unique_file_name, "w") as file:
+            yaml.dump(log_content, file)
+        print(f"Log file written locally: {unique_file_name}")
 
 
 if __name__ == '__main__':
@@ -90,9 +109,9 @@ if __name__ == '__main__':
     print(f"Setting multiprocessing start method to 'forkserver': {mp.set_start_method('forkserver', force=True)}")
     print(f"New multiprocessing start method: {mp.get_start_method(allow_none=False)}")
 
-    xml_path = "s3://rhapso-zar-sample/dataset.xml"
-    yml_path = 'not using yml config (hard coded instead)'
-    output_path = 's3://rhapso-matching-test/fusion-9-26/results/'
+    xml_path = "s3://martin-test-bucket/fusion/dataset.xml"
+    yml_path = 's3://martin-test-bucket/fusion/worker_config.yml'
+    output_path = 's3://martin-test-bucket/fusion/results/'
 
     print(f'{xml_path=}')
     print(f'{yml_path=}')
