@@ -54,7 +54,7 @@ def execute_job(yml_path, xml_path, output_path):
     # Prep inputs
     configs = utils.read_config_yaml(yml_path)
     input_path = configs['input_path']
-    output_s3_path = configs['output_path']
+    output_s3_path = 's3://martin-test-bucket/fusion-04/results/' #configs['output_path']
     channel = configs['channel']
     print(f"   Input path: {input_path}")
     print(f"   Output path: {output_s3_path}")
@@ -90,15 +90,41 @@ def execute_job(yml_path, xml_path, output_path):
     # Unique log filename
     unique_id = str(uuid.uuid4())
     timestamp = int(time.time() * 1000)
-    unique_file_name = str(Path(output_path) / f"file_{timestamp}_{unique_id}.yml")
-
-    log_content = {}
-    log_content['in_path'] = output_params.path
-    log_content['output_path'] = output_params.path.replace("fused_full_res", "fused")
-    log_content['resolution_zyx'] = list(output_params.resolution_zyx)
-
-    with open(unique_file_name, "w") as file:
-        yaml.dump(log_content, file)
+    unique_file_name = f"file_{timestamp}_{unique_id}.yml"
+    
+    # Handle S3 vs local file writing
+    if output_path.startswith("s3://"):
+        # S3 path - use boto3 to upload
+        bucket_name, key_prefix = output_path[5:].split("/", 1)
+        s3_key = f"{key_prefix.rstrip('/')}/{unique_file_name}"
+        
+        log_content = {}
+        log_content['in_path'] = output_params.path
+        log_content['output_path'] = output_params.path.replace("fused_full_res", "fused")
+        log_content['resolution_zyx'] = list(output_params.resolution_zyx)
+        
+        # Upload YAML content to S3
+        s3_client = boto3.client('s3')
+        yaml_content = yaml.dump(log_content)
+        s3_client.put_object(
+            Bucket=bucket_name,
+            Key=s3_key,
+            Body=yaml_content.encode('utf-8'),
+            ContentType='application/x-yaml'
+        )
+        print(f"✅ Log file uploaded to S3: s3://{bucket_name}/{s3_key}")
+    else:
+        # Local path - use standard file writing
+        unique_file_path = str(Path(output_path) / unique_file_name)
+        
+        log_content = {}
+        log_content['in_path'] = output_params.path
+        log_content['output_path'] = output_params.path.replace("fused_full_res", "fused")
+        log_content['resolution_zyx'] = list(output_params.resolution_zyx)
+        
+        with open(unique_file_path, "w") as file:
+            yaml.dump(log_content, file)
+        print(f"✅ Log file created locally: {unique_file_path}")
 
 
 if __name__ == '__main__':
@@ -122,9 +148,14 @@ if __name__ == '__main__':
     # yml_path = 'Rhapso/pipelines/fusion/data/worker_config.yml'
 
     # S3 Paths
-    xml_path = "s3://martin-test-bucket/fusion/data/BL6-R12_stitching_all_channels.xml"
-    yml_path = "s3://martin-test-bucket/fusion/data/worker_config.yml"
-    output_path = 's3://martin-test-bucket/rhapso-fusion-01/results/'
+    # xml_path = "s3://martin-test-bucket/fusion/data/BL6-R12_stitching_all_channels.xml"
+    # yml_path = "s3://martin-test-bucket/fusion/data/worker_config.yml"
+    # output_path = 's3://martin-test-bucket/rhapso-fusion-03/results/'
+
+    xml_path='s3://martin-test-bucket/fusion-04/dataset.xml'
+    yml_path='s3://martin-test-bucket/fusion-04/worker_config.yml'
+    output_path = 's3://martin-test-bucket/fusion-04/results/'
+ 
 
     print(f'{xml_path=}')
     print(f'{yml_path=}')

@@ -14,6 +14,7 @@ import tensorstore as ts
 import torch
 from torch.utils.data import Dataset
 import zarr
+import ray
 import Rhapso.fusion.aind_cloud_fusion.blend as blend
 import Rhapso.fusion.aind_cloud_fusion.cloud_queue as cq
 import Rhapso.fusion.aind_cloud_fusion.geometry as geometry
@@ -346,34 +347,42 @@ def run_fusion(  # noqa: C901
     # Set CPU/GPU cell_size
     DEFAULT_CHUNKSIZE = (1, 1, 128, 128, 128)
     CPU_CELL_SIZE = (256, 128, 128)  # Reduced cell size to use less memory
-    GPU_CELL_SIZE = calculate_gpu_cell_size(output_volume_size)
+    # GPU_CELL_SIZE = calculate_gpu_cell_size(output_volume_size)  # COMMENTED OUT: GPU processing disabled
     
     if output_params.chunksize != DEFAULT_CHUNKSIZE:
-        if cpu_cell_size is None or gpu_cell_size is None:
-            raise ValueError('Custom CPU/GPU cell sizes must be provided for custom output chunksize.')
+        if cpu_cell_size is None:  # Removed gpu_cell_size requirement
+            raise ValueError('Custom CPU cell size must be provided for custom output chunksize.')
         CPU_CELL_SIZE = cpu_cell_size
-        GPU_CELL_SIZE = gpu_cell_size
+        # GPU_CELL_SIZE = gpu_cell_size  # COMMENTED OUT: GPU processing disabled
     if cpu_cell_size:
         CPU_CELL_SIZE = cpu_cell_size
-    if gpu_cell_size:
-        GPU_CELL_SIZE = gpu_cell_size
+    # if gpu_cell_size:  # COMMENTED OUT: GPU processing disabled
+    #     GPU_CELL_SIZE = gpu_cell_size
 
-    # Start GPU Runtime
-    p = torch.multiprocessing.Process(
-        target=gpu_fusion,
-        args=(input_s3_path,
-            xml_path,
-            channel_num,
-            output_params,
-            tile_layout,
-            output_volume,
-            GPU_CELL_SIZE,
-            volume_sampler_stride,
-            volume_sampler_start,
-            datastore)
-    )
-    # p.daemon = True
-    # p.start()
+    # ============================================================================
+    # GPU PROCESSING SECTION - COMMENTED OUT (CPU-ONLY MODE)
+    # ============================================================================
+    # NOTE: GPU processing has been disabled. Only CPU processing with Ray is used.
+    # The following code creates a GPU process but never starts it, causing the
+    # "can only join a started process" error. Commenting out to prevent errors.
+    # ============================================================================
+    
+    # # Start GPU Runtime
+    # p = torch.multiprocessing.Process(
+    #     target=gpu_fusion,
+    #     args=(input_s3_path,
+    #         xml_path,
+    #         channel_num,
+    #         output_params,
+    #         tile_layout,
+    #         output_volume,
+    #         GPU_CELL_SIZE,
+    #         volume_sampler_stride,
+    #         volume_sampler_start,
+    #         datastore)
+    # )
+    # # p.daemon = True
+    # # p.start()
 
     # Start the CPU Runtime
     overlap_volume_sampler = FusionVolumeSampler(tile_transforms,
@@ -390,69 +399,128 @@ def run_fusion(  # noqa: C901
 
     batch_start = time.time()
     total_cells = len(overlap_volume_sampler)
+    # Reduce batch size to prevent OOM issues
+    batch_size = min(batch_size, 10)  # Cap at 10 to prevent memory issues
     LOGGER.info(f"CPU Cell Size: {CPU_CELL_SIZE}")
     LOGGER.info(f"CPU Total Cells: {total_cells}")
-    LOGGER.info(f"CPU Batch Size: {batch_size}")
+    LOGGER.info(f"CPU Batch Size: {batch_size} (reduced to prevent OOM)")
 
-    delayed_jobs = []
-    for i, (curr_cell, src_ids) in enumerate(overlap_volume_sampler):
-        # Force garbage collection every 5 cells to free memory
-        if i % 5 == 0:
-            gc.collect()
-            if torch.cuda.is_available():
-                torch.cuda.empty_cache()
-        
-        delayed_job = delayed(cpu_fusion)(tile_arrays,
-                                        tile_transforms,
-                                        tile_sizes_zyx,
-                                        tile_aabbs,
-                                        output_volume_size,
-                                        output_volume_origin,
-                                        output_volume,
-                                        blend_module,
-                                        curr_cell,
-                                        src_ids
-                                        )
-        delayed_jobs.append(delayed_job)
+    """
+    RAY INITIALIZATION START
+    """
+    # Initialize Ray locally
+    try:
+        # View dashboard at http://localhost:8265/
+        ray.init(
+            ignore_reinit_error=True,
+            dashboard_host='0.0.0.0',  # Allow external access
+            dashboard_port=8265
+        )
+        # ray.init(ignore_reinit_error=True)
+        LOGGER.info("Ray initialized successfully")
+    except Exception as e:
+        LOGGER.error(f"Failed to initialize Ray: {e}")
+        raise
+    """
+    RAY INITIALIZATION END
+    """
 
-        if len(delayed_jobs) == batch_size:
-            LOGGER.info(f"CPU: Calculating up to {i}/{total_cells}...")
+    """
+    RAY START
+    """
+    try:
+        # Create list of Ray remote tasks
+        ray_jobs = []
+        for i, (curr_cell, src_ids) in enumerate(overlap_volume_sampler):
+            LOGGER.info(f"Processing cell {i+1}/{total_cells} - Cell AABB: {curr_cell}, Source IDs: {src_ids}")
+            
+            ray_job = cpu_fusion_ray.remote(tile_arrays,
+                                           tile_transforms,
+                                           tile_sizes_zyx,
+                                           tile_aabbs,
+                                           output_volume_size,
+                                           output_volume_origin,
+                                           output_volume,
+                                           blend_module,
+                                           curr_cell,
+                                           src_ids
+                                           )
+            ray_jobs.append(ray_job)
+            
+            # Log Ray job status
+            LOGGER.info(f"Created Ray job {len(ray_jobs)} for cell {i+1}/{total_cells} - Job ID: {ray_job}")
+
+            # Process in batches
+            if len(ray_jobs) == batch_size:
+                LOGGER.info(f"CPU: Starting batch processing for cells {i-batch_size+2} to {i+1}/{total_cells} ({len(ray_jobs)} jobs)")
+                try:
+                    # Wait for batch completion
+                    LOGGER.info(f"Waiting for {len(ray_jobs)} Ray jobs to complete...")
+                    results = ray.get(ray_jobs)
+                    successful_jobs = sum(1 for result in results if result is True)
+                    failed_jobs = len(results) - successful_jobs
+                    LOGGER.info(
+                        f"CPU: Batch completed - {successful_jobs} successful, {failed_jobs} failed. "
+                        f"Cells {i-batch_size+2} to {i+1}/{total_cells}. Batch time: {time.time() - batch_start:.2f}s"
+                    )
+                except Exception as e:
+                    LOGGER.error(f"Error processing batch ending at {i+1}/{total_cells}: {e}")
+                    # Continue with next batch even if this one failed
+                finally:
+                    ray_jobs = []
+                    # Force garbage collection after each batch
+                    gc.collect()
+                    if torch.cuda.is_available():
+                        torch.cuda.empty_cache()
+                    batch_start = time.time()
+
+        # Process remaining cells
+        if ray_jobs:
+            LOGGER.info(f"CPU: Processing final batch of {len(ray_jobs)} remaining cells...")
             try:
-                da.compute(*delayed_jobs)
-                delayed_jobs = []
-                gc.collect()  # Force garbage collection after each batch
+                LOGGER.info(f"Waiting for final {len(ray_jobs)} Ray jobs to complete...")
+                results = ray.get(ray_jobs)
+                successful_jobs = sum(1 for result in results if result is True)
+                failed_jobs = len(results) - successful_jobs
+                LOGGER.info(
+                    f"CPU: Final batch completed - {successful_jobs} successful, {failed_jobs} failed. "
+                    f"Final batch time: {time.time() - batch_start:.2f}s"
+                )
+            except Exception as e:
+                LOGGER.error(f"Error processing final batch: {e}")
+            finally:
+                ray_jobs = []
+                # Force garbage collection after final batch
+                gc.collect()
                 if torch.cuda.is_available():
                     torch.cuda.empty_cache()
-                LOGGER.info(
-                    f"CPU: Finished up to {i}/{total_cells}. Batch time: {time.time() - batch_start}"
-                )
-                batch_start = time.time()
-            except Exception as e:
-                LOGGER.error(f"❌ Error during batch computation at {i}/{total_cells}: {e}")
-                LOGGER.error(f"   Error type: {type(e).__name__}")
-                import traceback
-                LOGGER.error(f"   Full traceback: {traceback.format_exc()}")
-                raise e
 
-    # Compute remaining cells
-    if delayed_jobs:  # Only process if there are remaining jobs
-        LOGGER.info(f"CPU: Calculating final batch up to {i}/{total_cells}...")
+        LOGGER.info("✅ CPU fusion processing complete.")
+
+    except Exception as e:
+        LOGGER.error(f"❌ CPU fusion error: {e}")
+        raise
+
+    finally:
+        # Cleanup Ray
         try:
-            da.compute(*delayed_jobs)
-            delayed_jobs = []
-            gc.collect()  # Force garbage collection after final batch
-            if torch.cuda.is_available():
-                torch.cuda.empty_cache()
-            LOGGER.info(f"CPU: Finished final batch. Total time: {time.time() - batch_start}")
+            ray.shutdown()
+            LOGGER.info("Ray shutdown complete")
         except Exception as e:
-            LOGGER.error(f"❌ Error during final batch computation: {e}")
-            LOGGER.error(f"   Error type: {type(e).__name__}")
-            import traceback
-            LOGGER.error(f"   Full traceback: {traceback.format_exc()}")
-            raise e
+            LOGGER.error(f"Error during Ray shutdown: {e}")
+    """
+    RAY END
+    """
 
-    p.join()
-    p.close()
+    # ============================================================================
+    # GPU PROCESS CLEANUP - COMMENTED OUT (CPU-ONLY MODE)
+    # ============================================================================
+    # NOTE: GPU process was never started, so these lines cause errors.
+    # Commenting out to prevent "can only join a started process" error.
+    # ============================================================================
+    
+    # p.join()  # COMMENTED OUT: GPU process never started
+    # p.close()  # COMMENTED OUT: GPU process never started
 
 
 def cpu_fusion(
@@ -518,120 +586,219 @@ def cpu_fusion(
     output_volume[output_slice] = output_chunk
 
 
-# No blending
-def gpu_fusion(
-    input_s3_path: str,
-    xml_path: str,
-    channel_num: int,
-    output_params: input_output.OutputParameters,
-    tile_layout: list[list[int]],
+"""
+RAY REMOTE FUNCTION START
+"""
+@ray.remote(num_cpus=1, memory=2 * 1024 * 1024 * 1024)  # 2GB memory limit per task
+def cpu_fusion_ray(
+    tile_arrays: dict[int, input_output.InputArray],
+    tile_transforms: dict[int, list[geometry.Transform]],
+    tile_sizes_zyx: dict[int, tuple[int, int, int]],
+    tile_aabbs: dict[int, geometry.AABB],
+    output_volume_size: tuple[int, int, int],
+    output_volume_origin: tuple[float, float, float],
     output_volume: input_output.OutputArray,
-    cell_size: tuple[int, int, int],
-    volume_sampler_stride: int,
-    volume_sampler_start: int,
-    datastore: int = 0,
+    blend_module: blend.BlendingModule,
+    cell_aabb: geometry.AABB,
+    src_ids: list[int]
 ):
-    """
-    NOTE:
-    ONLY INTERPOLATION, NO BLENDING.
-    Only intended to be used on non-overlap regions
-    for ultra-fast interpolation.
-    """
+    """Ray remote version of cpu_fusion function."""
+    try:
+        overlap_contributions: list[torch.Tensor] = []
+        for t_id in src_ids:
+            # Retrieve source image
+            image_slice: tuple[slice, slice, slice, slice, slice] = \
+                    utils.calculate_image_crop(cell_aabb,
+                                                output_volume_origin,
+                                                tile_transforms[t_id],
+                                                tile_sizes_zyx[t_id],
+                                                device='cpu')
+            src_img = tile_arrays[t_id][image_slice]
+            src_tensor = torch.Tensor(src_img.astype(np.int16))
 
-    dataset = input_output.BigStitcherDatasetChannel(xml_path, 
-                                           input_s3_path, 
-                                           channel_num, 
-                                           datastore=datastore)
-    a, b, c, d, e, f = initialize_fusion(dataset, output_params)
-    tile_arrays = a
-    tile_transforms = b
-    tile_sizes_zyx = c
-    tile_aabbs = d
-    output_volume_size = e
-    output_volume_origin = f
+            # Calculate sample field
+            sample_field = \
+                utils.calculate_sample_field(cell_aabb,
+                                            output_volume_origin,
+                                            tile_transforms[t_id],
+                                            tile_sizes_zyx[t_id],
+                                            device='cpu')
 
-    dataset = CloudDataset(tile_arrays,
-                            tile_transforms,
-                            tile_sizes_zyx,
-                            tile_aabbs,
-                            output_volume_size,
-                            output_volume_origin,
-                            cell_size)
+            # Perform interpolation
+            contribution = utils.interpolate(src_tensor,
+                                             sample_field,
+                                             device="cpu")
 
-    volume_sampler = FusionVolumeSampler(tile_transforms,
-                                        tile_sizes_zyx,
-                                        tile_aabbs,
-                                        output_volume_size,
-                                        output_volume_origin,
-                                        cell_size,
-                                        output_params.chunksize[2:],
-                                        tile_layout,
-                                        traverse_overlap = False,
-                                        stride = volume_sampler_stride,
-                                        start = volume_sampler_start)
+            overlap_contributions.append(contribution)
 
-    cloud_dataloader = cq.CloudDataloader(dataset,
-                                          volume_sampler,
-                                          num_workers=3)
-
-    batch_start = time.time()
-    total_cells = len(volume_sampler)
-    batch_size = 40
-    print(f'GPU Cell Size: {cell_size}')
-    print(f'GPU Total cells: {total_cells}')
-    print(f'GPU Batch size: {batch_size}')
-
-    for i, (cell_aabb, src_ids, src_tensors) in enumerate(cloud_dataloader):
-        # Extract only tensor in src tensors
-        t_id = src_ids[0]
-        src_cell = src_tensors[0]
-
-        # Interpolation on first GPU
-        sample_field = \
-        utils.calculate_sample_field(cell_aabb,
-                                    output_volume_origin,
-                                    tile_transforms[t_id],
-                                    tile_sizes_zyx[t_id],
-                                    device='cuda:0')
-        interpolated_cell = utils.interpolate(src_cell,
-                                        sample_field,
-                                        device='cuda:0')
+        # Perform blending
+        blended_cell = blend_module.blend(overlap_contributions,
+                                        device='cpu',
+                                        kwargs={
+                                        "chunk_tile_ids": src_ids,
+                                        "cell_box": cell_aabb
+                                        })
 
         # Write
         output_slice = (
-                slice(0, 1),
-                slice(0, 1),
-                slice(cell_aabb[0], cell_aabb[1]),
-                slice(cell_aabb[2], cell_aabb[3]),
-                slice(cell_aabb[4], cell_aabb[5]),
-            )
+            slice(0, 1),
+            slice(0, 1),
+            slice(cell_aabb[0], cell_aabb[1]),
+            slice(cell_aabb[2], cell_aabb[3]),
+            slice(cell_aabb[4], cell_aabb[5]),
+        )
 
-        # Convert from float16 -> canonical uint16
-        output_chunk = np.array(interpolated_cell.cpu()).astype(np.uint16)
+        # Convert from float32 -> canonical uint16
+        blended_cell = np.nan_to_num(blended_cell)
+        blended_cell = np.clip(blended_cell, 0, 65535)
+        output_chunk = blended_cell.astype(np.uint16)
         output_volume[output_slice] = output_chunk
+        
+        # Clean up memory
+        del overlap_contributions
+        del blended_cell
+        del output_chunk
+        if torch.cuda.is_available():
+            torch.cuda.empty_cache()
+        
+        return True  # Success indicator
+        
+    except Exception as e:
+        print(f"Error in cpu_fusion_ray for cell {cell_aabb}: {e}")
+        return False  # Failure indicator
+"""
+RAY REMOTE FUNCTION END
+"""
 
-        if i % batch_size == 0:
-            print(f"GPU: Finished up to {i}/{total_cells}. Batch time: {time.time() - batch_start}")
-            batch_start = time.time()
 
-    print(f"GPU: Finished up to {i}/{total_cells}. Batch time: {time.time() - batch_start}")
+# ============================================================================
+# GPU FUSION FUNCTION - COMMENTED OUT (CPU-ONLY MODE)
+# ============================================================================
+# NOTE: This function is not used in CPU-only mode. Commenting out to avoid
+# confusion and reduce code complexity.
+# ============================================================================
+
+# # No blending
+# def gpu_fusion(
+#     input_s3_path: str,
+#     xml_path: str,
+#     channel_num: int,
+#     output_params: input_output.OutputParameters,
+#     tile_layout: list[list[int]],
+#     output_volume: input_output.OutputArray,
+#     cell_size: tuple[int, int, int],
+#     volume_sampler_stride: int,
+#     volume_sampler_start: int,
+#     datastore: int = 0,
+# ):
+#     """
+#     NOTE:
+#     ONLY INTERPOLATION, NO BLENDING.
+#     Only intended to be used on non-overlap regions
+#     for ultra-fast interpolation.
+#     """
+# 
+#     dataset = input_output.BigStitcherDatasetChannel(xml_path, 
+#                                            input_s3_path, 
+#                                            channel_num, 
+#                                            datastore=datastore)
+#     a, b, c, d, e, f = initialize_fusion(dataset, output_params)
+#     tile_arrays = a
+#     tile_transforms = b
+#     tile_sizes_zyx = c
+#     tile_aabbs = d
+#     output_volume_size = e
+#     output_volume_origin = f
+# 
+#     dataset = CloudDataset(tile_arrays,
+#                             tile_transforms,
+#                             tile_sizes_zyx,
+#                             tile_aabbs,
+#                             output_volume_size,
+#                             output_volume_origin,
+#                             cell_size)
+# 
+#     volume_sampler = FusionVolumeSampler(tile_transforms,
+#                                         tile_sizes_zyx,
+#                                         tile_aabbs,
+#                                         output_volume_size,
+#                                         output_volume_origin,
+#                                         cell_size,
+#                                         output_params.chunksize[2:],
+#                                         tile_layout,
+#                                         traverse_overlap = False,
+#                                         stride = volume_sampler_stride,
+#                                         start = volume_sampler_start)
+# 
+#     cloud_dataloader = cq.CloudDataloader(dataset,
+#                                           volume_sampler,
+#                                           num_workers=3)
+# 
+#     batch_start = time.time()
+#     total_cells = len(volume_sampler)
+#     batch_size = 40
+#     print(f'GPU Cell Size: {cell_size}')
+#     print(f'GPU Total cells: {total_cells}')
+#     print(f'GPU Batch size: {batch_size}')
+# 
+#     for i, (cell_aabb, src_ids, src_tensors) in enumerate(cloud_dataloader):
+#         # Extract only tensor in src tensors
+#         t_id = src_ids[0]
+#         src_cell = src_tensors[0]
+# 
+#         # Interpolation on first GPU
+#         sample_field = \
+#         utils.calculate_sample_field(cell_aabb,
+#                                     output_volume_origin,
+#                                     tile_transforms[t_id],
+#                                     tile_sizes_zyx[t_id],
+#                                     device='cuda:0')
+#         interpolated_cell = utils.interpolate(src_cell,
+#                                         sample_field,
+#                                         device='cuda:0')
+# 
+#         # Write
+#         output_slice = (
+#                 slice(0, 1),
+#                 slice(0, 1),
+#                 slice(cell_aabb[0], cell_aabb[1]),
+#                 slice(cell_aabb[2], cell_aabb[3]),
+#                 slice(cell_aabb[4], cell_aabb[5]),
+#             )
+# 
+#         # Convert from float16 -> canonical uint16
+#         output_chunk = np.array(interpolated_cell.cpu()).astype(np.uint16)
+#         output_volume[output_slice] = output_chunk
+# 
+#         if i % batch_size == 0:
+#             print(f"GPU: Finished up to {i}/{total_cells}. Batch time: {time.time() - batch_start}")
+#             batch_start = time.time()
+# 
+#     print(f"GPU: Finished up to {i}/{total_cells}. Batch time: {time.time() - batch_start}")
 
 
 
-def calculate_gpu_cell_size(
-    output_volume_size: tuple[int, int, int]
-) -> tuple[int, int, int]:
-    """
-    Heuristic lookup table for 16 GB GPU.
-    Cell sizes are fit to canonical (128, 128, 128) chunk size.
-    """
+# ============================================================================
+# GPU CELL SIZE CALCULATION - COMMENTED OUT (CPU-ONLY MODE)
+# ============================================================================
+# NOTE: This function is not used in CPU-only mode. Commenting out to avoid
+# confusion and reduce code complexity.
+# ============================================================================
 
-    gpu_cell_sizes = {1024: (1024, 512, 512),  # Good for exaspim
-                      512: (512, 640, 640),    # Good smartspim
-                      384: (384, 768, 768)}    # Good for dispim
-    closest_key = min(gpu_cell_sizes.keys(), key=lambda k: abs(k - output_volume_size[0]))
-
-    return gpu_cell_sizes[closest_key]
+# def calculate_gpu_cell_size(
+#     output_volume_size: tuple[int, int, int]
+# ) -> tuple[int, int, int]:
+#     """
+#     Heuristic lookup table for 16 GB GPU.
+#     Cell sizes are fit to canonical (128, 128, 128) chunk size.
+#     """
+# 
+#     gpu_cell_sizes = {1024: (1024, 512, 512),  # Good for exaspim
+#                       512: (512, 640, 640),    # Good smartspim
+#                       384: (384, 768, 768)}    # Good for dispim
+#     closest_key = min(gpu_cell_sizes.keys(), key=lambda k: abs(k - output_volume_size[0]))
+# 
+#     return gpu_cell_sizes[closest_key]
 
 
 class CloudDataset(Dataset):
