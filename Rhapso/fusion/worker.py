@@ -7,14 +7,17 @@ No fallback to CPU written until required.
 import uuid
 import time
 from pathlib import Path
+from datetime import datetime
 import xml.etree.ElementTree as ET
 import yaml
-import fusion.aind_cloud_fusion.fusion as fusion
-import fusion.aind_cloud_fusion.input_output as input_output
-import fusion.aind_cloud_fusion.script_utils as utils
+import Rhapso.fusion.aind_cloud_fusion.fusion as fusion
+import Rhapso.fusion.aind_cloud_fusion.input_output as input_output
+import Rhapso.fusion.aind_cloud_fusion.script_utils as utils
 import xml.etree.ElementTree as ET
 import boto3
 from io import BytesIO
+import os
+import multiprocessing as mp
 
 def get_tile_zyx_resolution(input_xml_path: str) -> list[int]: 
     """
@@ -41,10 +44,10 @@ def get_tile_zyx_resolution(input_xml_path: str) -> list[int]:
 
 def execute_job(yml_path, xml_path, output_path):
     # Prep inputs
-    configs = utils.read_config_yaml(yml_path)
-    input_path = configs['input_path']
-    output_s3_path = configs['output_path']
-    channel = configs['channel']
+    # configs = utils.read_config_yaml(yml_path)
+    input_path = "s3://aind-open-data/exaSPIM_708365_2024-04-29_12-46-15/SPIM.ome.zarr/"
+    output_s3_path = "s3://rhapso-matching-test/fusion-9-26/fused-output/"
+    channel = 488
 
     resolution_zyx = get_tile_zyx_resolution(xml_path)
     output_params = input_output.OutputParameters(
@@ -54,6 +57,7 @@ def execute_job(yml_path, xml_path, output_path):
     blend_option = 'weighted_linear_blending'
 
     # Run fusion
+    print(f'Starting fusion at: {datetime.now()}')
     fusion.run_fusion(
             input_path,
             xml_path,
@@ -79,9 +83,16 @@ def execute_job(yml_path, xml_path, output_path):
 
 if __name__ == '__main__':
 
-    xml_path = 's3://rhapso-zarr-glue/output/dataset-solve.xml'
-    yml_path = 's3://rhapso-zarr-glue/output/worker_config.yml'
-    output_path = 's3://rhapso-zarr-glue/output/'
+    # Force CPU-only execution settings
+    os.environ["CUDA_VISIBLE_DEVICES"] = ""  # Hide all GPUs
+    os.environ["PYTORCH_CUDA_ALLOC_CONF"] = "max_split_size_mb:32"
+    print(f"Current multiprocessing start method: {mp.get_start_method(allow_none=False)}")
+    print(f"Setting multiprocessing start method to 'forkserver': {mp.set_start_method('forkserver', force=True)}")
+    print(f"New multiprocessing start method: {mp.get_start_method(allow_none=False)}")
+
+    xml_path = "s3://rhapso-zar-sample/dataset.xml"
+    yml_path = 'not using yml config (hard coded instead)'
+    output_path = 's3://rhapso-matching-test/fusion-9-26/results/'
 
     print(f'{xml_path=}')
     print(f'{yml_path=}')
