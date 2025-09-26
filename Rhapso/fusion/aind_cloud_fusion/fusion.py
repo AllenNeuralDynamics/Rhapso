@@ -389,6 +389,8 @@ def run_fusion(  # noqa: C901
     LOGGER.info(f"CPU Batch Size: {batch_size}")
 
     for i, (curr_cell, src_ids) in enumerate(overlap_volume_sampler):
+        # if i >= 5:  # Stop after 5 iterations
+        #     break
         print(f"{datetime.now()} - Processing cell {i+1} of {len(overlap_volume_sampler)}: fusing tiles for volume cell")
         results = cpu_fusion(tile_arrays,
                            tile_transforms,
@@ -402,8 +404,9 @@ def run_fusion(  # noqa: C901
                            src_ids
                            )
 
-    p.join()
-    p.close()
+    if p.is_alive() or hasattr(p, '_popen') and p._popen is not None:
+        p.join()
+        p.close()
 
 
 def cpu_fusion(
