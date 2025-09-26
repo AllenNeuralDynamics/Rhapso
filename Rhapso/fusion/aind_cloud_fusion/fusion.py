@@ -8,6 +8,7 @@ from datetime import datetime
 import dask.array as da
 from dask import delayed
 import numpy as np
+import ray
 import s3fs
 import tensorstore as ts
 import torch
@@ -381,34 +382,57 @@ def run_fusion(  # noqa: C901
                                                 stride=volume_sampler_stride,
                                                 start=volume_sampler_start)
 
+    # Initialize Ray
+    if not ray.is_initialized():
+        ray.init(local_mode=False, ignore_reinit_error=True)
+    
     batch_start = time.time()
     total_cells = len(overlap_volume_sampler)
-    batch_size = 200
+    batch_size = 2
     LOGGER.info(f"CPU Cell Size: {CPU_CELL_SIZE}")
     LOGGER.info(f"CPU Total Cells: {total_cells}")
     LOGGER.info(f"CPU Batch Size: {batch_size}")
 
+    # Process cells in batches using Ray
+    ray_tasks = []
     for i, (curr_cell, src_ids) in enumerate(overlap_volume_sampler):
-        # if i >= 5:  # Stop after 5 iterations
-        #     break
-        print(f"{datetime.now()} - Processing cell {i+1} of {len(overlap_volume_sampler)}: fusing tiles for volume cell")
-        results = cpu_fusion(tile_arrays,
-                           tile_transforms,
-                           tile_sizes_zyx,
-                           tile_aabbs,
-                           output_volume_size,
-                           output_volume_origin,
-                           output_volume,
-                           blend_module,
-                           curr_cell,
-                           src_ids
-                           )
+        if i >= 8:
+            print(f"DEBUG: Stopping after {i} items for testing")
+            break
+        
+        # Submit task to Ray
+        task = cpu_fusion.remote(
+            tile_arrays,
+            tile_transforms,
+            tile_sizes_zyx,
+            tile_aabbs,
+            output_volume_size,
+            output_volume_origin,
+            output_volume,
+            blend_module,
+            curr_cell,
+            src_ids
+        )
+        ray_tasks.append(task)
+        
+        # Process batch when we reach batch_size or end of cells
+        if len(ray_tasks) == batch_size or i == total_cells - 1:
+            LOGGER.info(f"CPU: Processing batch of {len(ray_tasks)} cells (up to {i+1}/{total_cells})")
+            # Wait for all tasks in this batch to complete
+            ray.get(ray_tasks)
+            ray_tasks = []
+            LOGGER.info(f"CPU: Finished batch up to {i+1}/{total_cells}. Batch time: {time.time() - batch_start}")
+            batch_start = time.time()
+    
+    # Shutdown Ray
+    ray.shutdown()
 
     if p.is_alive() or hasattr(p, '_popen') and p._popen is not None:
         p.join()
         p.close()
 
 
+@ray.remote
 def cpu_fusion(
     tile_arrays: dict[int, input_output.InputArray],
     tile_transforms: dict[int, list[geometry.Transform]],
