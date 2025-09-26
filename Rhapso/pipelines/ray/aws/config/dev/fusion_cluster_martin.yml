@@ -1,4 +1,4 @@
-cluster_name: ray-martin-cluster-alignment-05
+cluster_name: ray-cluster-rhapso-alignment-martin-07
 max_workers: 10
 min_workers: 10
 
@@ -10,14 +10,14 @@ provider:
 
 auth:
   ssh_user: ubuntu
-  ssh_private_key: ~/.ssh/martin-ray-rhapso-new.pem 
+  ssh_private_key: ~/.ssh/rhapso-ray-ssh-martin.pem 
 
 available_node_types:
   ray.head.default:
     node_config:
       InstanceType: r5.4xlarge
       ImageId: ami-0ec1bf4a8f92e7bd1
-      KeyName: martin-ray-rhapso-new
+      KeyName: rhapso-ray-ssh-martin
       IamInstanceProfile:
         Name: RhapsoInstanceProfile
       TagSpecifications:
@@ -30,7 +30,7 @@ available_node_types:
     node_config:
       InstanceType: r5.4xlarge
       ImageId: ami-0ec1bf4a8f92e7bd1 
-      KeyName: martin-ray-rhapso-new
+      KeyName: rhapso-ray-ssh-martin
       IamInstanceProfile:
         Name: RhapsoInstanceProfile
       TagSpecifications:
@@ -42,29 +42,23 @@ available_node_types:
 head_node_type: ray.head.default
 
 setup_commands:
-  - sudo apt-get update -y
-  - sudo apt-get install -y python3-venv unzip jq
-  # Install AWS CLI v2 cleanly (avoid pip conflicts with boto3/botocore)
-  - curl -sS https://awscli.amazonaws.com/awscli-exe-linux-x86_64.zip -o awscliv2.zip
-  - unzip -q awscliv2.zip && sudo ./aws/install -i /usr/local/aws-cli -b /usr/local/bin
-  # Isolate Python deps
-  - python3 -m venv ~/ray-venv
-  - ~/ray-venv/bin/pip install --upgrade pip setuptools wheel
-  # *** Pin click BEFORE ray ***
-  - ~/ray-venv/bin/pip install "click==8.1.7"
-  - ~/ray-venv/bin/pip install "ray[default]==2.9.1" protobuf==4.23.4
-  # Your wheel
-  - aws s3 cp s3://martin-test-bucket/rhapso-0.1.8-py3-none-any.whl /tmp/rhapso-0.1.8-py3-none-any.whl
-  - ~/ray-venv/bin/pip install --force-reinstall /tmp/rhapso-0.1.8-py3-none-any.whl
-   
+  - sudo apt-get update -y 
+  - sudo DEBIAN_FRONTEND=noninteractive apt install -y python3-pip 
+  - sudo python3 -m pip install awscli
+  - sudo python3 -m pip install "ray[default]==2.9.1"  
+  - sudo python3 -m pip install protobuf==4.23.4 
+  - aws s3 cp s3://martin-test-bucket/rhapso-0.1.8-py3-none-any.whl /tmp/rhapso-0.1.8-py3-none-any.whl  
+  - echo 'export PATH=$HOME/.local/bin:$PATH' >> ~/.bashrc
+  - source ~/.bashrc
+  - pip install --force-reinstall /tmp/rhapso-0.1.8-py3-none-any.whl    
 
 head_start_ray_commands:
-  - ~/ray-venv/bin/ray stop
-  - ~/ray-venv/bin/ray start --head --port=6379 --dashboard-host=0.0.0.0 --autoscaling-config=~/ray_bootstrap_config.yaml
+  - ray stop
+  - ray start --head --port=6379 --dashboard-host=0.0.0.0 --autoscaling-config=~/ray_bootstrap_config.yaml 
 
 worker_start_ray_commands:
-  - ~/ray-venv/bin/ray stop
-  - ~/ray-venv/bin/ray start --address=$RAY_HEAD_IP:6379
+  - ray stop
+  - ray start --address=$RAY_HEAD_IP:6379
 
 # SETUP
 # ---------------------
@@ -77,7 +71,7 @@ worker_start_ray_commands:
 # rm -rf ~/.cache/ray
 
 # ACCESS RAY DASHBOARD
-# ssh -i ~/.ssh/martin-ray-rhapso-new.pem -L 8265:localhost:8265 ubuntu@54.203.12.142
+# ssh -i ~/.ssh/rhapso-ray-ssh-martin.pem -L 8265:localhost:8265 ubuntu@54.203.12.142
 # http://localhost:8265
 
 # TO FIX
