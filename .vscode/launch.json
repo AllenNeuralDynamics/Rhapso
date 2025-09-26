@@ -30,6 +30,16 @@
             "python": "venv/bin/python",
             "args": [],
             "justMyCode": true
+        },
+        {
+            "name": "Fusion Worker",
+            "type": "debugpy",
+            "request": "launch",
+            "program": "${workspaceFolder}/Rhapso/fusion/worker.py",
+            "cwd": "${workspaceFolder}",
+            "python": "venv/bin/python",
+            "args": [],
+            "justMyCode": true
         }
     ]
 }
