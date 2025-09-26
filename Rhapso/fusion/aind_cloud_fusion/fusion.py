@@ -4,6 +4,7 @@ from __future__ import annotations
 import logging
 import time
 from typing import Optional
+from datetime import datetime
 import dask.array as da
 from dask import delayed
 import numpy as np
@@ -12,11 +13,11 @@ import tensorstore as ts
 import torch
 from torch.utils.data import Dataset
 import zarr
-import fusion.aind_cloud_fusion.blend as blend
-import fusion.aind_cloud_fusion.cloud_queue as cq
-import fusion.aind_cloud_fusion.geometry as geometry
-import fusion.aind_cloud_fusion.input_output as input_output
-import fusion.aind_cloud_fusion.fusion_utils as utils
+import Rhapso.fusion.aind_cloud_fusion.blend as blend
+import Rhapso.fusion.aind_cloud_fusion.cloud_queue as cq
+import Rhapso.fusion.aind_cloud_fusion.geometry as geometry
+import Rhapso.fusion.aind_cloud_fusion.input_output as input_output
+import Rhapso.fusion.aind_cloud_fusion.fusion_utils as utils
 
 def initialize_fusion(
     dataset: input_output.Dataset,
@@ -382,42 +383,24 @@ def run_fusion(  # noqa: C901
 
     batch_start = time.time()
     total_cells = len(overlap_volume_sampler)
-    batch_size = 200
+    batch_size = 10
     LOGGER.info(f"CPU Cell Size: {CPU_CELL_SIZE}")
     LOGGER.info(f"CPU Total Cells: {total_cells}")
     LOGGER.info(f"CPU Batch Size: {batch_size}")
 
-    delayed_jobs = []
     for i, (curr_cell, src_ids) in enumerate(overlap_volume_sampler):
-        delayed_job = delayed(cpu_fusion)(tile_arrays,
-                                        tile_transforms,
-                                        tile_sizes_zyx,
-                                        tile_aabbs,
-                                        output_volume_size,
-                                        output_volume_origin,
-                                        output_volume,
-                                        blend_module,
-                                        curr_cell,
-                                        src_ids
-                                        )
-        delayed_jobs.append(delayed_job)
-
-        if len(delayed_jobs) == batch_size:
-            LOGGER.info(f"CPU: Calculating up to {i}/{total_cells}...")
-            da.compute(*delayed_jobs)
-            delayed_jobs = []
-            LOGGER.info(
-                f"CPU: Finished up to {i}/{total_cells}. Batch time: {time.time() - batch_start}"
-            )
-            batch_start = time.time()
-
-    # Compute remaining cells
-    LOGGER.info(f"CPU: Calculating up to {i}/{total_cells}...")
-    da.compute(*delayed_jobs)
-    delayed_jobs = []
-    LOGGER.info(
-        f"CPU: Finished up to {i}/{total_cells}. Batch time: {time.time() - batch_start}"
-    )
+        print(f"{datetime.now()} - Processing cell {i+1} of {len(overlap_volume_sampler)}: fusing tiles for volume cell")
+        results = cpu_fusion(tile_arrays,
+                           tile_transforms,
+                           tile_sizes_zyx,
+                           tile_aabbs,
+                           output_volume_size,
+                           output_volume_origin,
+                           output_volume,
+                           blend_module,
+                           curr_cell,
+                           src_ids
+                           )
 
     p.join()
     p.close()
