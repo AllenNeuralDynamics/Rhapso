@@ -383,7 +383,7 @@ def run_fusion(  # noqa: C901
 
     batch_start = time.time()
     total_cells = len(overlap_volume_sampler)
-    batch_size = 10
+    batch_size = 200
     LOGGER.info(f"CPU Cell Size: {CPU_CELL_SIZE}")
     LOGGER.info(f"CPU Total Cells: {total_cells}")
     LOGGER.info(f"CPU Batch Size: {batch_size}")
