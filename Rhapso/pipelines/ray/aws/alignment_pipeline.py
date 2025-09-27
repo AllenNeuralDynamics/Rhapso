@@ -195,14 +195,68 @@ detection_cmd = (
 prefix = (Path(__file__).resolve().parent / "config/dev").as_posix()
 unified_yml = "alignment_cluster_martin.yml"
 
+def cleanup_cluster(yml, cwd):
+    """Clean up the Ray cluster and handle any errors gracefully"""
+    print("\n=== Cleaning up cluster ===")
+    print("$", " ".join(["ray", "down", yml, "-y"]))
+    try:
+        subprocess.run(["ray", "down", yml, "-y"], cwd=cwd, capture_output=False, text=True)
+        print("✅ Cluster cleanup completed")
+    except Exception as cleanup_error:
+        print(f"⚠️  Cluster cleanup failed: {cleanup_error}")
+        # Try alternative cleanup methods
+        try:
+            print("Trying alternative cleanup...")
+            subprocess.run(["ray", "down", yml], cwd=cwd, capture_output=False, text=True)
+        except:
+            print("Alternative cleanup also failed - cluster may need manual cleanup")
+
 def exec_on_cluster(name, yml, cmd, cwd):
     print(f"\n=== {name} ===")
     print("$", " ".join(["ray", "exec", yml, cmd]))
-    subprocess.run(["ray", "exec", yml, cmd], check=True, cwd=cwd)
+    try:
+        result = subprocess.run(["ray", "exec", yml, cmd], check=True, cwd=cwd, capture_output=False, text=True)
+        print("✅ Command completed successfully")
+        if result.stdout:
+            print("STDOUT:", result.stdout)
+        if result.stderr:
+            print("STDERR:", result.stderr)
+    except subprocess.CalledProcessError as e:
+        print(f"❌ Command failed with return code {e.returncode}")
+        print("STDOUT:", e.stdout)
+        print("STDERR:", e.stderr)
+        raise
+
+print("\n=== Clean up any existing cluster ===")
+print("$", " ".join(["ray", "down", unified_yml, "-y"]))
+try:
+    subprocess.run(["ray", "down", unified_yml, "-y"], cwd=prefix, capture_output=False, text=True)
+    print("✅ Cleanup completed (or no existing cluster)")
+except:
+    print("ℹ️  No existing cluster to clean up")
 
 print("\n=== Start cluster ===")
 print("$", " ".join(["ray", "up", unified_yml, "-y"]))
-subprocess.run(["ray", "up", unified_yml, "-y"], check=True, cwd=prefix)
+try:
+    result = subprocess.run(["ray", "up", unified_yml, "-y"], check=True, cwd=prefix, capture_output=False, text=True)
+    print("✅ Cluster started successfully")
+    if result.stdout:
+        print("STDOUT:", result.stdout)
+    if result.stderr:
+        print("STDERR:", result.stderr)
+except subprocess.CalledProcessError as e:
+    print(f"❌ Cluster startup failed with return code {e.returncode}")
+    print("STDOUT:", e.stdout)
+    print("STDERR:", e.stderr)
+    print("\n🔍 Debugging tips:")
+    print("1. Check if the cluster name is unique (try changing cluster_name in the yml file)")
+    print("2. Verify AWS credentials and permissions")
+    print("3. Check if the S3 bucket and rhapso wheel file exist")
+    print("4. Try running 'ray down' first to clean up any existing cluster")
+    
+    # Clean up failed cluster immediately
+    cleanup_cluster(unified_yml, prefix)
+    raise
 
 try:
     exec_on_cluster("Detection", unified_yml, detection_cmd, prefix)
@@ -217,11 +271,12 @@ try:
 
 except subprocess.CalledProcessError as e:
     print(f"❌ Pipeline error: {e}")
+    # Clean up cluster on pipeline error
+    cleanup_cluster(unified_yml, prefix)
     raise
 
 finally:
-    print("\n=== Tear down cluster ===")
-    print("$", " ".join(["ray", "down", unified_yml, "-y"]))
-    subprocess.run(["ray", "down", unified_yml, "-y"], cwd=prefix)
+    # Always try to clean up, even if everything succeeded
+    cleanup_cluster(unified_yml, prefix)
 
 print("\n✅ Pipeline complete.")
