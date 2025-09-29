@@ -166,27 +166,45 @@ class BigStitcherDataset(Dataset):
             tile_paths[t_id] = self.s3_path + Path(t_path).name + level_str
 
         tile_arrays: dict[int, InputArray] = {}
-        for tile_id, t_path in tile_paths.items():
+        total_tiles = len(tile_paths)
+        print(f"Starting to load {total_tiles} tiles...")
+        
+        for i, (tile_id, t_path) in enumerate(tile_paths.items(), 1):
+            print(f"Loading Tile {tile_id} ({i}/{total_tiles}) from: {t_path}")
+            
+            try:
+                arr = None
+                if self.datastore == 0:  # Dask
+                    print(f"  Using Dask to load tile {tile_id}...")
+                    tile_zarr = da.from_zarr(t_path)
+                    arr = InputDask(tile_zarr)
+                elif self.datastore == 1:  # Tensorstore
+                    print(f"  Using Tensorstore to load tile {tile_id}...")
+                    # Referencing the following naming convention:
+                    # s3://BUCKET_NAME/DATASET_NAME/TILE/NAME/CHANNEL
+                    parts = t_path.split("/")
+                    bucket = parts[2]
+                    third_slash_index = (
+                        len(parts[0]) + len(parts[1]) + len(parts[2]) + 3
+                    )
+                    obj = t_path[third_slash_index:]
 
-            arr = None
-            if self.datastore == 0:  # Dask
-                tile_zarr = da.from_zarr(t_path)
-                arr = InputDask(tile_zarr)
-            elif self.datastore == 1:  # Tensorstore
-                # Referencing the following naming convention:
-                # s3://BUCKET_NAME/DATASET_NAME/TILE/NAME/CHANNEL
-                parts = t_path.split("/")
-                bucket = parts[2]
-                third_slash_index = (
-                    len(parts[0]) + len(parts[1]) + len(parts[2]) + 3
-                )
-                obj = t_path[third_slash_index:]
+                    tile_zarr = open_zarr_s3(bucket, obj)
+                    arr = InputTensorstore(tile_zarr)
 
-                tile_zarr = open_zarr_s3(bucket, obj)
-                arr = InputTensorstore(tile_zarr)
-
-            print(f"Loading Tile {tile_id}")
-            tile_arrays[int(tile_id)] = arr
+                print(f"  Successfully loaded Tile {tile_id}")
+                tile_arrays[int(tile_id)] = arr
+                
+            except Exception as e:
+                print(f"  ERROR: Failed to load Tile {tile_id}: {e}")
+                print(f"  This might be due to:")
+                print(f"  - Network connectivity issues")
+                print(f"  - S3 permissions problems")
+                print(f"  - Invalid tile path: {t_path}")
+                print(f"  - Corrupted tile data")
+                raise RuntimeError(f"Failed to load tile {tile_id}: {e}")
+        
+        print(f"Successfully loaded all {total_tiles} tiles!")
 
         self.tile_cache = tile_arrays
 
@@ -644,7 +662,7 @@ class OutputTensorstore(OutputArray):
 class OutputParameters:
     path: str
     datastore: int = 0 # {0 == Dask, 1 == Tensorstore}
-    chunksize: tuple[int, int, int, int, int] = (1, 1, 128, 128, 128)
+    chunksize: tuple[int, int, int, int, int] = (1, 1, 3584, 1800, 3904)
     resolution_zyx: tuple[float, float, float] = (1.0, 1.0, 1.0)
     dtype: np.dtype = np.uint16
     dimension_separator: str = "/"

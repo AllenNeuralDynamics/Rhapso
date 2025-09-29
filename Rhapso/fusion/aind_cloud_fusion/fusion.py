@@ -3,6 +3,7 @@
 from __future__ import annotations
 import logging
 import time
+import signal
 from typing import Optional
 from datetime import datetime
 import dask.array as da
@@ -19,6 +20,51 @@ import Rhapso.fusion.aind_cloud_fusion.cloud_queue as cq
 import Rhapso.fusion.aind_cloud_fusion.geometry as geometry
 import Rhapso.fusion.aind_cloud_fusion.input_output as input_output
 import Rhapso.fusion.aind_cloud_fusion.fusion_utils as utils
+
+
+class TimeoutError(Exception):
+    """Custom timeout exception"""
+    pass
+
+
+def timeout_handler(signum, frame):
+    """Signal handler for timeout"""
+    raise TimeoutError("Operation timed out")
+
+
+def with_timeout(timeout_seconds, func, *args, **kwargs):
+    """Execute a function with a timeout"""
+    # Set up the signal handler
+    old_handler = signal.signal(signal.SIGALRM, timeout_handler)
+    signal.alarm(timeout_seconds)
+    
+    try:
+        result = func(*args, **kwargs)
+        return result
+    finally:
+        # Restore the old signal handler
+        signal.alarm(0)
+        signal.signal(signal.SIGALRM, old_handler)
+
+
+def with_retry(max_retries, delay_seconds, func, *args, **kwargs):
+    """Execute a function with retry logic"""
+    LOGGER = logging.getLogger(__name__)
+    
+    for attempt in range(max_retries + 1):
+        try:
+            return func(*args, **kwargs)
+        except Exception as e:
+            if attempt == max_retries:
+                LOGGER.error(f"Function failed after {max_retries} retries: {e}")
+                raise
+            
+            LOGGER.warning(f"Attempt {attempt + 1} failed: {e}")
+            LOGGER.info(f"Retrying in {delay_seconds} seconds...")
+            time.sleep(delay_seconds)
+    
+    return None  # This should never be reached
+
 
 def initialize_fusion(
     dataset: input_output.Dataset,
@@ -144,12 +190,21 @@ def initialize_output_volume_dask(
     -------
     Zarr thread-safe datastore initialized on OutputParameters.
     """
+    import logging
+    LOGGER = logging.getLogger(__name__)
+
+    LOGGER.info(f"Initializing output volume at: {output_params.path}")
+    LOGGER.info(f"Output volume size: {output_volume_size}")
 
     # Local execution   
-    out_group = zarr.open_group(output_params.path, mode="w")
-
-    # Cloud execuion
-    if output_params.path.startswith("s3"): 
+    if not output_params.path.startswith("s3"):
+        LOGGER.info("Using local filesystem for output volume")
+        out_group = zarr.open_group(output_params.path, mode="w")
+    else:
+        # Cloud execution
+        LOGGER.info("Using S3 for output volume")
+        LOGGER.info("Creating S3 filesystem connection...")
+        
         s3 = s3fs.S3FileSystem(
             config_kwargs={
                 "max_pool_connections": 50,
@@ -165,8 +220,37 @@ def initialize_output_volume_dask(
                 },
             }
         )
+        
+        LOGGER.info("S3 filesystem created successfully")
+        LOGGER.info("Creating S3Map store...")
         store = s3fs.S3Map(root=output_params.path, s3=s3)
-        out_group = zarr.open(store=store, mode="a")
+        
+        LOGGER.info("Attempting to open/create zarr group on S3...")
+        LOGGER.info("This may take a while if the output directory needs to be created/cleared...")
+        LOGGER.info("Setting 5-minute timeout for S3 operations...")
+        
+        try:
+            # Use retry and timeout wrapper for S3 operations
+            LOGGER.info("Attempting S3 operation with retry and timeout...")
+            out_group = with_retry(3, 10, with_timeout, 300, zarr.open, store=store, mode="a")
+            LOGGER.info("Successfully opened zarr group on S3")
+        except TimeoutError:
+            LOGGER.error("S3 operation timed out after 5 minutes")
+            LOGGER.info("This might be due to:")
+            LOGGER.info("1. Very large existing directory that needs to be cleared")
+            LOGGER.info("2. Network connectivity problems")
+            LOGGER.info("3. S3 service issues")
+            LOGGER.info("4. The output path is locked by another process")
+            raise RuntimeError("S3 operation timed out - try using a different output path or check network connectivity")
+        except Exception as e:
+            LOGGER.error(f"Failed to open zarr group on S3 after retries: {e}")
+            LOGGER.info("This might be due to:")
+            LOGGER.info("1. S3 permissions issues")
+            LOGGER.info("2. Network connectivity problems") 
+            LOGGER.info("3. The output path already exists and is locked")
+            LOGGER.info("4. S3 service issues")
+            LOGGER.info("5. Invalid S3 path or bucket name")
+            raise
 
     path = "0"
     chunksize = output_params.chunksize
@@ -290,7 +374,9 @@ def run_fusion(  # noqa: C901
     cpu_cell_size: Optional[tuple[int, int, int]] = None,
     gpu_cell_size: Optional[tuple[int, int, int]] = None,
     volume_sampler_stride: int = 1,
-    volume_sampler_start: int = 0
+    volume_sampler_start: int = 0,
+    batch_size: int = 2,
+    chunksize: Optional[tuple[int, int, int, int, int]] = None
 ):
     """
     Fusion algorithm.
@@ -303,6 +389,7 @@ def run_fusion(  # noqa: C901
     datastore: Option to swap to tensorstore reading.
     cpu/gpu cell_size: size of subvolume in output volume sent to each cpu/gpu worker.
     volume_sampler stride/start: options for partitioning work across capsules.
+    chunksize: Custom chunk size for output zarr array (5-tuple: t, c, z, y, x).
     """
 
     logging.basicConfig(
@@ -311,11 +398,19 @@ def run_fusion(  # noqa: C901
     LOGGER = logging.getLogger(__name__)
     LOGGER.setLevel(logging.INFO)
 
+    # Update output_params with custom chunksize if provided
+    if chunksize is not None:
+        LOGGER.info(f"Using custom chunksize: {chunksize}")
+        output_params.chunksize = chunksize
+    else:
+        LOGGER.info(f"Using default chunksize: {output_params.chunksize}")
+
     # Base Initalization
     dataset = input_output.BigStitcherDatasetChannel(xml_path, 
                                            input_s3_path, 
                                            channel_num, 
                                            datastore=datastore)
+    LOGGER.info("Initializing fusion data structures...")
     a, b, c, d, e, f = initialize_fusion(dataset, output_params)
     tile_arrays = a
     tile_transforms = b
@@ -323,7 +418,12 @@ def run_fusion(  # noqa: C901
     tile_aabbs = d
     output_volume_size = e
     output_volume_origin = f
+    
+    LOGGER.info("Data structures initialized successfully")
+    LOGGER.info("Now initializing output volume...")
+    LOGGER.info("This is where the process might hang if there are S3 issues...")
     output_volume = initialize_output_volume(output_params, output_volume_size)
+    LOGGER.info("Output volume initialized successfully")
     tile_layout = utils.parse_yx_tile_layout(xml_path, channel_num)
 
     LOGGER.info(f"Number of Tiles: {len(tile_arrays)}")
@@ -339,18 +439,22 @@ def run_fusion(  # noqa: C901
     blend_module = blending_options[blend_option]
 
     # Set CPU/GPU cell_size
-    DEFAULT_CHUNKSIZE = (1, 1, 128, 128, 128)
-    CPU_CELL_SIZE = (512, 256, 256)
+    DEFAULT_CHUNKSIZE = (1, 1, 3584, 1800, 3904)
+    CPU_CELL_SIZE = (512, 200, 244)  # Default compatible with new chunk size
     GPU_CELL_SIZE = calculate_gpu_cell_size(output_volume_size)
-    if output_params.chunksize != DEFAULT_CHUNKSIZE:
-        if cpu_cell_size is None or gpu_cell_size is None:
-            raise ValueError('Custom CPU/GPU cell sizes must be provided for custom output chunksize.')
+    
+    # Use passed cell sizes if provided
+    if cpu_cell_size is not None:
+        LOGGER.info(f"Using custom CPU cell size: {cpu_cell_size}")
         CPU_CELL_SIZE = cpu_cell_size
+    else:
+        LOGGER.info(f"Using default CPU cell size: {CPU_CELL_SIZE}")
+        
+    if gpu_cell_size is not None:
+        LOGGER.info(f"Using custom GPU cell size: {gpu_cell_size}")
         GPU_CELL_SIZE = gpu_cell_size
-    if cpu_cell_size:
-        CPU_CELL_SIZE = cpu_cell_size
-    if gpu_cell_size:
-        GPU_CELL_SIZE = gpu_cell_size
+    else:
+        LOGGER.info(f"Using default GPU cell size: {GPU_CELL_SIZE}")
 
     # Start GPU Runtime
     p = torch.multiprocessing.Process(
@@ -382,13 +486,19 @@ def run_fusion(  # noqa: C901
                                                 stride=volume_sampler_stride,
                                                 start=volume_sampler_start)
 
-    # Initialize Ray
+    # Initialize Ray - connect to existing cluster if available, otherwise start local
     if not ray.is_initialized():
-        ray.init(local_mode=False, ignore_reinit_error=True)
+        try:
+            # Try to connect to existing Ray cluster first
+            ray.init(address='auto', ignore_reinit_error=True)
+            LOGGER.info("Connected to existing Ray cluster")
+        except Exception as e:
+            LOGGER.warning(f"Could not connect to existing Ray cluster: {e}")
+            LOGGER.info("Starting local Ray instance")
+            ray.init(local_mode=False, ignore_reinit_error=True)
     
     batch_start = time.time()
     total_cells = len(overlap_volume_sampler)
-    batch_size = 2
     LOGGER.info(f"CPU Cell Size: {CPU_CELL_SIZE}")
     LOGGER.info(f"CPU Total Cells: {total_cells}")
     LOGGER.info(f"CPU Batch Size: {batch_size}")
@@ -396,12 +506,12 @@ def run_fusion(  # noqa: C901
     # Process cells in batches using Ray
     ray_tasks = []
     for i, (curr_cell, src_ids) in enumerate(overlap_volume_sampler):
-        if i >= 8:
-            print(f"DEBUG: Stopping after {i} items for testing")
-            break
+        # if i >= 8:
+        #     print(f"DEBUG: Stopping after {i} items for testing")
+        #     break
         
-        # Submit task to Ray
-        task = cpu_fusion.remote(
+        # Submit task to Ray with resource requirements
+        task = cpu_fusion.options(num_cpus=1).remote(
             tile_arrays,
             tile_transforms,
             tile_sizes_zyx,
@@ -418,8 +528,21 @@ def run_fusion(  # noqa: C901
         # Process batch when we reach batch_size or end of cells
         if len(ray_tasks) == batch_size or i == total_cells - 1:
             LOGGER.info(f"CPU: Processing batch of {len(ray_tasks)} cells (up to {i+1}/{total_cells})")
-            # Wait for all tasks in this batch to complete
-            ray.get(ray_tasks)
+            # Wait for all tasks in this batch to complete with timeout
+            try:
+                ray.get(ray_tasks, timeout=3600)  # 1 hour timeout per batch
+            except ray.exceptions.GetTimeoutError:
+                LOGGER.error(f"Batch timeout after 1 hour. Failed at batch {i+1}/{total_cells}")
+                # Cancel remaining tasks
+                for task in ray_tasks:
+                    ray.cancel(task)
+                raise RuntimeError(f"Fusion failed due to timeout at batch {i+1}/{total_cells}")
+            except Exception as e:
+                LOGGER.error(f"Batch failed with error: {e}")
+                # Cancel remaining tasks
+                for task in ray_tasks:
+                    ray.cancel(task)
+                raise
             ray_tasks = []
             LOGGER.info(f"CPU: Finished batch up to {i+1}/{total_cells}. Batch time: {time.time() - batch_start}")
             batch_start = time.time()

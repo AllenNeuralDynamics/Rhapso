@@ -1,6 +1,6 @@
-cluster_name: rhapso-ray-alignment-cluster-martin-027
-max_workers: 5
-min_workers: 5
+cluster_name: rhapso-ray-fusion-cluster-martin-045
+max_workers: 40
+min_workers: 40
 
 provider:
   type: aws
@@ -100,6 +100,7 @@ setup_commands:
       toolz==1.0.0 \
       nptyping==2.5.0 \
       torch==2.8.0 \
+      tensorstore==0.1.45 \
       ray[default]==2.49.2
 
   - echo "Cleaning up..."
