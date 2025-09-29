@@ -118,7 +118,7 @@ def execute_job(yml_path, xml_path, output_path, ray_config_path):
         output_params = input_output.OutputParameters(
             path=output_s3_path,
             resolution_zyx=resolution_zyx,
-            chunksize=custom_chunksize
+            chunk_size=custom_chunksize
         )
         blend_option = 'weighted_linear_blending'
 
@@ -148,7 +148,7 @@ def execute_job(yml_path, xml_path, output_path, ray_config_path):
             "output_params = input_output.OutputParameters(\n"
             f"    path=\\\"{output_s3_path}\\\",\n"
             f"    resolution_zyx={resolution_zyx},\n"
-            "    chunksize=custom_chunksize\n"
+            "    chunk_size=custom_chunksize\n"
             ")\n"
             "\n"
             "print(f'Starting fusion at: {{datetime.now()}}')\n"

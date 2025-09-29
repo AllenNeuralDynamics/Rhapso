@@ -662,7 +662,7 @@ class OutputTensorstore(OutputArray):
 class OutputParameters:
     path: str
     datastore: int = 0 # {0 == Dask, 1 == Tensorstore}
-    chunksize: tuple[int, int, int, int, int] = (1, 1, 128, 128, 128)
+    chunk_size: tuple[int, int, int, int, int] = (1, 1, 128, 128, 128)
     resolution_zyx: tuple[float, float, float] = (1.0, 1.0, 1.0)
     dtype: np.dtype = np.uint16
     dimension_separator: str = "/"
