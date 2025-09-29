@@ -5,7 +5,7 @@ import json
 import base64, json
 from pathlib import Path
 
-with open("Rhapso/pipelines/ray/param/HCR_s43_561.yml", "r") as file:
+with open("Rhapso/pipelines/ray/param/HCR_s43_488.yml", "r") as file:
     config = yaml.safe_load(file)
 
 serialized_config = base64.b64encode(json.dumps(config).encode()).decode()
@@ -155,6 +155,7 @@ solver_rigid = Solver(
     max_allowed_error=config['max_allowed_error'],
     max_plateauwidth=config['max_plateauwidth'],
     metrics_output_path=config['metrics_output_path'],
+    fixed_tile=config['fixed_tile']
 )
 
 # SOLVER MULTI CHANNEL RIGID
@@ -165,18 +166,6 @@ solver_multi_channel_rigid = Solver(
     xml_file_path_solver_rigid_c2=config['xml_file_path_solver_rigid_c2'],
     xml_file_path_output_rigid_c2=config['xml_file_path_output_rigid_c2'],
     n5_input_path_c2=config['n5_input_path_c2'],
-    # xml_file_path_solver_rigid_c3=config['xml_file_path_solver_rigid_c3'],
-    # xml_file_path_output_rigid_c3=config['xml_file_path_output_rigid_c3'],
-    # n5_input_path_c3=config['n5_input_path_c3'],
-    # xml_file_path_solver_rigid_c4=config['xml_file_path_solver_rigid_c4'],
-    # xml_file_path_output_rigid_c4=config['xml_file_path_output_rigid_c4'],
-    # n5_input_path_c4=config['n5_input_path_c4'],
-    # xml_file_path_solver_rigid_c5=config['xml_file_path_solver_rigid_c5'],
-    # xml_file_path_output_rigid_c5=config['xml_file_path_output_rigid_c5'],
-    # n5_input_path_c5=config['n5_input_path_c5'],
-    # xml_file_path_solver_rigid_c6=config['xml_file_path_solver_rigid_c6'],
-    # xml_file_path_output_rigid_c6=config['xml_file_path_output_rigid_c6'],
-    # n5_input_path_c6=config['n5_input_path_c6'],
     run_type=config['run_type_solver_rigid'],  
     relative_threshold=config['relative_threshold'],
     absolute_threshold=config['absolute_threshold'],
@@ -186,6 +175,7 @@ solver_multi_channel_rigid = Solver(
     max_allowed_error=config['max_allowed_error'],
     max_plateauwidth=config['max_plateauwidth'],
     metrics_output_path=config['metrics_output_path'],
+    fixed_tile=config['fixed_tile']
 )
 
 # SOLVER AFFINE
@@ -202,6 +192,7 @@ solver_affine = Solver(
     max_allowed_error=config['max_allowed_error'],
     max_plateauwidth=config['max_plateauwidth'],
     metrics_output_path=config['metrics_output_path'],
+    fixed_tile=config['fixed_tile']
 )
 
 # SOLVER MULTI CHANNEL AFFINE
@@ -212,18 +203,6 @@ solver_multi_channel_affine = Solver(
     xml_file_path_solver_affine_c2=config['xml_file_path_solver_affine_c2'],
     xml_file_path_output_affine_c2=config['xml_file_path_output_affine_c2'],
     n5_input_path_c2=config['n5_input_path_c2'],
-    # xml_file_path_solver_affine_c3=config['xml_file_path_solver_affine_c3'],
-    # xml_file_path_output_affine_c3=config['xml_file_path_output_affine_c3'],
-    # n5_input_path_c3=config['n5_input_path_c3'],
-    # xml_file_path_solver_affine_c4=config['xml_file_path_solver_affine_c4'],
-    # xml_file_path_output_affine_c4=config['xml_file_path_output_affine_c4'],
-    # n5_input_path_c4=config['n5_input_path_c4'],
-    # xml_file_path_solver_affine_c5=config['xml_file_path_solver_affine_c5'],
-    # xml_file_path_output_affine_c5=config['xml_file_path_output_affine_c5'],
-    # n5_input_path_c5=config['n5_input_path_c5'],
-    # xml_file_path_solver_affine_c6=config['xml_file_path_solver_affine_c6'],
-    # xml_file_path_output_affine_c6=config['xml_file_path_output_affine_c6'],
-    # n5_input_path_c6=config['n5_input_path_c6'],
     run_type=config['run_type_solver_affine'],  
     relative_threshold=config['relative_threshold'],
     absolute_threshold=config['absolute_threshold'],
@@ -233,6 +212,7 @@ solver_multi_channel_affine = Solver(
     max_allowed_error=config['max_allowed_error'],
     max_plateauwidth=config['max_plateauwidth'],
     metrics_output_path=config['metrics_output_path'],
+    fixed_tile=config['fixed_tile']
 )
 
 # SOLVER SPLIT AFFINE
@@ -249,6 +229,7 @@ solver_split_affine = Solver(
     max_allowed_error=config['max_allowed_error'],
     max_plateauwidth=config['max_plateauwidth'],
     metrics_output_path=config['metrics_output_path'],
+    fixed_tile=config['fixed_tile']
 )
 
 prefix = (Path(__file__).resolve().parent / "config/dev").as_posix()
@@ -268,9 +249,9 @@ try:
     # exec_on_cluster("Matching (rigid)", unified_yml, matching_cmd_rigid, prefix)
     # solver_rigid.run()
     # solver_multi_channel_rigid.run()
-    # exec_on_cluster("Matching (affine)", unified_yml, matching_cmd_affine, prefix)
+    exec_on_cluster("Matching (affine)", unified_yml, matching_cmd_affine, prefix)
     # solver_affine.run()
-    solver_multi_channel_affine.run()
+    # solver_multi_channel_affine.run()
     # exec_on_cluster("Split Dataset", unified_yml, split_cmd, prefix)
     # exec_on_cluster("Matching (split_affine)", unified_yml, matching_cmd_split_affine, prefix)
     # solver_split_affine.run()

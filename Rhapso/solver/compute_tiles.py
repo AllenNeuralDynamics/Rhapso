@@ -1,4 +1,5 @@
 import numpy as np
+import copy
 
 """
 Compute Tiles prepares a set of tiles and pairwise correspondences for global alignment.
@@ -11,6 +12,7 @@ class ComputeTiles:
         self.groups = groups
         self.dataframes_list = dataframes_list
         self.run_type = run_type
+        self.models_by_view = {}
     
     def flip_matches(self, matches):
         """
@@ -350,27 +352,33 @@ class ComputeTiles:
         """
         Attach inlier correspondences to each tile for both directions
         """
-        for pair in self.pmc:
-            pair_a = pair['view'][0]
-            pair_b = pair['view'][1]
-            tile_a = map[pair_a]
-            tile_b = map[pair_b]
+        pm_map = []
+        for pairs in self.pmc:
+            # m = copy.deepcopy(map)
+            m = map
+            for pair in pairs:
+                pair_a = pair['view'][0]
+                pair_b = pair['view'][1]
+                tile_a = m[pair_a]
+                tile_b = m[pair_b]
 
-            correspondences = pair['inliers']
-            if len(correspondences) > 0:
+                correspondences = pair['inliers']
+                if len(correspondences) > 0:
 
-                pm = correspondences
-                flipped_matches = self.flip_matches(pm)
+                    pm = correspondences
+                    flipped_matches = self.flip_matches(pm)
 
-                tile_a['matches'].extend(pm)
-                tile_b['matches'].extend(flipped_matches)
+                    tile_a['matches'].extend(pm)
+                    tile_b['matches'].extend(flipped_matches)
 
-                tile_a['connected_tiles'].append({'view': pair_b, 'tile': tile_b})
-                tile_b['connected_tiles'].append({'view': pair_a, 'tile': tile_a})
-                
-                pair['flipped'] = flipped_matches
-        
-        return map
+                    tile_a['connected_tiles'].append({'view': pair_b, 'tile': tile_b})
+                    tile_b['connected_tiles'].append({'view': pair_a, 'tile': tile_a})
+                    
+                    pair['flipped'] = flipped_matches
+
+            pm_map.append(m)    
+            
+        return pm_map
 
     def create_default_model_3d(self):
         """
@@ -406,7 +414,6 @@ class ComputeTiles:
         """
         view_map = {}   
         if self.groups:
-            
             remaining_views = {f"timepoint: {tp}, setup: {vs}" for (tp, vs) in self.view_id_set}
             for group in self.groups:
                 for view in group['views']:
@@ -416,7 +423,7 @@ class ComputeTiles:
                         'cost': 0,
                         'distance': 0,
                         'matches': [],
-                        'model': self.create_models()
+                        'model': self.models_by_view[view]
                     }
             
                     if view not in remaining_views:
@@ -431,21 +438,21 @@ class ComputeTiles:
                     'cost': 0,
                     'distance': 0,
                     'matches': [],
-                    'model': self.create_models(),
+                    'model': self.models_by_view[view],
                 }
         
         else:
             for view in self.view_id_set:
                 tp, setup = view
-                key = f"timepoint: {tp}, setup: {setup}"
+                view = f"timepoint: {tp}, setup: {setup}"
 
-                view_map[key] = {
-                    'view': key,
+                view_map[view] = {
+                    'view': view,
                     'connected_tiles': [],
                     'cost': 0,
                     'distance': 0,
                     'matches': [],
-                    'model': self.create_models()
+                    'model': self.models_by_view[view]
                 }
             
         return view_map
@@ -467,40 +474,44 @@ class ComputeTiles:
         """
         Build the initial tile collection for alignment
         """
-        tc = {
-            'error': 0,
-            'fixed_tiles': [],
-            'max_error': 0,
-            'min_error': float('inf'),
-            'tiles': []
-        }
+        tc_map = []
+        for view in view_map:
+            tc = {
+                'error': 0,
+                'fixed_tiles': [],
+                'max_error': 0,
+                'min_error': float('inf'),
+                'tiles': []
+            }
 
-        if self.groups:
-            view_to_group_idx = {v: gi for gi, g in enumerate(self.groups) for v in g.get('views', [])}
+            if self.groups:
+                view_to_group_idx = {v: gi for gi, g in enumerate(self.groups) for v in g.get('views', [])}
 
-            first_by_group = {}
-            for view_id, gi in view_to_group_idx.items():
-                first_by_group.setdefault(gi, view_id)
+                first_by_group = {}
+                for view_id, gi in view_to_group_idx.items():
+                    first_by_group.setdefault(gi, view_id)
 
-            # add exactly one tile per group 
-            for gi in sorted(first_by_group):
-                rep_view = first_by_group[gi]
-                t = view_map.get(rep_view)
-                if len(t['connected_tiles']) > 0:
-                    tc['tiles'].append(t)
+                # add exactly one tile per group 
+                for gi in sorted(first_by_group):
+                    rep_view = first_by_group[gi]
+                    t = view.get(rep_view)
+                    if len(t['connected_tiles']) > 0:
+                        tc['tiles'].append(t)
 
-        else:
-            tiles = []
-            for tp, setup in self.view_id_set:
-                key = f"timepoint: {tp}, setup: {setup}"
-                tile = view_map[key]      
-                tiles.append(tile)
+            else:
+                tiles = []
+                for tp, setup in self.view_id_set:
+                    key = f"timepoint: {tp}, setup: {setup}"
+                    tile = view[key]      
+                    tiles.append(tile)
+                
+                for tile in tiles:
+                    if len(tile['connected_tiles']) > 0:
+                        tc['tiles'].append(tile)
             
-            for tile in tiles:
-                if len(tile['connected_tiles']) > 0:
-                    tc['tiles'].append(tile)
+            tc_map.append(tc)
             
-        return tc
+        return tc_map
     
     def compute_tiles(self):
         """
@@ -509,14 +520,44 @@ class ComputeTiles:
         view_map = self.init_global_opt()
         tc = self.add_and_fix_tiles(view_map)
 
-        if len(tc['tiles']) == 0:
-            return None
+        for tile in tc:
+            if len(tile['tiles']) == 0:
+                return None
+
+        return tc, view_map
+    
+    def build_models_by_view(self):
+        def add(view_key: str):
+            if view_key in self.models_by_view:
+                raise RuntimeError(f"Duplicate view encountered: {view_key}")
+            self.models_by_view[view_key] = self.create_models()
+
+        if self.groups:
+            # start with all views we expect
+            remaining = {f"timepoint: {tp}, setup: {vs}" for (tp, vs) in self.view_id_set}
+
+            # add all views explicitly listed in groups
+            for group in self.groups:
+                for view_key in group.get("views", []):
+                    add(view_key)
+                    if view_key not in remaining:
+                        raise RuntimeError(f"{view_key} is part of two groups or not in view_id_set.")
+                    remaining.remove(view_key)
+
+            # any leftover views that weren’t mentioned in groups still get models
+            for view_key in remaining:
+                add(view_key)
+
         else:
-            return tc, view_map
+            # no groups: create a model for every (timepoint, setup)
+            for tp, vs in self.view_id_set:
+                view_key = f"timepoint: {tp}, setup: {vs}"
+                add(view_key)
 
     def run(self):
         """
         Executes the entry point of the script.
         """
+        self.build_models_by_view()
         tc, view_map = self.compute_tiles()
         return tc, view_map

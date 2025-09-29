@@ -2,6 +2,7 @@ import zarr
 import json
 import os
 import s3fs
+import copy
 
 """
 Data Prep fetches and preps n5 interest points data
@@ -181,15 +182,26 @@ class DataPrep():
 
             self.view_id_set = sorted(view_id_set, key=lambda x: (int(x[0]), int(x[1])))
             
+            # data_map_list.append({
+            #     'output_xml_path': view_transform_matrices['output_xml_path'],
+            #     'n5_path': view_transform_matrices['n5_path'],
+            #     'view_transform_matrices': view_transform_matrices['view_transform_matrices'],
+            #     'connected_views': self.connected_views, 
+            #     'corresponding_interest_points': self.corresponding_interest_points, 
+            #     'interest_points': self.interest_points, 
+            #     'label_map_global': self.label_map_global, 
+            #     'view_id_set': self.view_id_set}
+            #     )
+
             data_map_list.append({
                 'output_xml_path': view_transform_matrices['output_xml_path'],
                 'n5_path': view_transform_matrices['n5_path'],
                 'view_transform_matrices': view_transform_matrices['view_transform_matrices'],
-                'connected_views': self.connected_views, 
-                'corresponding_interest_points': self.corresponding_interest_points, 
-                'interest_points': self.interest_points, 
-                'label_map_global': self.label_map_global, 
-                'view_id_set': self.view_id_set}
-                )
+                'connected_views': copy.deepcopy(self.connected_views),
+                'corresponding_interest_points': copy.deepcopy(self.corresponding_interest_points),
+                'interest_points': copy.deepcopy(self.interest_points),
+                'label_map_global': copy.deepcopy(self.label_map_global),
+                'view_id_set': self.view_id_set
+            })
 
-            return data_map_list
+        return data_map_list

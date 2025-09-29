@@ -17,7 +17,7 @@ This class implements the Solver pipeline for rigid, affine, and split-affine op
 
 class Solver:
     def __init__(self, run_type, relative_threshold, absolute_threshold, min_matches, damp, max_iterations, max_allowed_error,
-                 max_plateauwidth, metrics_output_path, **kwargs):
+                 fixed_tile, max_plateauwidth, metrics_output_path, **kwargs):
         self.run_type = run_type
         self.relative_threshold = relative_threshold
         self.absolute_threshold = absolute_threshold
@@ -27,6 +27,7 @@ class Solver:
         self.max_allowed_error = max_allowed_error
         self.max_plateauwidth = max_plateauwidth
         self.metrics_output_path = metrics_output_path
+        self.fixed_tile = fixed_tile
         
         self.groups = False
         self.s3 = boto3.client('s3')
@@ -79,7 +80,7 @@ class Solver:
         print("Tiles are computed")
 
         # Use matches to update transformation matrices to represent rough alignment
-        pre_align_tiles = PreAlignTiles(self.min_matches, self.run_type)
+        pre_align_tiles = PreAlignTiles(self.min_matches, self.run_type, self.fixed_tile)
         tc = pre_align_tiles.run(tiles)
         print("Tiles are pre-aligned")
 
@@ -119,9 +120,9 @@ class Solver:
             print("Models and metrics have been combined")
 
         # Save results to xml - one new affine matrix per view registration
-        # save_results = SaveResults(tiles, xml, self.run_type, validation_stats)
-        # save_results.run()
-        # print("Results have been saved")
+        save_results = SaveResults(tiles, xml, self.run_type, validation_stats)
+        save_results.run()
+        print("Results have been saved")
     
     def run(self):
         self.solve()

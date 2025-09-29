@@ -102,15 +102,23 @@ class ModelAndTileSetup():
                                     })
                                 
                             if inliers:
-                                existing = next((p for p in self.pairs if p['view'] == (key_i, key_j)), None)
-                                if existing:
-                                    existing['inliers'].extend(inliers)
-                                else:
-                                    self.pairs.append({
-                                        'view': (key_i, key_j),
-                                        'inliers': inliers,
-                                        'flipped': None 
-                                    })
+                                # existing = next((p for p in self.pairs if p['view'] == (key_i, key_j)), None)
+                                # if existing:
+                                #     existing['inliers'].extend(inliers)                               
+                                # else:
+
+                                channel_idx = sum(1 for p in self.pairs if p['view'] == (key_i, key_j))
+                                self.pairs.append({
+                                    'view': (key_i, key_j),
+                                    'channel_idx': channel_idx,
+                                    'inliers': inliers,
+                                    'flipped': None 
+                                })
+        
+        max_ch = max(p['channel_idx'] for p in self.pairs) if self.pairs else -1
+
+        if max_ch > 0:
+            self.pairs = [[p for p in self.pairs if p['channel_idx'] == ch] for ch in range(max_ch + 1)]
     
     def run(self):
         """

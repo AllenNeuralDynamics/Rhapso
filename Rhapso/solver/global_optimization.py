@@ -96,7 +96,7 @@ class GlobalOptimization:
         tile['cost'] = cost
         tile['distance'] = distance
 
-    def update_errors(self):
+    def update_errors(self, tiles):
         """
         Monitor convergence by updating cost metrics for all tiles and returns the average alignment error.
         """
@@ -104,7 +104,7 @@ class GlobalOptimization:
         min_error = float("inf")
         max_error = 0.0
 
-        for tile in self.tiles:
+        for tile in tiles:
             self.update_cost(tile)
 
             if tile['distance'] < min_error:
@@ -113,7 +113,7 @@ class GlobalOptimization:
                 max_error = tile['distance']
             total_distance += tile['distance']
 
-        average_error = total_distance / len(self.tiles)  
+        average_error = total_distance / len(tiles)  
 
         # self.save_metrics.update(
         #     "alignment errors",
@@ -351,8 +351,8 @@ class GlobalOptimization:
 
         return point
     
-    def apply(self):     
-        for tile in self.tiles:
+    def apply(self, tiles):     
+        for tile in tiles:
             if self.run_type == 'affine' or self.run_type == 'split-affine':
                 model = tile['model']['regularized']
             elif self.run_type == 'rigid':
@@ -366,23 +366,23 @@ class GlobalOptimization:
         width = int(width)
         return (values[-1] - values[-1 - width]) / width
 
-    def optimize_silently(self):
+    def optimize_silently(self, tiles):
         """
         Iteratively refines tile alignments using model fitting and dampening until convergence or max iterations.
         """
         i = 0
         proceed = i < self.max_iterations
-        self.apply()
+        self.apply(tiles)
 
         while proceed:
-            if not self.tiles:
+            if not tiles:
                 return
             
-            for tile in self.tiles:         
+            for tile in tiles:         
                 self.fit(tile)
                 self.apply_damp(tile)
 
-            error = self.update_errors()
+            error = self.update_errors(tiles)
             self.update_observer(error)
             self.validation_stats.setdefault('solver_metrics_per_tile', {}).setdefault('stats', []).append({
                 'iteration': i,
@@ -405,6 +405,7 @@ class GlobalOptimization:
         """
         Executes the entry point of the script.
         """
-        self.optimize_silently()
+        for tiles in self.tiles:
+            self.optimize_silently(tiles['tiles'])
 
         return self.tiles, self.validation_stats

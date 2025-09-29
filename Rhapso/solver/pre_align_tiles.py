@@ -1,14 +1,16 @@
 import numpy as np
 import random
+import copy
 
 """
 Pre Align Tiles roughly align p1 with p2 to speed up global optimization rounds
 """
 
 class PreAlignTiles:
-    def __init__(self, min_matches, run_type):
+    def __init__(self, min_matches, run_type, fixed_tile):
         self.min_matches = min_matches
         self.run_type = run_type
+        self.fixed_tile = fixed_tile
         
     def rigid_fit_model(self, rigid_model, matches):
         """
@@ -250,67 +252,75 @@ class PreAlignTiles:
             match['p1']['w'][:] = match['p1']['l']
             self.apply_model_in_place(match['p1']['w'], model)  
                 
-    def pre_align(self, tiles):
+    def pre_align(self, tile_list):
         """
         Greedily seed an initial alignment
         """
-        random.shuffle(tiles['tiles'])
+        for tiles in tile_list:
+            random.shuffle(tiles['tiles'])
 
-        unaligned_tiles = []
-        aligned_tiles = []
+            if getattr(self, "fixed_tile", None):
+                seed = next((t for t in tiles['tiles'] if t.get('view') == self.fixed_tile), None)
+                if seed is None:
+                    raise ValueError(f"Fixed tile '{self.fixed_tile}' not found in tiles.")
+                tiles['fixed_tiles'] = [seed]
 
-        if not tiles:
-            return unaligned_tiles, aligned_tiles
-        
-        if len(tiles['fixed_tiles']) == 0:
-            aligned_tiles.append(tiles['tiles'][0])
-            unaligned_tiles.extend(tiles['tiles'][1:])
-        else:
-            for tile in tiles['tiles']:
-                if tile in tiles['fixed_tiles']:
-                    aligned_tiles.append(tile)
-                else:
-                    unaligned_tiles.append(tile)
-        
-        ref_index = 0
-        while ref_index < len(aligned_tiles):
+            unaligned_tiles = []
+            aligned_tiles = []
+
+            if not tiles:
+                return unaligned_tiles, aligned_tiles
             
-            if len(unaligned_tiles) == 0:
-                break
-                
-            reference_tile = aligned_tiles[ref_index]
-            self.apply_transform_to_tile(reference_tile)
+            if len(tiles['fixed_tiles']) == 0:
+                aligned_tiles.append(tiles['tiles'][0])
+                unaligned_tiles.extend(tiles['tiles'][1:])
+            else:
+                for tile in tiles['tiles']:
+                    if tile in tiles['fixed_tiles']:
+                        aligned_tiles.append(tile)
+                    else:
+                        unaligned_tiles.append(tile)
             
-            tiles_added = 0
-            target_index = 0
-
-            while target_index < len(unaligned_tiles):
-                target_tile = unaligned_tiles[target_index]
+            ref_index = 0
+            while ref_index < len(aligned_tiles):
                 
-                if any(conn['view'] == target_tile['view'] for conn in reference_tile['connected_tiles']): 
-                    pm = self.get_connected_point_matches(target_tile, reference_tile)
+                if len(unaligned_tiles) == 0:
+                    break
                     
-                    if len(pm) >= self.min_matches:
-                        target_tile = self.fit(target_tile, pm)
-                        unaligned_tiles.pop(target_index)
-                        aligned_tiles.append(target_tile)
-                        tiles_added += 1
-                        continue
+                reference_tile = aligned_tiles[ref_index]
+                self.apply_transform_to_tile(reference_tile)
                 
-                target_index += 1
+                tiles_added = 0
+                target_index = 0
+
+                while target_index < len(unaligned_tiles):
+                    target_tile = unaligned_tiles[target_index]
+                    
+                    if any(conn['view'] == target_tile['view'] for conn in reference_tile['connected_tiles']): 
+                        pm = self.get_connected_point_matches(target_tile, reference_tile)
+                        
+                        if len(pm) >= self.min_matches:
+                            target_tile = self.fit(target_tile, pm)
+                            unaligned_tiles.pop(target_index)
+                            aligned_tiles.append(target_tile)
+                            tiles_added += 1
+                            continue
+                    
+                    target_index += 1
+                
+                # Always move to the next reference tile
+                ref_index += 1
             
-            # Always move to the next reference tile
-            ref_index += 1
-        
-        return unaligned_tiles
+        return unaligned_tiles         
 
     def run(self, tiles):
         """
         Executes the entry point of the script.
         """
+        # tiles = self.merge_channels_per_view(tiles)
         unaligned_tiles = self.pre_align(tiles)
 
         if len(unaligned_tiles) > 0:
             print(f"aligned all tiles but: {len(unaligned_tiles)}")
 
-        return tiles['tiles']
+        return tiles

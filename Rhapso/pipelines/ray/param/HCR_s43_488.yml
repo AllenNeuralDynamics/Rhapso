@@ -30,6 +30,7 @@ damp: 1.0
 max_iterations: 10000
 max_allowed_error: .inf
 max_plateauwidth: 200
+fixed_tile: False
 
 # -- RIGID --
 run_type_solver_rigid: 'rigid'
@@ -140,7 +141,7 @@ regularization_weight_rigid: 1.0
 
 # -- AFFINE --
 match_type_affine: 'affine'  
-xml_file_path_matching_affine: *rigid_solver_xml_output               
+xml_file_path_matching_affine: 's3://rhapso-matching-test/488/rhapso-rigid.xml'              
 
 # Candidates
 num_neighbors_affine: 3

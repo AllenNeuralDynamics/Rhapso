@@ -10,7 +10,7 @@ Utility class that saves the final matrices of alignment per view to XML
 
 class SaveResults:
     def __init__(self, tiles, xml_list, run_type, validation_stats):
-        self.tiles = tiles
+        self.tiles = tiles[0]['tiles']
         self.xml_list = xml_list
         self.run_type = run_type
         self.validation_stats = validation_stats

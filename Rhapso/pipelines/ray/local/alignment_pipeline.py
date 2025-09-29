@@ -105,6 +105,7 @@ solver_rigid = Solver(
     max_allowed_error=config['max_allowed_error'],
     max_plateauwidth=config['max_plateauwidth'],
     metrics_output_path=config['metrics_output_path'],
+    fixed_tile=config['fixed_tile']
 )
 
 # SOLVER MULTI CHANNEL RIGID
@@ -124,6 +125,7 @@ solver_multi_channel_rigid = Solver(
     max_allowed_error=config['max_allowed_error'],
     max_plateauwidth=config['max_plateauwidth'],
     metrics_output_path=config['metrics_output_path'],
+    fixed_tile=config['fixed_tile']
 )
 
 # SOLVER AFFINE
@@ -140,6 +142,7 @@ solver_affine = Solver(
     max_allowed_error=config['max_allowed_error'],
     max_plateauwidth=config['max_plateauwidth'],
     metrics_output_path=config['metrics_output_path'],
+    fixed_tile=config['fixed_tile']
 )
 
 # SOLVER MULTI CHANNEL AFFINE
@@ -159,6 +162,7 @@ solver_multi_channel_affine = Solver(
     max_allowed_error=config['max_allowed_error'],
     max_plateauwidth=config['max_plateauwidth'],
     metrics_output_path=config['metrics_output_path'],
+    fixed_tile=config['fixed_tile']
 )
 
 # SOLVER SPLIT AFFINE
@@ -175,6 +179,7 @@ solver_split_affine = Solver(
     max_allowed_error=config['max_allowed_error'],
     max_plateauwidth=config['max_plateauwidth'],
     metrics_output_path=config['metrics_output_path'],
+    fixed_tile=config['fixed_tile']
 )
 
 # SPLIT DATASETS
@@ -188,7 +193,7 @@ split_dataset = SplitDataset(
     error=config['error'],
     exclude_radius=config['exclude_radius'], 
     target_image_size=config['target_image_size'],
-    target_overlap=config['target_overlap'],
+    target_overlap=config['target_overlap']
 )
 
 # -- ALIGNMENT PIPELINE --
