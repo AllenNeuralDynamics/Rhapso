@@ -132,19 +132,19 @@ def initialize_fusion(
 
     # Rounding up the OUTPUT_VOLUME_SIZE to the nearest chunk
     # b/c zarr-python has occasional errors writing at the boundaries.
-    # This ensures a multiple of chunksize without losing data.
-    remainder_0 = OUTPUT_VOLUME_SIZE[0] % output_params.chunksize[2]
-    remainder_1 = OUTPUT_VOLUME_SIZE[1] % output_params.chunksize[3]
-    remainder_2 = OUTPUT_VOLUME_SIZE[2] % output_params.chunksize[4]
+    # This ensures a multiple of chunk_size without losing data.
+    remainder_0 = OUTPUT_VOLUME_SIZE[0] % output_params.chunk_size[2]
+    remainder_1 = OUTPUT_VOLUME_SIZE[1] % output_params.chunk_size[3]
+    remainder_2 = OUTPUT_VOLUME_SIZE[2] % output_params.chunk_size[4]
     if remainder_0 > 0:
         OUTPUT_VOLUME_SIZE[0] -= remainder_0
-        OUTPUT_VOLUME_SIZE[0] += output_params.chunksize[2]
+        OUTPUT_VOLUME_SIZE[0] += output_params.chunk_size[2]
     if remainder_1 > 0:
         OUTPUT_VOLUME_SIZE[1] -= remainder_1
-        OUTPUT_VOLUME_SIZE[1] += output_params.chunksize[3]
+        OUTPUT_VOLUME_SIZE[1] += output_params.chunk_size[3]
     if remainder_2 > 0:
         OUTPUT_VOLUME_SIZE[2] -= remainder_2
-        OUTPUT_VOLUME_SIZE[2] += output_params.chunksize[4]
+        OUTPUT_VOLUME_SIZE[2] += output_params.chunk_size[4]
     OUTPUT_VOLUME_SIZE = tuple(OUTPUT_VOLUME_SIZE)
 
     OUTPUT_VOLUME_ORIGIN = (global_tile_boundaries[0],
@@ -253,7 +253,7 @@ def initialize_output_volume_dask(
             raise
 
     path = "0"
-    chunksize = output_params.chunksize
+    chunk_size = output_params.chunk_size
     datatype = output_params.dtype
     dimension_separator = "/"
     compressor = output_params.compressor
@@ -266,7 +266,7 @@ def initialize_output_volume_dask(
             output_volume_size[1],
             output_volume_size[2],
         ),
-        chunks=chunksize,
+        chunks=chunk_size,
         dtype=datatype,
         compressor=compressor,
         dimension_separator=dimension_separator,
@@ -288,7 +288,7 @@ def initialize_output_volume_tensorstore(
     parts = output_params.path.split("/")
     bucket = parts[2]
     path = "/".join(parts[3:])
-    chunksize = list(output_params.chunksize)
+    chunk_size = list(output_params.chunk_size)
     output_shape = [
         1,
         1,
@@ -309,7 +309,7 @@ def initialize_output_volume_tensorstore(
             "create": True,
             "open": True,
             "metadata": {
-                "chunks": chunksize,
+                "chunks": chunk_size,
                 "compressor": {
                     "blocksize": 0,
                     "clevel": 1,
@@ -376,7 +376,7 @@ def run_fusion(  # noqa: C901
     volume_sampler_stride: int = 1,
     volume_sampler_start: int = 0,
     batch_size: int = 2,
-    chunksize: Optional[tuple[int, int, int, int, int]] = None
+    chunk_size: Optional[tuple[int, int, int, int, int]] = None
 ):
     """
     Fusion algorithm.
@@ -389,7 +389,7 @@ def run_fusion(  # noqa: C901
     datastore: Option to swap to tensorstore reading.
     cpu/gpu cell_size: size of subvolume in output volume sent to each cpu/gpu worker.
     volume_sampler stride/start: options for partitioning work across capsules.
-    chunksize: Custom chunk size for output zarr array (5-tuple: t, c, z, y, x).
+    chunk_size: Custom chunk_size for output zarr array (5-tuple: t, c, z, y, x).
     """
 
     logging.basicConfig(
@@ -398,12 +398,12 @@ def run_fusion(  # noqa: C901
     LOGGER = logging.getLogger(__name__)
     LOGGER.setLevel(logging.INFO)
 
-    # Update output_params with custom chunksize if provided
-    if chunksize is not None:
-        LOGGER.info(f"Using custom chunksize: {chunksize}")
-        output_params.chunksize = chunksize
+    # Update output_params with custom chunk_size if provided
+    if chunk_size is not None:
+        LOGGER.info(f"Using custom chunk_size: {chunk_size}")
+        output_params.chunk_size = chunk_size
     else:
-        LOGGER.info(f"Using default chunksize: {output_params.chunksize}")
+        LOGGER.info(f"Using default chunk_size: {output_params.chunk_size}")
 
     # Base Initalization
     dataset = input_output.BigStitcherDatasetChannel(xml_path, 
@@ -439,8 +439,8 @@ def run_fusion(  # noqa: C901
     blend_module = blending_options[blend_option]
 
     # Set CPU/GPU cell_size
-    DEFAULT_CHUNKSIZE = (1, 1, 3584, 1800, 3904)
-    CPU_CELL_SIZE = (512, 200, 244)  # Default compatible with new chunk size
+    DEFAULT_CHUNKSIZE = (1, 1, 128, 128, 128)
+    CPU_CELL_SIZE = (512, 256, 256)
     GPU_CELL_SIZE = calculate_gpu_cell_size(output_volume_size)
     
     # Use passed cell sizes if provided
@@ -480,7 +480,7 @@ def run_fusion(  # noqa: C901
                                                 output_volume_size,
                                                 output_volume_origin,
                                                 CPU_CELL_SIZE,
-                                                output_params.chunksize[2:],
+                                                output_params.chunk_size[2:],
                                                 tile_layout,
                                                 traverse_overlap = True,
                                                 stride=volume_sampler_stride,
@@ -665,7 +665,7 @@ def gpu_fusion(
                                         output_volume_size,
                                         output_volume_origin,
                                         cell_size,
-                                        output_params.chunksize[2:],
+                                        output_params.chunk_size[2:],
                                         tile_layout,
                                         traverse_overlap = False,
                                         stride = volume_sampler_stride,
