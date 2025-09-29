@@ -1,6 +1,6 @@
-cluster_name: ray-cluster-rhapso-alignment-martin-07
-max_workers: 10
-min_workers: 10
+cluster_name: rhapso-ray-fusion-cluster-martin-047
+max_workers: 40
+min_workers: 40
 
 provider:
   type: aws
@@ -10,14 +10,20 @@ provider:
 
 auth:
   ssh_user: ubuntu
-  ssh_private_key: ~/.ssh/rhapso-ray-ssh-martin.pem 
+  ssh_private_key: ~/.ssh/martin-ray-rhapso-new.pem 
 
 available_node_types:
   ray.head.default:
     node_config:
-      InstanceType: r5.4xlarge
+      InstanceType: r5.4xlarge  # Large instance with plenty of storage
       ImageId: ami-0ec1bf4a8f92e7bd1
-      KeyName: rhapso-ray-ssh-martin
+      KeyName: martin-ray-rhapso-new
+      BlockDeviceMappings:
+        - DeviceName: /dev/sda1
+          Ebs:
+            VolumeSize: 100  # 100GB root volume
+            VolumeType: gp3
+            DeleteOnTermination: true
       IamInstanceProfile:
         Name: RhapsoInstanceProfile
       TagSpecifications:
@@ -28,9 +34,15 @@ available_node_types:
 
   ray.worker.default:
     node_config:
-      InstanceType: r5.4xlarge
+      InstanceType: r5.4xlarge  # Large instance with plenty of storage
       ImageId: ami-0ec1bf4a8f92e7bd1 
-      KeyName: rhapso-ray-ssh-martin
+      KeyName: martin-ray-rhapso-new
+      BlockDeviceMappings:
+        - DeviceName: /dev/sda1
+          Ebs:
+            VolumeSize: 100  # 100GB root volume
+            VolumeType: gp3
+            DeleteOnTermination: true
       IamInstanceProfile:
         Name: RhapsoInstanceProfile
       TagSpecifications:
@@ -41,22 +53,68 @@ available_node_types:
 
 head_node_type: ray.head.default
 
+# Corrected setup commands.
+# Pinning click==8.2.1 to resolve the "ValueError: not a valid Sentinel" on Python 3.10.
 setup_commands:
-  - sudo apt-get update -y 
-  - sudo DEBIAN_FRONTEND=noninteractive apt install -y python3-pip 
-  - sudo python3 -m pip install awscli
-  - sudo python3 -m pip install "ray[default]==2.9.1"  
-  - sudo python3 -m pip install protobuf==4.23.4 
-  - aws s3 cp s3://martin-test-bucket/rhapso-0.1.8-py3-none-any.whl /tmp/rhapso-0.1.8-py3-none-any.whl  
-  - echo 'export PATH=$HOME/.local/bin:$PATH' >> ~/.bashrc
-  - source ~/.bashrc
-  - pip install --force-reinstall /tmp/rhapso-0.1.8-py3-none-any.whl    
+  - echo "Hello World from Ray cluster setup!"
+  - sudo DEBIAN_FRONTEND=noninteractive apt-get update -y
+  - sudo DEBIAN_FRONTEND=noninteractive apt-get install -y python3-pip
+ 
+  # Install awscli to get the 'aws' command-line tool
+  - sudo pip3 install awscli
+
+  # Copy the rhapso wheel from S3 using the aws tool
+  - echo "Copying rhapso wheel from S3..."
+  - aws s3 cp s3://martin-test-bucket/rhapso-0.1.10-py3-none-any.whl /tmp/rhapso-0.1.10-py3-none-any.whl
+
+  # Install all packages in a single command with versions pinned for stability.
+  - echo "Installing all python dependencies..."
+  - sudo pip3 install \
+      /tmp/rhapso-0.1.10-py3-none-any.whl \
+      protobuf==4.25.3 \
+      click==8.2.1 \
+      boto3==1.35.92 \
+      botocore==1.35.93 \
+      s3transfer==0.10.4 \
+      aiobotocore==2.17.0 \
+      bioio==1.3.0 \
+      dask[array]==2024.12.1 \
+      dask-image==2024.5.3 \
+      distributed==2024.12.1 \
+      zarr==2.18.3 \
+      matplotlib==3.10.0 \
+      scipy==1.13.1 \
+      tifffile==2025.1.10 \
+      s3fs==2024.12.0 \
+      numcodecs==0.13.1 \
+      memory-profiler==0.61.0 \
+      pandas==2.3.2 \
+      numpy==1.26.4 \
+      scikit-image==0.22.0 \
+      scikit-learn==1.7.2 \
+      pillow==11.3.0 \
+      lxml==6.0.2 \
+      xmltodict==1.0.2 \
+      xarray==2025.6.1 \
+      ome-zarr==0.11.1 \
+      toolz==1.0.0 \
+      nptyping==2.5.0 \
+      torch==2.8.0 \
+      tensorstore==0.1.45 \
+      ray[default]==2.49.2
+
+  - echo "Cleaning up..."
+  - sudo pip3 cache purge
+  - rm -rf /tmp/pip-*
+  - echo "Installation and setup complete!"
 
 head_start_ray_commands:
+  - echo "Starting Ray head node..."
   - ray stop
   - ray start --head --port=6379 --dashboard-host=0.0.0.0 --autoscaling-config=~/ray_bootstrap_config.yaml 
 
 worker_start_ray_commands:
+  - echo "Starting Ray worker node..."
   - ray stop
   - ray start --address=$RAY_HEAD_IP:6379
 
@@ -66,12 +124,12 @@ worker_start_ray_commands:
 # python setup.py bdist_wheel 
 
 # RAY UP / DOWN / CLEAR CACHE COMMANDS
-# ray up alignment_cluster_martin.yml --no-config-cache
-# ray down alignment_cluster_martin.yml
+# ray up alignment_cluster_sean.yml --no-config-cache
+# ray down alignment_cluster_sean.yml
 # rm -rf ~/.cache/ray
 
 # ACCESS RAY DASHBOARD
-# ssh -i ~/.ssh/rhapso-ray-ssh-martin.pem -L 8265:localhost:8265 ubuntu@54.203.12.142
+# ssh -i /Users/seanfite/Desktop/AllenInstitute/Rhapso/Auth/AWS/EC2-SSH-Key/martin-ray-rhapso-new.pem -L 8265:localhost:8265 ubuntu@44.252.112.30
 # http://localhost:8265
 
 # TO FIX

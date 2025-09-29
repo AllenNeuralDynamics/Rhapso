@@ -109,13 +109,12 @@ def execute_job(yml_path, xml_path, output_path, ray_config_path):
         channel = configs['channel']
 
         resolution_zyx = get_tile_zyx_resolution(xml_path)
-        # Use custom chunksize for large volumes
-        custom_chunksize = (1, 1, 3584, 1800, 3904)
-        # Workaround for incorrect remote validation logic:
-        # Remote checks: cell_size % chunk_size == 0 (wrong!)
-        # So cell_size must be a multiple of chunk size
-        # Using proportional cell size similar to working example (512, 256, 256)
-        custom_cpu_cell_size = (3584, 900, 1952)  # Proportional to working example
+
+        custom_chunksize = (1, 1, 128, 128, 128)
+        custom_cpu_cell_size = (512, 256, 256)        
+        # custom_chunksize = (1, 1, 3584, 1800, 3904)
+        # custom_cpu_cell_size = (3584, 900, 1952) 
+
         output_params = input_output.OutputParameters(
             path=output_s3_path,
             resolution_zyx=resolution_zyx,
@@ -251,7 +250,7 @@ if __name__ == '__main__':
     xml_path = "s3://martin-test-bucket/fusion/dataset.xml"
     yml_path = 's3://martin-test-bucket/fusion/worker_config.yml'
     output_path = 's3://martin-test-bucket/fusion/results/'
-    ray_config_path = '/mnt/c/Users/marti/Documents/allen/repos/Rhapso-Fusion/Rhapso/pipelines/ray/aws/config/dev/alignment_cluster_martin.yml'
+    ray_config_path = '/mnt/c/Users/marti/Documents/allen/repos/Rhapso-Fusion/Rhapso/pipelines/ray/aws/config/dev/fusion_cluster_martin.yml'
 
     print(f'{xml_path=}')
     print(f'{yml_path=}')

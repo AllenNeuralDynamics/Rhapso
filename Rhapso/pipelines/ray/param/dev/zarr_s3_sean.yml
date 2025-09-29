@@ -4,8 +4,8 @@
 
 xml_file_path_detection: 's3://aind-open-data/exaSPIM_720164_2025-07-07_17-55-45_processed_2025-07-15_16-22-02/tile_alignment/dataset.xml'
 image_file_prefix: 's3://aind-open-data/exaSPIM_720164_2025-07-07_17-55-45_processed_2025-07-15_16-22-02/flatfield_correction/SPIM.ome.zarr/' 
-xml_output_file_path: &detection_xml_output_file_path 's3://martin-test-bucket/488/rhapso-detection.xml'
-n5_output_file_prefix: &n5_output_file_prefix 's3://martin-test-bucket/488/' 
+xml_output_file_path: &detection_xml_output_file_path 's3://rhapso-matching-test/488/rhapso-detection.xml'
+n5_output_file_prefix: &n5_output_file_prefix 's3://rhapso-matching-test/488/' 
 detection_run_type: 'ray' 
 file_type: 'zarr' 
 dsxy: 16
@@ -36,24 +36,24 @@ fixed_tile: False
 # -- RIGID --
 run_type_solver_rigid: 'rigid'
 xml_file_path_solver_rigid: *detection_xml_output_file_path
-xml_file_path_output_rigid: &rigid_solver_xml_output 's3://martin-test-bucket/488/rhapso-rigid.xml'
+xml_file_path_output_rigid: &rigid_solver_xml_output 's3://rhapso-matching-test/488/rhapso-rigid.xml'
 
 # -- AFFINE --
 run_type_solver_affine: 'affine'
 xml_file_path_solver_affine: *rigid_solver_xml_output
-xml_file_path_output_affine: &affine_solver_xml_output 's3://martin-test-bucket/rhapso-solver-affine.xml'
+xml_file_path_output_affine: &affine_solver_xml_output 's3://rhapso-matching-test/rhapso-solver-affine.xml'
 
 # -- SPLIT AFFINE --
 run_type_solver_split_affine: 'split-affine'
-xml_file_path_solver_split_affine: 's3://martin-test-bucket/rhapso-solver-split.xml'
-xml_file_path_output_split_affine: 's3://martin-test-bucket/rhapso-solver-split-affine.xml'
+xml_file_path_solver_split_affine: 's3://rhapso-matching-test/rhapso-solver-split.xml'
+xml_file_path_output_split_affine: 's3://rhapso-matching-test/rhapso-solver-split-affine.xml'
 
 
 # SPLIT DATASET
 # -----------------------------------
 
 xml_file_path_split: *affine_solver_xml_output
-xml_output_file_path_split: &affine_split_solver_xml_output 's3://martin-test-bucket/rhapso-solver-split.xml'
+xml_output_file_path_split: &affine_split_solver_xml_output 's3://rhapso-matching-test/rhapso-solver-split.xml'
 n5_path_split: *n5_output_file_prefix
 point_density: 100.0 
 min_points: 20
