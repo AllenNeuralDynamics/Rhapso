@@ -2,10 +2,10 @@
 # INTEREST POINT DETECTION
 # -----------------------------------
 
-xml_file_path_detection: 's3://rhapso-matching-test/channel_561.xml'
-image_file_prefix: 's3://aind-open-data/HCR_000000-s43_2025-07-24_13-00-00_processed_2025-09-16_18-41-44/image_radial_correction/' 
-xml_output_file_path: &detection_xml_output_file_path 's3://rhapso-matching-test/561/rhapso-detection.xml'
-n5_output_file_prefix: &n5_output_file_prefix 's3://rhapso-matching-test/561/' 
+xml_file_path_detection: 's3://rhapso-matching-test/channel_514.xml'
+image_file_prefix: 's3://aind-open-data/HCR_000000-s43_2025-07-24_13-00-00_processed_2025-09-18_01-23-50/image_radial_correction/' 
+xml_output_file_path: &detection_xml_output_file_path 's3://rhapso-matching-test/514/rhapso-detection.xml'
+n5_output_file_prefix: &n5_output_file_prefix 's3://rhapso-matching-test/514/' 
 detection_run_type: 'ray' 
 file_type: 'zarr' 
 dsxy: 4
@@ -30,13 +30,13 @@ damp: 1.0
 max_iterations: 10000
 max_allowed_error: .inf
 max_plateauwidth: 200
-fixed_tile: False
+fixed_tile: 'timepoint: 0, setup: 5'
 
 # -- RIGID --
 run_type_solver_rigid: 'rigid'
-xml_file_path_solver_rigid_c1: 's3://rhapso-matching-test/561/rhapso-detection.xml'
-xml_file_path_output_rigid_c1: &rigid_solver_xml_output 's3://rhapso-matching-test/561/rhapso-rigid.xml' 
-n5_input_path_c1: 's3://rhapso-matching-test/561/' 
+xml_file_path_solver_rigid_c1: 's3://rhapso-matching-test/514/rhapso-detection.xml'
+xml_file_path_output_rigid_c1: &rigid_solver_xml_output 's3://rhapso-matching-test/514/rhapso-rigid.xml' 
+n5_input_path_c1: 's3://rhapso-matching-test/514/' 
 
 # -- MULTI CHANNEL GROUPING --
 xml_file_path_solver_rigid_c2: 's3://rhapso-matching-test/488/rhapso-detection.xml'
@@ -45,9 +45,9 @@ n5_input_path_c2: 's3://rhapso-matching-test/488/'
 
 # -- AFFINE --
 run_type_solver_affine: 'affine'
-xml_file_path_solver_affine_c1: 's3://rhapso-matching-test/561/rhapso-rigid.xml'
-xml_file_path_output_affine_c1: &affine_solver_xml_output 's3://rhapso-matching-test/561/rhapso-affine.xml'
-n5_input_path_c1: 's3://rhapso-matching-test/561/'
+xml_file_path_solver_affine_c1: 's3://rhapso-matching-test/514/rhapso-rigid.xml'
+xml_file_path_output_affine_c1: &affine_solver_xml_output 's3://rhapso-matching-test/514/rhapso-affine.xml'
+n5_input_path_c1: 's3://rhapso-matching-test/514/'
 
 # -- MULTI CHANNEL GROUPING --
 xml_file_path_solver_affine_c2: 's3://rhapso-matching-test/488/rhapso-rigid.xml'

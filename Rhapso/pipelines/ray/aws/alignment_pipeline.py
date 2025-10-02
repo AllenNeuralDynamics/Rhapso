@@ -5,7 +5,7 @@ import json
 import base64, json
 from pathlib import Path
 
-with open("Rhapso/pipelines/ray/param/HCR_s43_488.yml", "r") as file:
+with open("Rhapso/pipelines/ray/param/HCR_s43_514.yml", "r") as file:
     config = yaml.safe_load(file)
 
 serialized_config = base64.b64encode(json.dumps(config).encode()).decode()

@@ -431,6 +431,7 @@ class BigStitcherDatasetChannel(BigStitcherDataset):
 
         # Otherwise fetch for first time
         tile_arrays: dict[int, InputArray] = {}
+        tile_specs = []
 
         if self.xml_path.startswith('s3://'):
             # Handle S3 path
@@ -505,6 +506,8 @@ class BigStitcherDatasetChannel(BigStitcherDataset):
 
                     tile_id = tile_id_lut[location_ch]
 
+                    tile_specs.append(full_resolution_p)
+
                     arr = None
                     if self.datastore == 0:  # Dask
                         tile_zarr = da.from_zarr(full_resolution_p)
@@ -528,7 +531,7 @@ class BigStitcherDatasetChannel(BigStitcherDataset):
 
         self.tile_cache = tile_arrays
 
-        return tile_arrays
+        return tile_arrays, tile_specs
 
     def _get_smartspim_tile_volumes_tczyx(
         self, multiscale: Optional[str] = "0"

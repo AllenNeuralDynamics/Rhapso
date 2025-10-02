@@ -9,7 +9,7 @@ import ray
 ray.init()
 
 # Point to param file
-with open("Rhapso/pipelines/ray/param/HCR_s43_561.yml", "r") as file:
+with open("Rhapso/pipelines/ray/param/dev/zarr_local_sean.yml", "r") as file:
     config = yaml.safe_load(file)
 
 # -- INITIALIZE EACH COMPONENT --
@@ -200,10 +200,10 @@ split_dataset = SplitDataset(
 # interest_point_detection.run()
 # interest_point_matching_rigid.run()
 # solver_rigid.run()
-solver_multi_channel_rigid.run()
+# solver_multi_channel_rigid.run()
 # interest_point_matching_affine.run()
 # solver_affine.run()
-# solver_multi_channel_affine.run()
+solver_multi_channel_affine.run()
 # split_dataset.run()
 # interest_point_matching_split_affine.run()
 # solver_split_affine.run()

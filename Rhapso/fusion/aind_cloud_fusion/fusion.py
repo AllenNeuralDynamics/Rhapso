@@ -4,8 +4,6 @@ from __future__ import annotations
 import logging
 import time
 from typing import Optional
-import dask.array as da
-from dask import delayed
 import numpy as np
 import s3fs
 import tensorstore as ts
@@ -17,6 +15,7 @@ from . import cloud_queue as cq
 from . import geometry as geometry
 from . import input_output as input_output
 from . import fusion_utils as utils
+import ray
 
 def initialize_fusion(
     dataset: input_output.Dataset,
@@ -40,7 +39,7 @@ def initialize_fusion(
     """
 
     # Output Data Structures-- tile_arrays, tile_transforms
-    tile_arrays: dict[int, input_output.InputArray] = dataset.tile_volumes_tczyx
+    tile_arrays, tile_paths = dataset.tile_volumes_tczyx
     tile_transforms: dict[int, list[geometry.Transform]] = (
         dataset.tile_transforms_zyx
     )
@@ -123,6 +122,7 @@ def initialize_fusion(
         tile_aabbs,
         OUTPUT_VOLUME_SIZE,
         OUTPUT_VOLUME_ORIGIN,
+        tile_paths
     )
 
 
@@ -314,13 +314,14 @@ def run_fusion(  # noqa: C901
                                            input_s3_path, 
                                            channel_num, 
                                            datastore=datastore)
-    a, b, c, d, e, f = initialize_fusion(dataset, output_params)
+    a, b, c, d, e, f, g = initialize_fusion(dataset, output_params)
     tile_arrays = a
     tile_transforms = b
     tile_sizes_zyx = c
     tile_aabbs = d
     output_volume_size = e
     output_volume_origin = f
+    tile_paths = g
     output_volume = initialize_output_volume(output_params, output_volume_size)
     tile_layout = utils.parse_yx_tile_layout(xml_path, channel_num)
 
@@ -341,16 +342,10 @@ def run_fusion(  # noqa: C901
     # CPU_CELL_SIZE = (512, 256, 256)
     CPU_CELL_SIZE = (128, 128, 128)
 
-    GPU_CELL_SIZE = calculate_gpu_cell_size(output_volume_size)
     if output_params.chunksize != DEFAULT_CHUNKSIZE:
         if cpu_cell_size is None or gpu_cell_size is None:
             raise ValueError('Custom CPU/GPU cell sizes must be provided for custom output chunksize.')
         CPU_CELL_SIZE = cpu_cell_size
-        GPU_CELL_SIZE = gpu_cell_size
-    if cpu_cell_size:
-        CPU_CELL_SIZE = cpu_cell_size
-    if gpu_cell_size:
-        GPU_CELL_SIZE = gpu_cell_size
 
     # Start GPU Runtime
     # p = torch.multiprocessing.Process(
@@ -389,37 +384,81 @@ def run_fusion(  # noqa: C901
     LOGGER.info(f"CPU Total Cells: {total_cells}")
     LOGGER.info(f"CPU Batch Size: {batch_size}")
 
-    delayed_jobs = []
-    for i, (curr_cell, src_ids) in enumerate(overlap_volume_sampler):
-        delayed_job = delayed(cpu_fusion)(tile_arrays,
-                                        tile_transforms,
-                                        tile_sizes_zyx,
-                                        tile_aabbs,
-                                        output_volume_size,
-                                        output_volume_origin,
-                                        output_volume,
-                                        blend_module,
-                                        curr_cell,
-                                        src_ids
-                                        )
-        delayed_jobs.append(delayed_job)
+    batch_start = time.time()
+    processed_in_batch = 0
+    tile_arrays = []
 
-        if len(delayed_jobs) == batch_size:
-            LOGGER.info(f"CPU: Calculating up to {i}/{total_cells}...")
-            da.compute(*delayed_jobs)
-            delayed_jobs = []
-            LOGGER.info(
-                f"CPU: Finished up to {i}/{total_cells}. Batch time: {time.time() - batch_start}"
-            )
-            batch_start = time.time()
+    # Distribute with Ray approach
+    # @ray.remote
+    # def process_fusion_task(curr_cell, src_ids, tile_arrays, tile_transforms, tile_sizes_zyx, tile_aabbs,
+    #                         output_volume_size, output_volume_origin, output_volume, blend_module, tile_paths):
+        
+    #     cpu_fusion(tile_arrays, tile_transforms, tile_sizes_zyx, tile_aabbs, output_volume_size, output_volume_origin,
+    #                output_volume, blend_module, curr_cell, src_ids, tile_paths)
+        
+    #     return {
+    #         'cell': curr_cell,
+    #         'src_count': len(src_ids)
+    #     }
+
+    # # Submit tasks to Ray (same structure as your DoG example)
+    # futures = [
+    #     process_fusion_task.remote(curr_cell, src_ids, tile_arrays, tile_transforms, tile_sizes_zyx, tile_aabbs,
+    #                                output_volume_size, output_volume_origin, output_volume, blend_module, tile_paths)
+    #     for (curr_cell, src_ids) in overlap_volume_sampler
+    # ]
+
+    # # Gather results (will raise if any task errored)
+    # results = ray.get(futures)
+
+    # Iterative approach
+    for (curr_cell, src_ids) in overlap_volume_sampler:
+        cpu_fusion(
+            tile_arrays,
+            tile_transforms,
+            tile_sizes_zyx,
+            tile_aabbs,
+            output_volume_size,
+            output_volume_origin,
+            output_volume,
+            blend_module,
+            curr_cell,
+            src_ids,
+            tile_paths
+        )
+
+    # Dask distributed approach (single machine)
+    # delayed_jobs = []
+    # for i, (curr_cell, src_ids) in enumerate(overlap_volume_sampler):
+    #     delayed_job = delayed(cpu_fusion)(tile_arrays,
+    #                                     tile_transforms,
+    #                                     tile_sizes_zyx,
+    #                                     tile_aabbs,
+    #                                     output_volume_size,
+    #                                     output_volume_origin,
+    #                                     output_volume,
+    #                                     blend_module,
+    #                                     curr_cell,
+    #                                     src_ids
+    #                                     )
+    #     delayed_jobs.append(delayed_job)
+
+    #     if len(delayed_jobs) == batch_size:
+    #         LOGGER.info(f"CPU: Calculating up to {i}/{total_cells}...")
+    #         da.compute(*delayed_jobs)
+    #         delayed_jobs = []
+    #         LOGGER.info(
+    #             f"CPU: Finished up to {i}/{total_cells}. Batch time: {time.time() - batch_start}"
+    #         )
+    #         batch_start = time.time()
 
     # Compute remaining cells
-    LOGGER.info(f"CPU: Calculating up to {i}/{total_cells}...")
-    da.compute(*delayed_jobs)
-    delayed_jobs = []
-    LOGGER.info(
-        f"CPU: Finished up to {i}/{total_cells}. Batch time: {time.time() - batch_start}"
-    )
+    # LOGGER.info(f"CPU: Calculating up to {i}/{total_cells}...")
+    # da.compute(*delayed_jobs)
+    # delayed_jobs = []
+    # LOGGER.info(
+    #     f"CPU: Finished up to {i}/{total_cells}. Batch time: {time.time() - batch_start}"
+    # )
 
     # p.join()
     # p.close()
@@ -435,10 +474,14 @@ def cpu_fusion(
     output_volume: input_output.OutputArray,
     blend_module: blend.BlendingModule,
     cell_aabb: geometry.AABB,
-    src_ids: list[int]
+    src_ids: list[int],
+    tile_paths
 ):
     overlap_contributions: list[torch.Tensor] = []
+    s3 = s3fs.S3FileSystem(anon=False)
+    print("we are in cpu fusion")
     for t_id in src_ids:
+        print("we are in for loop inside cpu fusion")
         # Retrieve source image
         image_slice: tuple[slice, slice, slice, slice, slice] = \
                 utils.calculate_image_crop(cell_aabb,
@@ -446,7 +489,13 @@ def cpu_fusion(
                                             tile_transforms[t_id],
                                             tile_sizes_zyx[t_id],
                                             device='cpu')
-        src_img = tile_arrays[t_id][image_slice]
+        src_path = tile_paths[t_id]
+        store = s3fs.S3Map(root=src_path, s3=s3)
+        zarr_arr = zarr.open(store=store, mode="r")
+        src_img = zarr_arr[image_slice]
+
+        # src_img = tile_arrays[t_id][image_slice]
+        
         src_tensor = torch.Tensor(src_img.astype(np.int16))
 
         # Calculate sample field
@@ -473,136 +522,19 @@ def cpu_fusion(
                                     })
 
     # Write
-    output_slice = (
-        slice(0, 1),
-        slice(0, 1),
-        slice(cell_aabb[0], cell_aabb[1]),
-        slice(cell_aabb[2], cell_aabb[3]),
-        slice(cell_aabb[4], cell_aabb[5]),
-    )
+    # output_slice = (
+    #     slice(0, 1),
+    #     slice(0, 1),
+    #     slice(cell_aabb[0], cell_aabb[1]),
+    #     slice(cell_aabb[2], cell_aabb[3]),
+    #     slice(cell_aabb[4], cell_aabb[5]),
+    # )
 
-    # Convert from float32 -> canonical uint16
-    blended_cell = np.nan_to_num(blended_cell)
-    blended_cell = np.clip(blended_cell, 0, 65535)
-    output_chunk = blended_cell.astype(np.uint16)
-    output_volume[output_slice] = output_chunk
-
-
-# No blending
-def gpu_fusion(
-    input_s3_path: str,
-    xml_path: str,
-    channel_num: int,
-    output_params: input_output.OutputParameters,
-    tile_layout: list[list[int]],
-    output_volume: input_output.OutputArray,
-    cell_size: tuple[int, int, int],
-    volume_sampler_stride: int,
-    volume_sampler_start: int,
-    datastore: int = 0,
-):
-    """
-    NOTE:
-    ONLY INTERPOLATION, NO BLENDING.
-    Only intended to be used on non-overlap regions
-    for ultra-fast interpolation.
-    """
-
-    dataset = input_output.BigStitcherDatasetChannel(xml_path, 
-                                           input_s3_path, 
-                                           channel_num, 
-                                           datastore=datastore)
-    a, b, c, d, e, f = initialize_fusion(dataset, output_params)
-    tile_arrays = a
-    tile_transforms = b
-    tile_sizes_zyx = c
-    tile_aabbs = d
-    output_volume_size = e
-    output_volume_origin = f
-
-    dataset = CloudDataset(tile_arrays,
-                            tile_transforms,
-                            tile_sizes_zyx,
-                            tile_aabbs,
-                            output_volume_size,
-                            output_volume_origin,
-                            cell_size)
-
-    volume_sampler = FusionVolumeSampler(tile_transforms,
-                                        tile_sizes_zyx,
-                                        tile_aabbs,
-                                        output_volume_size,
-                                        output_volume_origin,
-                                        cell_size,
-                                        output_params.chunksize[2:],
-                                        tile_layout,
-                                        traverse_overlap = False,
-                                        stride = volume_sampler_stride,
-                                        start = volume_sampler_start)
-
-    cloud_dataloader = cq.CloudDataloader(dataset,
-                                          volume_sampler,
-                                          num_workers=3)
-
-    batch_start = time.time()
-    total_cells = len(volume_sampler)
-    batch_size = 40
-    print(f'GPU Cell Size: {cell_size}')
-    print(f'GPU Total cells: {total_cells}')
-    print(f'GPU Batch size: {batch_size}')
-
-    for i, (cell_aabb, src_ids, src_tensors) in enumerate(cloud_dataloader):
-        # Extract only tensor in src tensors
-        t_id = src_ids[0]
-        src_cell = src_tensors[0]
-
-        # Interpolation on first GPU
-        sample_field = \
-        utils.calculate_sample_field(cell_aabb,
-                                    output_volume_origin,
-                                    tile_transforms[t_id],
-                                    tile_sizes_zyx[t_id],
-                                    device='cuda:0')
-        interpolated_cell = utils.interpolate(src_cell,
-                                        sample_field,
-                                        device='cuda:0')
-
-        # Write
-        output_slice = (
-                slice(0, 1),
-                slice(0, 1),
-                slice(cell_aabb[0], cell_aabb[1]),
-                slice(cell_aabb[2], cell_aabb[3]),
-                slice(cell_aabb[4], cell_aabb[5]),
-            )
-
-        # Convert from float16 -> canonical uint16
-        output_chunk = np.array(interpolated_cell.cpu()).astype(np.uint16)
-        output_volume[output_slice] = output_chunk
-
-        if i % batch_size == 0:
-            print(f"GPU: Finished up to {i}/{total_cells}. Batch time: {time.time() - batch_start}")
-            batch_start = time.time()
-
-    print(f"GPU: Finished up to {i}/{total_cells}. Batch time: {time.time() - batch_start}")
-
-
-
-def calculate_gpu_cell_size(
-    output_volume_size: tuple[int, int, int]
-) -> tuple[int, int, int]:
-    """
-    Heuristic lookup table for 16 GB GPU.
-    Cell sizes are fit to canonical (128, 128, 128) chunk size.
-    """
-
-    gpu_cell_sizes = {1024: (1024, 512, 512),  # Good for exaspim
-                      512: (512, 640, 640),    # Good smartspim
-                      384: (384, 768, 768)}    # Good for dispim
-    closest_key = min(gpu_cell_sizes.keys(), key=lambda k: abs(k - output_volume_size[0]))
-
-    return gpu_cell_sizes[closest_key]
-
+    # # Convert from float32 -> canonical uint16
+    # blended_cell = np.nan_to_num(blended_cell)
+    # blended_cell = np.clip(blended_cell, 0, 65535)
+    # output_chunk = blended_cell.astype(np.uint16)
+    # output_volume[output_slice] = output_chunk
 
 class CloudDataset(Dataset):
     def __init__(
@@ -818,6 +750,8 @@ class FusionVolumeSampler(cq.VolumeSampler):
                                     int(np.floor(o_aabb[4])),
                                     int(np.ceil(o_aabb[5])))
                                     for o_aabb in self.non_overlap_regions]
+        
+        print()
 
     def _check_true_collision(
         self,

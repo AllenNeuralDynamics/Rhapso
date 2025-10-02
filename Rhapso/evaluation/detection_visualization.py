@@ -35,11 +35,11 @@ def visualize_points(full_path):
         zarray = root[dataset_rel_path]
         data_int = zarray[:]
 
-    intensities = data_int
+    # intensities = data_int
 
     print("\n--- Detection Stats (Raw Rhapso Output) ---")
     print(f"Total Points: {len(data)}")
-    print(f"Intensity: min={intensities.min():.2f}, max={intensities.max():.2f}, mean={intensities.mean():.2f}, std={intensities.std():.2f}")
+    # print(f"Intensity: min={intensities.min():.2f}, max={intensities.max():.2f}, mean={intensities.mean():.2f}, std={intensities.std():.2f}")
 
     for dim, name in zip(range(3), ['X', 'Y', 'Z']):
         values = data[:, dim]
@@ -60,15 +60,16 @@ def visualize_points(full_path):
     ax.set_xlabel('X')
     ax.set_ylabel('Y')
     ax.set_zlabel('Z')
-    ax.set_title(f"Interest Points in 3D Rhapso (showing {len(sample)} points)")
+    ax.set_title(f"Interest Points in 3D Rhapso 561 (showing {len(sample)} points)")
     plt.tight_layout()
     plt.show()
 
-# base_path = "s3://rhapso-matching-test/interestpoints.n5"
-base_path = "/Users/seanfite/Desktop/Rhapso-Output/interestpoints.n5"
+# base_path = "s3://rhapso-matching-test/488/interestpoints.n5"
+base_path = "s3://rhapso-matching-test/514/interestpoints.n5"
+# base_path = "/Users/seanfite/Desktop/Rhapso-Output/interestpoints.n5"
 
 for tp_id in [0]:
-    for setup_id in range(20):  
+    for setup_id in range(9):  
         path = f"{base_path}/tpId_{tp_id}_viewSetupId_{setup_id}/beads/interestpoints/loc"
         print(f"Reading: {path}")
         visualize_points(path)

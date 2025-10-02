@@ -15,6 +15,9 @@ import aind_cloud_fusion.script_utils as utils
 import xml.etree.ElementTree as ET
 import boto3
 from io import BytesIO
+# from .aind_cloud_fusion import fusion as fusion
+# from .aind_cloud_fusion import input_output as input_output
+# from .aind_cloud_fusion import script_utils as utils
 
 def get_tile_zyx_resolution(input_xml_path: str) -> list[int]: 
     """
@@ -80,8 +83,8 @@ def execute_job(yml_path, xml_path, output_path):
 if __name__ == '__main__':
 
     xml_path = 's3://rhapso-zar-sample/dataset.xml'
-    yml_path = 's3://rhapso-matching-test/worker_config.yml'
-    output_path = 's3://rhapso-zarr-glue/fusion'
+    yml_path = 's3://sean-fusion/worker_config.yml'
+    output_path = 's3://sean-fusion/fusion-output'
 
     print(f'{xml_path=}')
     print(f'{yml_path=}')

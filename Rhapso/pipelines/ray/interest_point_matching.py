@@ -59,7 +59,7 @@ class InterestPointMatching:
         #     all_results.append(filtered_inliers)
 
         # Distribute interest point matching with Ray
-        @ray.remote
+        @ray.remote(num_cpus=2)
         def match_pair(pointsA, pointsB, viewA_str, viewB_str, label, num_neighbors, redundancy, significance, num_required_neighbors, 
                        match_type, inlier_factor, lambda_value, num_iterations, model_min_matches, regularization_weight, search_radius,
                        view_registrations, input_type, image_file_prefix): 

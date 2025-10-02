@@ -257,7 +257,7 @@ class PreAlignTiles:
         Greedily seed an initial alignment
         """
         for tiles in tile_list:
-            random.shuffle(tiles['tiles'])
+            # random.shuffle(tiles['tiles'])
 
             if getattr(self, "fixed_tile", None):
                 seed = next((t for t in tiles['tiles'] if t.get('view') == self.fixed_tile), None)
@@ -317,7 +317,6 @@ class PreAlignTiles:
         """
         Executes the entry point of the script.
         """
-        # tiles = self.merge_channels_per_view(tiles)
         unaligned_tiles = self.pre_align(tiles)
 
         if len(unaligned_tiles) > 0:

@@ -161,6 +161,11 @@ class DataPrep():
         """
         data_map_list = []
         for view_transform_matrices in self.view_transform_matrices_list:
+            self.connected_views = {}
+            self.corresponding_interest_points = {}
+            self.interest_points = {}
+            self.label_map_global = {}
+
             self.interest_points_df = view_transform_matrices['dataframes']['view_interest_points']
             self.n5_input_path = view_transform_matrices['n5_path']
             self.view_transform_matrices = view_transform_matrices
@@ -181,17 +186,6 @@ class DataPrep():
                     continue
 
             self.view_id_set = sorted(view_id_set, key=lambda x: (int(x[0]), int(x[1])))
-            
-            # data_map_list.append({
-            #     'output_xml_path': view_transform_matrices['output_xml_path'],
-            #     'n5_path': view_transform_matrices['n5_path'],
-            #     'view_transform_matrices': view_transform_matrices['view_transform_matrices'],
-            #     'connected_views': self.connected_views, 
-            #     'corresponding_interest_points': self.corresponding_interest_points, 
-            #     'interest_points': self.interest_points, 
-            #     'label_map_global': self.label_map_global, 
-            #     'view_id_set': self.view_id_set}
-            #     )
 
             data_map_list.append({
                 'output_xml_path': view_transform_matrices['output_xml_path'],
