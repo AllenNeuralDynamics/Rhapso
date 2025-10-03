@@ -9,15 +9,15 @@ import time
 from pathlib import Path
 import xml.etree.ElementTree as ET
 import yaml
-import aind_cloud_fusion.fusion as fusion
-import aind_cloud_fusion.input_output as input_output
-import aind_cloud_fusion.script_utils as utils
+# import aind_cloud_fusion.fusion as fusion
+# import aind_cloud_fusion.input_output as input_output
+# import aind_cloud_fusion.script_utils as utils
 import xml.etree.ElementTree as ET
 import boto3
 from io import BytesIO
-# from .aind_cloud_fusion import fusion as fusion
-# from .aind_cloud_fusion import input_output as input_output
-# from .aind_cloud_fusion import script_utils as utils
+from .aind_cloud_fusion import fusion as fusion
+from .aind_cloud_fusion import input_output as input_output
+from .aind_cloud_fusion import script_utils as utils
 
 def get_tile_zyx_resolution(input_xml_path: str) -> list[int]: 
     """

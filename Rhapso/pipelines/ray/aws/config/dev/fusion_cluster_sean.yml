@@ -2,8 +2,6 @@ cluster_name: rhapso-ray-fusion-cluster-sean-2
 max_workers: 40
 min_workers: 40
 
-# change to 11
-
 provider:
   type: aws
   region: us-west-2
@@ -75,7 +73,7 @@ worker_start_ray_commands:
 # rm -rf ~/.cache/ray
 
 # ACCESS RAY DASHBOARD
-# ssh -i /Users/seanfite/Desktop/AllenInstitute/Rhapso/Auth/AWS/EC2-SSH-Key/sean-rhapso.pem -L 8265:localhost:8265 ubuntu@52.43.27.108
+# ssh -i /Users/seanfite/Desktop/AllenInstitute/Rhapso/Auth/AWS/EC2-SSH-Key/sean-rhapso.pem -L 8265:localhost:8265 ubuntu@34.220.18.17
 # http://localhost:8265
 
 # TO FIX

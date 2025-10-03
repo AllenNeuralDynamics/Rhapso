@@ -339,8 +339,8 @@ def run_fusion(  # noqa: C901
 
     # Set CPU/GPU cell_size
     DEFAULT_CHUNKSIZE = (1, 1, 128, 128, 128)
-    # CPU_CELL_SIZE = (512, 256, 256)
-    CPU_CELL_SIZE = (128, 128, 128)
+    CPU_CELL_SIZE = (512, 256, 256)
+    # CPU_CELL_SIZE = (128, 128, 128)
 
     if output_params.chunksize != DEFAULT_CHUNKSIZE:
         if cpu_cell_size is None or gpu_cell_size is None:
@@ -377,55 +377,50 @@ def run_fusion(  # noqa: C901
                                                 stride=volume_sampler_stride,
                                                 start=volume_sampler_start)
 
-    batch_start = time.time()
     total_cells = len(overlap_volume_sampler)
-    batch_size = 200
     LOGGER.info(f"CPU Cell Size: {CPU_CELL_SIZE}")
     LOGGER.info(f"CPU Total Cells: {total_cells}")
-    LOGGER.info(f"CPU Batch Size: {batch_size}")
-
-    batch_start = time.time()
-    processed_in_batch = 0
     tile_arrays = []
 
     # Distribute with Ray approach
-    # @ray.remote
-    # def process_fusion_task(curr_cell, src_ids, tile_arrays, tile_transforms, tile_sizes_zyx, tile_aabbs,
-    #                         output_volume_size, output_volume_origin, output_volume, blend_module, tile_paths):
+    @ray.remote
+    def process_fusion_task(curr_cell, src_ids, tile_arrays, tile_transforms, tile_sizes_zyx, tile_aabbs,
+                            output_volume_size, output_volume_origin, output_volume, blend_module, tile_paths):
+        print("start cpu fusion")
+        cpu_fusion(tile_arrays, tile_transforms, tile_sizes_zyx, tile_aabbs, output_volume_size, output_volume_origin,
+                   output_volume, blend_module, curr_cell, src_ids, tile_paths)
+        print("finish cpu fusion")
         
-    #     cpu_fusion(tile_arrays, tile_transforms, tile_sizes_zyx, tile_aabbs, output_volume_size, output_volume_origin,
-    #                output_volume, blend_module, curr_cell, src_ids, tile_paths)
-        
-    #     return {
-    #         'cell': curr_cell,
-    #         'src_count': len(src_ids)
-    #     }
+        return {
+            'cell': curr_cell,
+            'src_count': len(src_ids)
+        }
 
-    # # Submit tasks to Ray (same structure as your DoG example)
-    # futures = [
-    #     process_fusion_task.remote(curr_cell, src_ids, tile_arrays, tile_transforms, tile_sizes_zyx, tile_aabbs,
-    #                                output_volume_size, output_volume_origin, output_volume, blend_module, tile_paths)
-    #     for (curr_cell, src_ids) in overlap_volume_sampler
-    # ]
+    # Submit tasks to Ray (same structure as your DoG example)
+    futures = [
+        process_fusion_task.remote(curr_cell, src_ids, tile_arrays, tile_transforms, tile_sizes_zyx, tile_aabbs,
+                                   output_volume_size, output_volume_origin, output_volume, blend_module, tile_paths)
+        for (curr_cell, src_ids) in overlap_volume_sampler
+    ]
 
-    # # Gather results (will raise if any task errored)
-    # results = ray.get(futures)
+    # Gather results (will raise if any task errored)
+    results = ray.get(futures)
 
     # Iterative approach
-    for (curr_cell, src_ids) in overlap_volume_sampler:
-        cpu_fusion(
-            tile_arrays,
-            tile_transforms,
-            tile_sizes_zyx,
-            tile_aabbs,
-            output_volume_size,
-            output_volume_origin,
-            output_volume,
-            blend_module,
-            curr_cell,
-            src_ids,
-            tile_paths
-        )
+    # for (curr_cell, src_ids) in overlap_volume_sampler:
+    #     cpu_fusion(
+    #         tile_arrays,
+    #         tile_transforms,
+    #         tile_sizes_zyx,
+    #         tile_aabbs,
+    #         output_volume_size,
+    #         output_volume_origin,
+    #         output_volume,
+    #         blend_module,
+    #         curr_cell,
+    #         src_ids,
+    #         tile_paths
+    #     )
 
     # Dask distributed approach (single machine)
     # delayed_jobs = []
@@ -479,9 +474,8 @@ def cpu_fusion(
 ):
     overlap_contributions: list[torch.Tensor] = []
     s3 = s3fs.S3FileSystem(anon=False)
-    print("we are in cpu fusion")
+
     for t_id in src_ids:
-        print("we are in for loop inside cpu fusion")
         # Retrieve source image
         image_slice: tuple[slice, slice, slice, slice, slice] = \
                 utils.calculate_image_crop(cell_aabb,
@@ -535,6 +529,8 @@ def cpu_fusion(
     # blended_cell = np.clip(blended_cell, 0, 65535)
     # output_chunk = blended_cell.astype(np.uint16)
     # output_volume[output_slice] = output_chunk
+
+    # send to s3
 
 class CloudDataset(Dataset):
     def __init__(
