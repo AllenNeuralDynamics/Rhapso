@@ -118,7 +118,7 @@ def execute_job(yml_path, xml_path, output_path, ray_config_path):
         output_params = input_output.OutputParameters(
             path=output_s3_path,
             resolution_zyx=resolution_zyx,
-            chunk_size=custom_chunksize
+            chunksize=custom_chunksize
         )
         blend_option = 'weighted_linear_blending'
 
@@ -148,7 +148,7 @@ def execute_job(yml_path, xml_path, output_path, ray_config_path):
             "output_params = input_output.OutputParameters(\n"
             f"    path=\\\"{output_s3_path}\\\",\n"
             f"    resolution_zyx={resolution_zyx},\n"
-            "    chunk_size=custom_chunksize\n"
+            "    chunksize=custom_chunksize\n"
             ")\n"
             "\n"
             "print(f'Starting fusion at: {{datetime.now()}}')\n"
@@ -161,7 +161,6 @@ def execute_job(yml_path, xml_path, output_path, ray_config_path):
             f"    {channel},\n"
             "    output_params,\n"
             f"    \\\"{blend_option}\\\",\n"
-            "    batch_size=150,\n"
             "    cpu_cell_size=custom_cpu_cell_size\n"
             ")\n"
             "\n"
@@ -250,7 +249,7 @@ if __name__ == '__main__':
     xml_path = "s3://martin-test-bucket/fusion/dataset.xml"
     yml_path = 's3://martin-test-bucket/fusion/worker_config.yml'
     output_path = 's3://martin-test-bucket/fusion/results/'
-    ray_config_path = '/mnt/c/Users/marti/Documents/allen/repos/Rhapso-Fusion/Rhapso/pipelines/ray/aws/config/dev/fusion_cluster_martin.yml'
+    ray_config_path = '/mnt/c/Users/marti/Documents/allen/repos/r2/Rhapso/pipelines/ray/aws/config/dev/fusion_cluster_martin.yml'
 
     print(f'{xml_path=}')
     print(f'{yml_path=}')
