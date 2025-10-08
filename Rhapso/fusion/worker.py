@@ -85,126 +85,144 @@ def start_cluster(yml_path, cwd):
         cleanup_cluster(yml_path, cwd)
         raise
 
-def execute_job(yml_path, xml_path, output_path, ray_config_path):
-    # Get the directory containing the ray config file
-    ray_config_dir = Path(ray_config_path).parent
+def execute_job(input_path, output_s3_path, channel, xml_path, output_path, ray_config_path, execute_on_ray=True):
+    # Prep inputs - common to both Ray and local execution
+    resolution_zyx = get_tile_zyx_resolution(xml_path)
+
+    custom_chunksize = (1, 1, 128, 128, 128)
+    custom_cpu_cell_size = (512, 256, 256)        
+    # custom_chunksize = (1, 1, 3584, 1800, 3904)
+    # custom_cpu_cell_size = (3584, 900, 1952) 
+
+    output_params = input_output.OutputParameters(
+        path=output_s3_path,
+        resolution_zyx=resolution_zyx,
+        chunksize=custom_chunksize
+    )
+    blend_option = 'weighted_linear_blending'
+
+    if execute_on_ray:
+        # Execute on Ray cluster
+        print("\n🚀 Running fusion on Ray cluster")
+        
+        # Get the directory containing the ray config file
+        ray_config_dir = Path(ray_config_path).parent
+        
+        # Clean up any existing cluster first
+        print("\n=== Clean up any existing cluster ===")
+        print("$", " ".join(["ray", "down", Path(ray_config_path).name, "-y"]))
+        try:
+            subprocess.run(["ray", "down", Path(ray_config_path).name, "-y"], cwd=ray_config_dir, capture_output=False, text=True)
+            print("✅ Cleanup completed (or no existing cluster)")
+        except:
+            print("ℹ️  No existing cluster to clean up")
+        
+        # Start the Ray cluster
+        start_cluster(Path(ray_config_path).name, ray_config_dir)
+        
+        try:
+            # Create the fusion command to run on the cluster (following alignment_pipeline.py pattern)
+            fusion_cmd = (
+                "bash -lc \""
+                "python3 - <<\\\"PY\\\"\n"
+                "import sys, os\n"
+                "sys.path.append('/home/ubuntu')\n"
+                "import Rhapso.fusion.aind_cloud_fusion.fusion as fusion\n"
+                "import Rhapso.fusion.aind_cloud_fusion.input_output as input_output\n"
+                "from datetime import datetime\n"
+                "\n"
+                "# Set environment variables\n"
+                "os.environ[\\\"CUDA_VISIBLE_DEVICES\\\"] = \\\"\\\"\n"
+                "os.environ[\\\"PYTORCH_CUDA_ALLOC_CONF\\\"] = \\\"max_split_size_mb:32\\\"\n"
+                "# Set Ray serialization settings to handle large objects\n"
+                "os.environ[\\\"RAY_OBJECT_STORE_ALLOW_SLOW_STORAGE\\\"] = \\\"1\\\"\n"
+                "os.environ[\\\"RAY_OBJECT_STORE_MEMORY\\\"] = \\\"10000000000\\\"\n"
+                "\n"
+                "# Define custom chunksize for large volumes\n"
+                f"custom_chunksize = {custom_chunksize}\n"
+                "# Workaround: proportional cell_size similar to working example to satisfy incorrect validation\n"
+                f"custom_cpu_cell_size = {custom_cpu_cell_size}\n"
+                "\n"
+                "# Create output parameters\n"
+                "output_params = input_output.OutputParameters(\n"
+                f"    path=\\\"{output_s3_path}\\\",\n"
+                f"    resolution_zyx={resolution_zyx},\n"
+                "    chunksize=custom_chunksize\n"
+                ")\n"
+                "\n"
+                "print(f'Starting fusion at: {{datetime.now()}}')\n"
+                f"print(f'Output fused zarr will be saved to: {output_s3_path}')\n"
+                "\n"
+                "# Run fusion with batch_size=150 and custom cell size\n"
+                "fusion.run_fusion(\n"
+                f"    \\\"{input_path}\\\",\n"
+                f"    \\\"{xml_path}\\\",\n"
+                f"    {channel},\n"
+                "    output_params,\n"
+                f"    \\\"{blend_option}\\\",\n"
+                "    cpu_cell_size=custom_cpu_cell_size\n"
+                ")\n"
+                "\n"
+                "print(f'Fusion completed at: {{datetime.now()}}')\n"
+                f"print(f'Output fused zarr saved to: {output_s3_path}')\n"
+                "PY\n"
+                "\""
+            )
+
+            # Run fusion on the cluster using ray exec
+            print(f'Starting fusion on cluster at: {datetime.now()}')
+            print(f'Output fused zarr will be saved to: {output_s3_path}')
+            
+            # Run with timeout and better error handling
+            try:
+                result = subprocess.run(
+                    ["ray", "exec", Path(ray_config_path).name, fusion_cmd],
+                    cwd=ray_config_dir,
+                    capture_output=False,
+                    text=True,
+                    check=True,
+                    timeout=86400  # 24 hour timeout
+                )
+            except subprocess.TimeoutExpired:
+                print("❌ Fusion timed out after 24 hours")
+                cleanup_cluster(Path(ray_config_path).name, ray_config_dir)
+                raise
+            except subprocess.CalledProcessError as e:
+                print(f"❌ Fusion failed with exit code {e.returncode}")
+                cleanup_cluster(Path(ray_config_path).name, ray_config_dir)
+                raise
+            
+            print(f'Fusion completed at: {datetime.now()}')
+            print(f'Output fused zarr saved to: {output_s3_path}')
+            
+        except Exception as e:
+            print(f"❌ Fusion error: {e}")
+            # Clean up cluster on fusion error
+            cleanup_cluster(Path(ray_config_path).name, ray_config_dir)
+            raise
+        
+        finally:
+            # Always try to clean up, even if everything succeeded
+            cleanup_cluster(Path(ray_config_path).name, ray_config_dir)
     
-    # Clean up any existing cluster first
-    print("\n=== Clean up any existing cluster ===")
-    print("$", " ".join(["ray", "down", Path(ray_config_path).name, "-y"]))
-    try:
-        subprocess.run(["ray", "down", Path(ray_config_path).name, "-y"], cwd=ray_config_dir, capture_output=False, text=True)
-        print("✅ Cleanup completed (or no existing cluster)")
-    except:
-        print("ℹ️  No existing cluster to clean up")
-    
-    # Start the Ray cluster
-    start_cluster(Path(ray_config_path).name, ray_config_dir)
-    
-    try:
-        # Prep inputs
-        configs = utils.read_config_yaml(yml_path)
-        input_path = configs['input_path']
-        output_s3_path = configs['output_path']
-        channel = configs['channel']
-
-        resolution_zyx = get_tile_zyx_resolution(xml_path)
-
-        custom_chunksize = (1, 1, 128, 128, 128)
-        custom_cpu_cell_size = (512, 256, 256)        
-        # custom_chunksize = (1, 1, 3584, 1800, 3904)
-        # custom_cpu_cell_size = (3584, 900, 1952) 
-
-        output_params = input_output.OutputParameters(
-            path=output_s3_path,
-            resolution_zyx=resolution_zyx,
-            chunksize=custom_chunksize
-        )
-        blend_option = 'weighted_linear_blending'
-
-        # Create the fusion command to run on the cluster (following alignment_pipeline.py pattern)
-        fusion_cmd = (
-            "bash -lc \""
-            "python3 - <<\\\"PY\\\"\n"
-            "import sys, os\n"
-            "sys.path.append('/home/ubuntu')\n"
-            "import Rhapso.fusion.aind_cloud_fusion.fusion as fusion\n"
-            "import Rhapso.fusion.aind_cloud_fusion.input_output as input_output\n"
-            "from datetime import datetime\n"
-            "\n"
-            "# Set environment variables\n"
-            "os.environ[\\\"CUDA_VISIBLE_DEVICES\\\"] = \\\"\\\"\n"
-            "os.environ[\\\"PYTORCH_CUDA_ALLOC_CONF\\\"] = \\\"max_split_size_mb:32\\\"\n"
-            "# Set Ray serialization settings to handle large objects\n"
-            "os.environ[\\\"RAY_OBJECT_STORE_ALLOW_SLOW_STORAGE\\\"] = \\\"1\\\"\n"
-            "os.environ[\\\"RAY_OBJECT_STORE_MEMORY\\\"] = \\\"10000000000\\\"\n"
-            "\n"
-            "# Define custom chunksize for large volumes\n"
-            f"custom_chunksize = {custom_chunksize}\n"
-            "# Workaround: proportional cell_size similar to working example to satisfy incorrect validation\n"
-            f"custom_cpu_cell_size = {custom_cpu_cell_size}\n"
-            "\n"
-            "# Create output parameters\n"
-            "output_params = input_output.OutputParameters(\n"
-            f"    path=\\\"{output_s3_path}\\\",\n"
-            f"    resolution_zyx={resolution_zyx},\n"
-            "    chunksize=custom_chunksize\n"
-            ")\n"
-            "\n"
-            "print(f'Starting fusion at: {{datetime.now()}}')\n"
-            f"print(f'Output fused zarr will be saved to: {output_s3_path}')\n"
-            "\n"
-            "# Run fusion with batch_size=150 and custom cell size\n"
-            "fusion.run_fusion(\n"
-            f"    \\\"{input_path}\\\",\n"
-            f"    \\\"{xml_path}\\\",\n"
-            f"    {channel},\n"
-            "    output_params,\n"
-            f"    \\\"{blend_option}\\\",\n"
-            "    cpu_cell_size=custom_cpu_cell_size\n"
-            ")\n"
-            "\n"
-            "print(f'Fusion completed at: {{datetime.now()}}')\n"
-            f"print(f'Output fused zarr saved to: {output_s3_path}')\n"
-            "PY\n"
-            "\""
-        )
-
-        # Run fusion on the cluster using ray exec
-        print(f'Starting fusion on cluster at: {datetime.now()}')
+    else:
+        # Execute locally
+        print("\n💻 Running fusion locally (no Ray cluster)")
+        print(f'Starting local fusion at: {datetime.now()}')
         print(f'Output fused zarr will be saved to: {output_s3_path}')
         
-        # Run with timeout and better error handling
-        try:
-            result = subprocess.run(
-                ["ray", "exec", Path(ray_config_path).name, fusion_cmd],
-                cwd=ray_config_dir,
-                capture_output=False,
-                text=True,
-                check=True,
-                timeout=86400  # 24 hour timeout
-            )
-        except subprocess.TimeoutExpired:
-            print("❌ Fusion timed out after 24 hours")
-            cleanup_cluster(Path(ray_config_path).name, ray_config_dir)
-            raise
-        except subprocess.CalledProcessError as e:
-            print(f"❌ Fusion failed with exit code {e.returncode}")
-            cleanup_cluster(Path(ray_config_path).name, ray_config_dir)
-            raise
+        # Run fusion locally
+        fusion.run_fusion(
+            input_path,
+            xml_path,
+            channel,
+            output_params,
+            blend_option,
+            cpu_cell_size=custom_cpu_cell_size
+        )
         
         print(f'Fusion completed at: {datetime.now()}')
         print(f'Output fused zarr saved to: {output_s3_path}')
-        
-    except Exception as e:
-        print(f"❌ Fusion error: {e}")
-        # Clean up cluster on fusion error
-        cleanup_cluster(Path(ray_config_path).name, ray_config_dir)
-        raise
-    
-    finally:
-        # Always try to clean up, even if everything succeeded
-        cleanup_cluster(Path(ray_config_path).name, ray_config_dir)
 
     # Log 'done' file for next capsule in pipeline.
     # Unique log filename
@@ -246,17 +264,31 @@ if __name__ == '__main__':
     print(f"Setting multiprocessing start method to 'forkserver': {mp.set_start_method('forkserver', force=True)}")
     print(f"New multiprocessing start method: {mp.get_start_method(allow_none=False)}")
 
+    input_path = "s3://aind-open-data/exaSPIM_708365_2024-04-29_12-46-15/SPIM.ome.zarr/"
+    from datetime import datetime
+    unique_folder = datetime.now().strftime("%Y%m%d_%H%M%S")
+    output_s3_path = f"s3://martin-test-bucket/fusion/{unique_folder}/outputFused.zarr/"
+    channel = 488
+    
     xml_path = "s3://martin-test-bucket/fusion/dataset.xml"
-    yml_path = 's3://martin-test-bucket/fusion/worker_config.yml'
     output_path = 's3://martin-test-bucket/fusion/results/'
     ray_config_path = '/mnt/c/Users/marti/Documents/allen/repos/r2/Rhapso/pipelines/ray/aws/config/dev/fusion_cluster_martin.yml'
+    
+    # Set to True to run on Ray cluster, False to run locally
+    execute_on_ray = False
 
+    print(f'{input_path=}')
+    print(f'{output_s3_path=}')
+    print(f'{channel=}')
     print(f'{xml_path=}')
-    print(f'{yml_path=}')
     print(f'{output_path=}')
     print(f'{ray_config_path=}')
+    print(f'{execute_on_ray=}')
 
-    execute_job(yml_path,
+    execute_job(input_path,
+                output_s3_path,
+                channel,
                 xml_path,
                 output_path,
-                ray_config_path)
+                ray_config_path,
+                execute_on_ray=execute_on_ray)

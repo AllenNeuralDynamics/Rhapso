@@ -147,7 +147,15 @@ def initialize_output_volume_dask(
     out_group = zarr.open_group(output_params.path, mode="w")
 
     # Cloud execuion
-    if output_params.path.startswith("s3"): 
+    if output_params.path.startswith("s3"):
+        print(f"\n{'='*80}")
+        print(f"[S3 OUTPUT] Initializing S3 filesystem for output")
+        print(f"[S3 OUTPUT] Path: {output_params.path}")
+        print(f"[S3 OUTPUT] Config:")
+        print(f"[S3 OUTPUT]   - max_pool_connections: 50")
+        print(f"[S3 OUTPUT]   - max_concurrent_requests: 20")
+        print(f"[S3 OUTPUT]   - total_max_attempts: 100")
+        print(f"[S3 OUTPUT]   - multipart_threshold: 64 MB")
         s3 = s3fs.S3FileSystem(
             config_kwargs={
                 "max_pool_connections": 50,
@@ -163,14 +171,28 @@ def initialize_output_volume_dask(
                 },
             }
         )
+        print(f"[S3 OUTPUT] Creating S3Map for zarr store...")
         store = s3fs.S3Map(root=output_params.path, s3=s3)
+        print(f"[S3 OUTPUT] Opening zarr group in append mode...")
         out_group = zarr.open(store=store, mode="a")
+        print(f"[S3 OUTPUT] ✓ S3 filesystem initialized successfully")
+        print(f"{'='*80}\n")
 
     path = "0"
     chunksize = output_params.chunksize
     datatype = output_params.dtype
     dimension_separator = "/"
     compressor = output_params.compressor
+    
+    if output_params.path.startswith("s3"):
+        print(f"\n[S3 OUTPUT] Creating zarr dataset...")
+        print(f"[S3 OUTPUT] Full path: {output_params.path}/{path}")
+        print(f"[S3 OUTPUT] Dataset configuration:")
+        print(f"[S3 OUTPUT]   - Shape: (1, 1, {output_volume_size[0]}, {output_volume_size[1]}, {output_volume_size[2]})")
+        print(f"[S3 OUTPUT]   - Chunk size: {chunksize}")
+        print(f"[S3 OUTPUT]   - Data type: {datatype}")
+        print(f"[S3 OUTPUT]   - Compressor: {compressor}")
+    
     output_volume = out_group.create_dataset(
         path,
         shape=(
@@ -187,6 +209,10 @@ def initialize_output_volume_dask(
         overwrite=True,
         fill_value=0,
     )
+    
+    if output_params.path.startswith("s3"):
+        print(f"[S3 OUTPUT] ✓ Zarr dataset created successfully")
+        print(f"[S3 OUTPUT] Ready to write fused data\n")
 
     return output_volume
 
@@ -210,6 +236,15 @@ def initialize_output_volume_tensorstore(
         output_volume_size[1],
         output_volume_size[2],
     ]
+    
+    print(f"\n{'='*80}")
+    print(f"[S3 OUTPUT TENSORSTORE] Initializing TensorStore with S3 backend")
+    print(f"[S3 OUTPUT TENSORSTORE] S3 bucket: {bucket}")
+    print(f"[S3 OUTPUT TENSORSTORE] S3 path: {path}")
+    print(f"[S3 OUTPUT TENSORSTORE] Full S3 path: s3://{bucket}/{path}")
+    print(f"[S3 OUTPUT TENSORSTORE] Output shape: {output_shape}")
+    print(f"[S3 OUTPUT TENSORSTORE] Chunks: {chunksize}")
+    print(f"{'='*80}\n")
 
     return ts.open(
         {
@@ -382,45 +417,47 @@ def run_fusion(  # noqa: C901
     LOGGER.info(f"CPU Total Cells: {total_cells}")
     tile_arrays = []
 
-    # Distribute with Ray approach
-    @ray.remote
-    def process_fusion_task(curr_cell, src_ids, tile_arrays, tile_transforms, tile_sizes_zyx, tile_aabbs,
-                            output_volume_size, output_volume_origin, output_volume, blend_module, tile_paths):
-        print("start cpu fusion")
-        cpu_fusion(tile_arrays, tile_transforms, tile_sizes_zyx, tile_aabbs, output_volume_size, output_volume_origin,
-                   output_volume, blend_module, curr_cell, src_ids, tile_paths)
-        print("finish cpu fusion")
+    # # ---------------------------------------------------------
+    # # Distribute with Ray approach
+    # @ray.remote
+    # def process_fusion_task(curr_cell, src_ids, tile_arrays, tile_transforms, tile_sizes_zyx, tile_aabbs,
+    #                         output_volume_size, output_volume_origin, output_volume, blend_module, tile_paths):
+    #     print("start cpu fusion")
+    #     cpu_fusion(tile_arrays, tile_transforms, tile_sizes_zyx, tile_aabbs, output_volume_size, output_volume_origin,
+    #                output_volume, blend_module, curr_cell, src_ids, tile_paths)
+    #     print("finish cpu fusion")
         
-        return {
-            'cell': curr_cell,
-            'src_count': len(src_ids)
-        }
+    #     return {
+    #         'cell': curr_cell,
+    #         'src_count': len(src_ids)
+    #     }
 
-    # Submit tasks to Ray (same structure as your DoG example)
-    futures = [
-        process_fusion_task.remote(curr_cell, src_ids, tile_arrays, tile_transforms, tile_sizes_zyx, tile_aabbs,
-                                   output_volume_size, output_volume_origin, output_volume, blend_module, tile_paths)
-        for (curr_cell, src_ids) in overlap_volume_sampler
-    ]
+    # # Submit tasks to Ray (same structure as your DoG example)
+    # futures = [
+    #     process_fusion_task.remote(curr_cell, src_ids, tile_arrays, tile_transforms, tile_sizes_zyx, tile_aabbs,
+    #                                output_volume_size, output_volume_origin, output_volume, blend_module, tile_paths)
+    #     for (curr_cell, src_ids) in overlap_volume_sampler
+    # ]
 
-    # Gather results (will raise if any task errored)
-    results = ray.get(futures)
+    # # Gather results (will raise if any task errored)
+    # results = ray.get(futures)
+    # # ---------------------------------------------------------
 
     # Iterative approach
-    # for (curr_cell, src_ids) in overlap_volume_sampler:
-    #     cpu_fusion(
-    #         tile_arrays,
-    #         tile_transforms,
-    #         tile_sizes_zyx,
-    #         tile_aabbs,
-    #         output_volume_size,
-    #         output_volume_origin,
-    #         output_volume,
-    #         blend_module,
-    #         curr_cell,
-    #         src_ids,
-    #         tile_paths
-    #     )
+    for (curr_cell, src_ids) in overlap_volume_sampler:
+        cpu_fusion(
+            tile_arrays,
+            tile_transforms,
+            tile_sizes_zyx,
+            tile_aabbs,
+            output_volume_size,
+            output_volume_origin,
+            output_volume,
+            blend_module,
+            curr_cell,
+            src_ids,
+            tile_paths
+        )
 
     # Dask distributed approach (single machine)
     # delayed_jobs = []
@@ -484,9 +521,11 @@ def cpu_fusion(
                                             tile_sizes_zyx[t_id],
                                             device='cpu')
         src_path = tile_paths[t_id]
+        print(f"[S3 INPUT] Reading tile {t_id} from: {src_path}")
         store = s3fs.S3Map(root=src_path, s3=s3)
         zarr_arr = zarr.open(store=store, mode="r")
         src_img = zarr_arr[image_slice]
+        print(f"[S3 INPUT] ✓ Read tile {t_id}, shape: {src_img.shape}")
 
         # src_img = tile_arrays[t_id][image_slice]
         
@@ -516,19 +555,49 @@ def cpu_fusion(
                                     })
 
     # Write
-    # output_slice = (
-    #     slice(0, 1),
-    #     slice(0, 1),
-    #     slice(cell_aabb[0], cell_aabb[1]),
-    #     slice(cell_aabb[2], cell_aabb[3]),
-    #     slice(cell_aabb[4], cell_aabb[5]),
-    # )
+    output_slice = (
+        slice(0, 1),
+        slice(0, 1),
+        slice(cell_aabb[0], cell_aabb[1]),
+        slice(cell_aabb[2], cell_aabb[3]),
+        slice(cell_aabb[4], cell_aabb[5]),
+    )
 
-    # # Convert from float32 -> canonical uint16
-    # blended_cell = np.nan_to_num(blended_cell)
-    # blended_cell = np.clip(blended_cell, 0, 65535)
-    # output_chunk = blended_cell.astype(np.uint16)
-    # output_volume[output_slice] = output_chunk
+    # Convert from float32 -> canonical uint16
+    blended_cell = np.nan_to_num(blended_cell)
+    blended_cell = np.clip(blended_cell, 0, 65535)
+    output_chunk = blended_cell.astype(np.uint16)
+    
+    # Log S3 write operation
+    if hasattr(output_volume, 'store') and hasattr(output_volume.store, 'map'):
+        s3_path = output_volume.store.map.root if hasattr(output_volume.store.map, 'root') else "unknown"
+        chunk_z = cell_aabb[1] - cell_aabb[0]
+        chunk_y = cell_aabb[3] - cell_aabb[2]
+        chunk_x = cell_aabb[5] - cell_aabb[4]
+        chunk_voxels = chunk_z * chunk_y * chunk_x
+        chunk_size_mb = (chunk_voxels * 2) / (1024 * 1024)  # 2 bytes per uint16
+        
+        print(f"\n{'='*80}")
+        print(f"[S3 WRITE] Writing fused/blended data to output volume")
+        print(f"[S3 WRITE] Destination: {s3_path}")
+        print(f"[S3 WRITE] Spatial region (in output volume coordinates):")
+        print(f"[S3 WRITE]   - Z: [{cell_aabb[0]:6d}:{cell_aabb[1]:6d}]  ({chunk_z:4d} voxels)")
+        print(f"[S3 WRITE]   - Y: [{cell_aabb[2]:6d}:{cell_aabb[3]:6d}]  ({chunk_y:4d} voxels)")
+        print(f"[S3 WRITE]   - X: [{cell_aabb[4]:6d}:{cell_aabb[5]:6d}]  ({chunk_x:4d} voxels)")
+        print(f"[S3 WRITE] Data characteristics:")
+        print(f"[S3 WRITE]   - Shape: {output_chunk.shape}")
+        print(f"[S3 WRITE]   - Data type: {output_chunk.dtype}")
+        print(f"[S3 WRITE]   - Total voxels: {chunk_voxels:,}")
+        print(f"[S3 WRITE]   - Uncompressed size: {chunk_size_mb:.2f} MB")
+        print(f"[S3 WRITE]   - Value range: [{output_chunk.min()}, {output_chunk.max()}]")
+        print(f"[S3 WRITE]   - Source tiles blended: {len(src_ids)} tiles (IDs: {src_ids})")
+        print(f"[S3 WRITE] Writing to S3...")
+    
+    output_volume[output_slice] = output_chunk
+    
+    if hasattr(output_volume, 'store') and hasattr(output_volume.store, 'map'):
+        print(f"[S3 WRITE] ✓ Successfully wrote chunk to S3")
+        print(f"{'='*80}\n")
 
     # send to s3
 
