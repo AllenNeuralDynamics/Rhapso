@@ -521,11 +521,10 @@ def cpu_fusion(
                                             tile_sizes_zyx[t_id],
                                             device='cpu')
         src_path = tile_paths[t_id]
-        print(f"[S3 INPUT] Reading tile {t_id} from: {src_path}")
         store = s3fs.S3Map(root=src_path, s3=s3)
         zarr_arr = zarr.open(store=store, mode="r")
         src_img = zarr_arr[image_slice]
-        print(f"[S3 INPUT] ✓ Read tile {t_id}, shape: {src_img.shape}")
+        print(f"[S3 INPUT] Tile {t_id}: {src_path} -> shape {src_img.shape}")
 
         # src_img = tile_arrays[t_id][image_slice]
         
@@ -568,38 +567,43 @@ def cpu_fusion(
     blended_cell = np.clip(blended_cell, 0, 65535)
     output_chunk = blended_cell.astype(np.uint16)
     
-    # Log S3 write operation
+    # Direct S3 write (inline, not using shared object)
+    s3_path = None
     if hasattr(output_volume, 'store') and hasattr(output_volume.store, 'map'):
-        s3_path = output_volume.store.map.root if hasattr(output_volume.store.map, 'root') else "unknown"
+        s3_path = output_volume.store.map.root if hasattr(output_volume.store.map, 'root') else None
+    
+    # Check if this is an S3 path (either starts with "s3://" or doesn't start with "/" for local paths)
+    if s3_path and not s3_path.startswith("/"):
         chunk_z = cell_aabb[1] - cell_aabb[0]
         chunk_y = cell_aabb[3] - cell_aabb[2]
         chunk_x = cell_aabb[5] - cell_aabb[4]
-        chunk_voxels = chunk_z * chunk_y * chunk_x
-        chunk_size_mb = (chunk_voxels * 2) / (1024 * 1024)  # 2 bytes per uint16
+        chunk_size_mb = (chunk_z * chunk_y * chunk_x * 2) / (1024 * 1024)  # 2 bytes per uint16
         
-        print(f"\n{'='*80}")
-        print(f"[S3 WRITE] Writing fused/blended data to output volume")
-        print(f"[S3 WRITE] Destination: {s3_path}")
-        print(f"[S3 WRITE] Spatial region (in output volume coordinates):")
-        print(f"[S3 WRITE]   - Z: [{cell_aabb[0]:6d}:{cell_aabb[1]:6d}]  ({chunk_z:4d} voxels)")
-        print(f"[S3 WRITE]   - Y: [{cell_aabb[2]:6d}:{cell_aabb[3]:6d}]  ({chunk_y:4d} voxels)")
-        print(f"[S3 WRITE]   - X: [{cell_aabb[4]:6d}:{cell_aabb[5]:6d}]  ({chunk_x:4d} voxels)")
-        print(f"[S3 WRITE] Data characteristics:")
-        print(f"[S3 WRITE]   - Shape: {output_chunk.shape}")
-        print(f"[S3 WRITE]   - Data type: {output_chunk.dtype}")
-        print(f"[S3 WRITE]   - Total voxels: {chunk_voxels:,}")
-        print(f"[S3 WRITE]   - Uncompressed size: {chunk_size_mb:.2f} MB")
-        print(f"[S3 WRITE]   - Value range: [{output_chunk.min()}, {output_chunk.max()}]")
-        print(f"[S3 WRITE]   - Source tiles blended: {len(src_ids)} tiles (IDs: {src_ids})")
-        print(f"[S3 WRITE] Writing to S3...")
-    
-    output_volume[output_slice] = output_chunk
-    
-    if hasattr(output_volume, 'store') and hasattr(output_volume.store, 'map'):
-        print(f"[S3 WRITE] ✓ Successfully wrote chunk to S3")
-        print(f"{'='*80}\n")
-
-    # send to s3
+        # Create S3 filesystem and directly write to zarr
+        s3_output = s3fs.S3FileSystem(
+            anon=False,
+            config_kwargs={
+                "max_pool_connections": 50,
+                "s3": {
+                    "multipart_threshold": 64 * 1024 * 1024,
+                    "max_concurrent_requests": 20,
+                },
+                "retries": {
+                    "total_max_attempts": 100,
+                    "mode": "adaptive",
+                },
+            }
+        )
+        output_store = s3fs.S3Map(root=s3_path, s3=s3_output)
+        output_zarr = zarr.open(store=output_store, mode="r+")
+        
+        full_s3_path = f"s3://{s3_path}" if not s3_path.startswith("s3://") else s3_path
+        print(f"[S3 WRITE] Z[{cell_aabb[0]}:{cell_aabb[1]}] Y[{cell_aabb[2]}:{cell_aabb[3]}] X[{cell_aabb[4]}:{cell_aabb[5]}] -> {full_s3_path} ({chunk_size_mb:.1f}MB, tiles {src_ids})")
+        
+        output_zarr["0"][output_slice] = output_chunk
+    else:
+        # Fallback to original shared object write for non-S3 paths
+        output_volume[output_slice] = output_chunk
 
 class CloudDataset(Dataset):
     def __init__(
