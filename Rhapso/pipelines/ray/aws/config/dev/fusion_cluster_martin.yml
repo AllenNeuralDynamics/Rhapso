@@ -1,4 +1,4 @@
-cluster_name: rhapso-ray-fusion-cluster-martin-094
+cluster_name: rhapso-ray-fusion-cluster-martin-099
 max_workers: 5
 min_workers: 5
 
