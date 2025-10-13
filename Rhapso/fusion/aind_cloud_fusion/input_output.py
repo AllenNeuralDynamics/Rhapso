@@ -456,13 +456,13 @@ class BigStitcherDatasetChannel(BigStitcherDataset):
             ch = int(match.group(1))
 
             # For tile format - tile_x_0000_y_0000_z_0000_ch_488
-            location_ch = (int(s_parts[2]), 
-                           int(s_parts[4]), 
-                           int(s_parts[6]), 
-                           ch)
+            # location_ch = (int(s_parts[2]), 
+            #                int(s_parts[4]), 
+            #                int(s_parts[6]), 
+            #                ch)
             
             # For Tile format - tile_000000_ch_488
-            # location_ch = (0, 0, int(tile_id), ch)
+            location_ch = (0, 0, int(tile_id), ch)
             
             tile_id_lut[location_ch] = int(tile_id)
 
@@ -493,16 +493,16 @@ class BigStitcherDatasetChannel(BigStitcherDataset):
                     ch = int(match.group(1))
                     
                     # For tile format - tile_x_0000_y_0000_z_0000_ch_488
-                    location_ch = (
-                        int(s_parts[2]),
-                        int(s_parts[4]),
-                        int(s_parts[6]),
-                        ch
-                    )
+                    # location_ch = (
+                    #     int(s_parts[2]),
+                    #     int(s_parts[4]),
+                    #     int(s_parts[6]),
+                    #     ch
+                    # )
 
                     # For Tile format - tile_000000_ch_488
-                    # view = s_parts[1]
-                    # location_ch = (0, 0, int(view), ch)
+                    view = s_parts[1]
+                    location_ch = (0, 0, int(view), ch)
 
                     tile_id = tile_id_lut[location_ch]
 

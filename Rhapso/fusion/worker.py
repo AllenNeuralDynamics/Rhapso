@@ -9,15 +9,15 @@ import time
 from pathlib import Path
 import xml.etree.ElementTree as ET
 import yaml
-# import aind_cloud_fusion.fusion as fusion
-# import aind_cloud_fusion.input_output as input_output
-# import aind_cloud_fusion.script_utils as utils
+import aind_cloud_fusion.fusion as fusion
+import aind_cloud_fusion.input_output as input_output
+import aind_cloud_fusion.script_utils as utils
 import xml.etree.ElementTree as ET
 import boto3
 from io import BytesIO
-from .aind_cloud_fusion import fusion as fusion
-from .aind_cloud_fusion import input_output as input_output
-from .aind_cloud_fusion import script_utils as utils
+# from .aind_cloud_fusion import fusion as fusion
+# from .aind_cloud_fusion import input_output as input_output
+# from .aind_cloud_fusion import script_utils as utils
 
 def get_tile_zyx_resolution(input_xml_path: str) -> list[int]: 
     """
@@ -67,24 +67,23 @@ def execute_job(yml_path, xml_path, output_path):
 
     # Log 'done' file for next capsule in pipeline.
     # Unique log filename
-    unique_id = str(uuid.uuid4())
-    timestamp = int(time.time() * 1000)
-    unique_file_name = str(Path(output_path) / f"file_{timestamp}_{unique_id}.yml")
+    # unique_id = str(uuid.uuid4())
+    # timestamp = int(time.time() * 1000)
+    # unique_file_name = str(Path(output_path) / f"file_{timestamp}_{unique_id}.yml")
 
-    log_content = {}
-    log_content['in_path'] = output_params.path
-    log_content['output_path'] = output_params.path.replace("fused_full_res", "fused")
-    log_content['resolution_zyx'] = list(output_params.resolution_zyx)
+    # log_content = {}
+    # log_content['in_path'] = output_params.path
+    # log_content['output_path'] = output_params.path.replace("fused_full_res", "fused")
+    # log_content['resolution_zyx'] = list(output_params.resolution_zyx)
 
-    with open(unique_file_name, "w") as file:
-        yaml.dump(log_content, file)
-
+    # with open(unique_file_name, "w") as file:
+    #     yaml.dump(log_content, file)
 
 if __name__ == '__main__':
 
-    xml_path = 's3://rhapso-zar-sample/dataset.xml'
+    xml_path = 's3://aind-open-data/exaSPIM_720164_2025-07-07_17-55-45_processed_2025-07-15_16-22-02/tile_alignment/ip_affine_alignment/bigstitcher_affine.xml'
     yml_path = 's3://sean-fusion/worker_config.yml'
-    output_path = 's3://sean-fusion/fusion-output'
+    output_path = 's3://aind-scratch-data/exaSPIM_720164_2025-07-07_17-55-45_rhapso/fusion/fused.zarr'
 
     print(f'{xml_path=}')
     print(f'{yml_path=}')

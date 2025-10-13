@@ -7,6 +7,7 @@ from . import geometry as geometry
 import boto3
 from io import BytesIO
 import xmltodict
+import numpy as np
 
 def check_collision(
     cell_box: geometry.AABB,
@@ -345,6 +346,101 @@ def get_overlap_regions(
 
     return tile_to_overlap_ids, overlaps
 
+def parse_yx_tile_layout(xml_path: str, channel: int) -> list[list[int]]:
+    """
+    Utility for parsing tile layout from a BigStitcher XML.
+
+    tile_layout follows axis convention:
+        +--- +x
+        |
+        |
+        +y
+
+    Tile ids in output tile_layout use the same tile ids defined in the XML.
+    Spaces are denoted with tile id '-1'.
+    """
+    # --- load XML (S3 or local) ---
+    if xml_path.startswith('s3://'):
+        s3 = boto3.client('s3')
+        bucket_name, key = xml_path[5:].split('/', 1)
+        response = s3.get_object(Bucket=bucket_name, Key=key)
+        file_stream = BytesIO(response['Body'].read())
+        data = xmltodict.parse(file_stream.read().decode('utf-8'))
+    else:
+        with open(xml_path, "r") as file:
+            data = xmltodict.parse(file.read())
+
+    # --- gather tile ids for this channel ---
+    channel_tile_ids: list[str] = []
+    for zgroup in data["SpimData"]["SequenceDescription"]["ImageLoader"]["zgroups"]["zgroup"]:
+        tile_id = zgroup["@setup"]  # NOTE: XML ids are strings
+        tile_name = zgroup["path"]
+        match = re.search(r'ch_(\d+)', tile_name)
+        ch = int(match.group(1))
+        if ch == channel:
+            channel_tile_ids.append(tile_id)
+
+    # --- collect stage positions for those tiles ---
+    stage_positions_xyz: dict[str, tuple[float, float, float]] = {}
+    for d in data["SpimData"]["ViewRegistrations"]["ViewRegistration"]:
+        tile_id = d["@setup"]
+        if tile_id in channel_tile_ids:
+            view_transform = d["ViewTransform"]
+            if isinstance(view_transform, list):
+                view_transform = view_transform[-1]
+            nums = [float(val) for val in view_transform["affine"].split()]
+            # affine is 3x4 row-major; take translations at indices 3, 7, 11
+            stage_positions_xyz[tile_id] = (nums[3], nums[7], nums[11])
+
+    # --- build robust grid (collapse float jitter; no division by tiny deltas) ---
+    positions_arr_xyz = np.array([pos for pos in stage_positions_xyz.values()]) if stage_positions_xyz else np.zeros((0, 3))
+    x_raw = np.sort(positions_arr_xyz[:, 0]) if positions_arr_xyz.size else np.array([])
+    y_raw = np.sort(positions_arr_xyz[:, 1]) if positions_arr_xyz.size else np.array([])
+
+    # collapse near-duplicates by rounding (adjust decimals if your jitter differs)
+    _DEC = 2
+    x_unique = np.unique(np.round(x_raw, _DEC)) if x_raw.size else np.array([])
+    y_unique = np.unique(np.round(y_raw, _DEC)) if y_raw.size else np.array([])
+
+    # grid size from unique coords (avoids inf when diffs are ~0)
+    W = int(x_unique.size)
+    H = int(y_unique.size)
+    tile_layout = np.full((H, W), -1, dtype=int)
+
+    if H == 0 or W == 0:
+        return tile_layout  # nothing to place
+
+    # --- place tiles by nearest unique coordinate (no M, no 1/dx) ---
+    for tile_id, (sx, sy, _sz) in stage_positions_xyz.items():
+        sxr = round(sx, _DEC)
+        syr = round(sy, _DEC)
+
+        # X index via searchsorted, then pick the closest neighbor
+        ix = int(np.searchsorted(x_unique, sxr, side="left"))
+        if ix == 0:
+            ix = 0
+        elif ix >= W:
+            ix = W - 1
+        else:
+            # choose nearer of left/right
+            left = x_unique[ix - 1]
+            right = x_unique[ix]
+            ix = ix - 1 if abs(sx - left) <= abs(right - sx) else ix
+
+        # Y index via searchsorted, then pick the closest neighbor
+        iy = int(np.searchsorted(y_unique, syr, side="left"))
+        if iy == 0:
+            iy = 0
+        elif iy >= H:
+            iy = H - 1
+        else:
+            left = y_unique[iy - 1]
+            right = y_unique[iy]
+            iy = iy - 1 if abs(sy - left) <= abs(right - sy) else iy
+
+        tile_layout[iy, ix] = int(tile_id)  # keep your int ids
+
+    return tile_layout
 
 def parse_yx_tile_layout(xml_path: str, channel: int) -> list[list[int]]:
     """

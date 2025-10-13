@@ -6,6 +6,8 @@ import time
 from typing import Optional
 import numpy as np
 import s3fs
+import dask.array as da
+from dask import delayed
 import tensorstore as ts
 import torch
 from torch.utils.data import Dataset
@@ -339,8 +341,10 @@ def run_fusion(  # noqa: C901
 
     # Set CPU/GPU cell_size
     DEFAULT_CHUNKSIZE = (1, 1, 128, 128, 128)
-    CPU_CELL_SIZE = (512, 256, 256)
-    # CPU_CELL_SIZE = (128, 128, 128)
+    # CPU_CELL_SIZE = (512, 256, 256)   - too small
+    CPU_CELL_SIZE = (640, 256, 256)   
+    # CPU_CELL_SIZE = (1024, 256, 256)  - too big
+    # CPU_CELL_SIZE = (384, 256, 384)
 
     if output_params.chunksize != DEFAULT_CHUNKSIZE:
         if cpu_cell_size is None or gpu_cell_size is None:
@@ -377,87 +381,61 @@ def run_fusion(  # noqa: C901
                                                 stride=volume_sampler_stride,
                                                 start=volume_sampler_start)
 
+    batch_start = time.time()
     total_cells = len(overlap_volume_sampler)
+    batch_size = 200
     LOGGER.info(f"CPU Cell Size: {CPU_CELL_SIZE}")
     LOGGER.info(f"CPU Total Cells: {total_cells}")
+    LOGGER.info(f"CPU Batch Size: {batch_size}")
     tile_arrays = []
 
+    store = output_volume.store
+    write_root = getattr(store, "root", None) or getattr(store, "path", None)
+    write_ds = output_volume.path  
+
     # Distribute with Ray approach
-    @ray.remote
-    def process_fusion_task(curr_cell, src_ids, tile_arrays, tile_transforms, tile_sizes_zyx, tile_aabbs,
-                            output_volume_size, output_volume_origin, output_volume, blend_module, tile_paths):
-        print("start cpu fusion")
-        cpu_fusion(tile_arrays, tile_transforms, tile_sizes_zyx, tile_aabbs, output_volume_size, output_volume_origin,
-                   output_volume, blend_module, curr_cell, src_ids, tile_paths)
-        print("finish cpu fusion")
+    # @ray.remote
+    # def process_fusion_task(curr_cell, src_ids, tile_arrays, tile_transforms, tile_sizes_zyx, tile_aabbs,
+    #                         output_volume_size, output_volume_origin, output_volume, blend_module, tile_paths,
+    #                         write_root, write_ds):
+    #     print("start cpu fusion")
+    #     cpu_fusion(tile_arrays, tile_transforms, tile_sizes_zyx, tile_aabbs, output_volume_size, output_volume_origin,
+    #                output_volume, blend_module, curr_cell, src_ids, tile_paths, write_root, write_ds)
+    #     print("finish cpu fusion")
         
-        return {
-            'cell': curr_cell,
-            'src_count': len(src_ids)
-        }
+    #     return {
+    #         'cell': curr_cell,
+    #         'src_count': len(src_ids)
+    #     }
 
-    # Submit tasks to Ray (same structure as your DoG example)
-    futures = [
-        process_fusion_task.remote(curr_cell, src_ids, tile_arrays, tile_transforms, tile_sizes_zyx, tile_aabbs,
-                                   output_volume_size, output_volume_origin, output_volume, blend_module, tile_paths)
-        for (curr_cell, src_ids) in overlap_volume_sampler
-    ]
+    # # Submit tasks to Ray (same structure as your DoG example)
+    # futures = [
+    #     process_fusion_task.remote(curr_cell, src_ids, tile_arrays, tile_transforms, tile_sizes_zyx, tile_aabbs,
+    #                                output_volume_size, output_volume_origin, output_volume, blend_module, tile_paths,
+    #                                write_root, write_ds)
+    #     for (curr_cell, src_ids) in overlap_volume_sampler
+    # ]
 
-    # Gather results (will raise if any task errored)
-    results = ray.get(futures)
+    # # Gather results (will raise if any task errored)
+    # results = ray.get(futures)
 
     # Iterative approach
-    # for (curr_cell, src_ids) in overlap_volume_sampler:
-    #     cpu_fusion(
-    #         tile_arrays,
-    #         tile_transforms,
-    #         tile_sizes_zyx,
-    #         tile_aabbs,
-    #         output_volume_size,
-    #         output_volume_origin,
-    #         output_volume,
-    #         blend_module,
-    #         curr_cell,
-    #         src_ids,
-    #         tile_paths
-    #     )
-
-    # Dask distributed approach (single machine)
-    # delayed_jobs = []
-    # for i, (curr_cell, src_ids) in enumerate(overlap_volume_sampler):
-    #     delayed_job = delayed(cpu_fusion)(tile_arrays,
-    #                                     tile_transforms,
-    #                                     tile_sizes_zyx,
-    #                                     tile_aabbs,
-    #                                     output_volume_size,
-    #                                     output_volume_origin,
-    #                                     output_volume,
-    #                                     blend_module,
-    #                                     curr_cell,
-    #                                     src_ids
-    #                                     )
-    #     delayed_jobs.append(delayed_job)
-
-    #     if len(delayed_jobs) == batch_size:
-    #         LOGGER.info(f"CPU: Calculating up to {i}/{total_cells}...")
-    #         da.compute(*delayed_jobs)
-    #         delayed_jobs = []
-    #         LOGGER.info(
-    #             f"CPU: Finished up to {i}/{total_cells}. Batch time: {time.time() - batch_start}"
-    #         )
-    #         batch_start = time.time()
-
-    # Compute remaining cells
-    # LOGGER.info(f"CPU: Calculating up to {i}/{total_cells}...")
-    # da.compute(*delayed_jobs)
-    # delayed_jobs = []
-    # LOGGER.info(
-    #     f"CPU: Finished up to {i}/{total_cells}. Batch time: {time.time() - batch_start}"
-    # )
-
-    # p.join()
-    # p.close()
-
+    for (curr_cell, src_ids) in overlap_volume_sampler:
+        cpu_fusion(
+            tile_arrays,
+            tile_transforms,
+            tile_sizes_zyx,
+            tile_aabbs,
+            output_volume_size,
+            output_volume_origin,
+            output_volume,
+            blend_module,
+            curr_cell,
+            src_ids,
+            tile_paths,
+            write_root,
+            write_ds
+        )
 
 def cpu_fusion(
     tile_arrays: dict[int, input_output.InputArray],
@@ -470,7 +448,9 @@ def cpu_fusion(
     blend_module: blend.BlendingModule,
     cell_aabb: geometry.AABB,
     src_ids: list[int],
-    tile_paths
+    tile_paths, 
+    write_root,
+    write_ds
 ):
     overlap_contributions: list[torch.Tensor] = []
     s3 = s3fs.S3FileSystem(anon=False)
@@ -481,14 +461,13 @@ def cpu_fusion(
                 utils.calculate_image_crop(cell_aabb,
                                             output_volume_origin,
                                             tile_transforms[t_id],
-                                            tile_sizes_zyx[t_id],
+                                            tile_sizes_zyx[t_id], 
                                             device='cpu')
+
         src_path = tile_paths[t_id]
         store = s3fs.S3Map(root=src_path, s3=s3)
         zarr_arr = zarr.open(store=store, mode="r")
         src_img = zarr_arr[image_slice]
-
-        # src_img = tile_arrays[t_id][image_slice]
         
         src_tensor = torch.Tensor(src_img.astype(np.int16))
 
@@ -516,21 +495,25 @@ def cpu_fusion(
                                     })
 
     # Write
-    # output_slice = (
-    #     slice(0, 1),
-    #     slice(0, 1),
-    #     slice(cell_aabb[0], cell_aabb[1]),
-    #     slice(cell_aabb[2], cell_aabb[3]),
-    #     slice(cell_aabb[4], cell_aabb[5]),
-    # )
+    output_slice = (
+        slice(0, 1),
+        slice(0, 1),
+        slice(cell_aabb[0], cell_aabb[1]),
+        slice(cell_aabb[2], cell_aabb[3]),  
+        slice(cell_aabb[4], cell_aabb[5]),
+    )
 
-    # # Convert from float32 -> canonical uint16
-    # blended_cell = np.nan_to_num(blended_cell)
-    # blended_cell = np.clip(blended_cell, 0, 65535)
-    # output_chunk = blended_cell.astype(np.uint16)
+    # Convert from float32 -> canonical uint16
+    blended_cell = np.nan_to_num(blended_cell)
+    blended_cell = np.clip(blended_cell, 0, 65535)
+    output_chunk = blended_cell.astype(np.uint16)
+
+    # Old Approach
     # output_volume[output_slice] = output_chunk
 
-    # send to s3
+    out_store = s3fs.S3Map(root=write_root, s3=s3)
+    arr = zarr.open(store=out_store, mode="a")[write_ds]
+    arr[output_slice] = np.ascontiguousarray(output_chunk)
 
 class CloudDataset(Dataset):
     def __init__(

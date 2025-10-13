@@ -3,6 +3,7 @@ Interface for generic blending.
 """
 
 import torch
+import numpy as np
 from . import geometry as geometry
 
 class BlendingModule:
@@ -143,7 +144,6 @@ class WeightedLinearBlending(BlendingModule):
             fused_chunk += w * c
 
         return fused_chunk
-
 
     # Cleaner Code: 
     # def blend(self, chunks: list[torch.Tensor], device: str, kwargs={}) -> torch.Tensor:
