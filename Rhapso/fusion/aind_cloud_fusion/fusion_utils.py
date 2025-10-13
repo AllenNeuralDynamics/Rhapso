@@ -442,79 +442,79 @@ def parse_yx_tile_layout(xml_path: str, channel: int) -> list[list[int]]:
 
     return tile_layout
 
-def parse_yx_tile_layout(xml_path: str, channel: int) -> list[list[int]]:
-    """
-    Utility for parsing tile layout from a bigstitcher xml
-    requested by some blending modules.
+# def parse_yx_tile_layout(xml_path: str, channel: int) -> list[list[int]]:
+#     """
+#     Utility for parsing tile layout from a bigstitcher xml
+#     requested by some blending modules.
 
-    tile_layout follows axis convention:
-    +--- +x
-    |
-    |
-    +y
+#     tile_layout follows axis convention:
+#     +--- +x
+#     |
+#     |
+#     +y
 
-    Tile ids in output tile_layout uses the same tile ids
-    defined in the xml file. Spaces denoted with tile id '-1'.
-    """
+#     Tile ids in output tile_layout uses the same tile ids
+#     defined in the xml file. Spaces denoted with tile id '-1'.
+#     """
 
-    if xml_path.startswith('s3://'):
-        # Handle S3 path
-        s3 = boto3.client('s3')
-        bucket_name, key = xml_path[5:].split('/', 1)
-        response = s3.get_object(Bucket=bucket_name, Key=key)
-        file_stream = BytesIO(response['Body'].read())
-        data = xmltodict.parse(file_stream.read().decode('utf-8'))
-    else:
-        with open(xml_path, "r") as file:
-            data = xmltodict.parse(file.read())
+#     if xml_path.startswith('s3://'):
+#         # Handle S3 path
+#         s3 = boto3.client('s3')
+#         bucket_name, key = xml_path[5:].split('/', 1)
+#         response = s3.get_object(Bucket=bucket_name, Key=key)
+#         file_stream = BytesIO(response['Body'].read())
+#         data = xmltodict.parse(file_stream.read().decode('utf-8'))
+#     else:
+#         with open(xml_path, "r") as file:
+#             data = xmltodict.parse(file.read())
 
-    # Get channel tiles    
-    channel_tile_ids: list[int] = [] 
-    for zgroup in data["SpimData"]["SequenceDescription"]["ImageLoader"][
-        "zgroups"
-    ]["zgroup"]:
-        tile_id = zgroup["@setup"]
-        tile_name = zgroup["path"]
-        match = re.search(r'ch_(\d+)', tile_name)
-        ch = int(match.group(1))
+#     # Get channel tiles    
+#     channel_tile_ids: list[int] = [] 
+#     for zgroup in data["SpimData"]["SequenceDescription"]["ImageLoader"][
+#         "zgroups"
+#     ]["zgroup"]:
+#         tile_id = zgroup["@setup"]
+#         tile_name = zgroup["path"]
+#         match = re.search(r'ch_(\d+)', tile_name)
+#         ch = int(match.group(1))
 
-        if ch == channel:
-            channel_tile_ids.append(tile_id)
+#         if ch == channel:
+#             channel_tile_ids.append(tile_id)
     
-    # Get channel tile stage positions
-    stage_positions_xyz: dict[int, tuple[float, float, float]] = {}
-    for d in data["SpimData"]["ViewRegistrations"]["ViewRegistration"]:
-        tile_id = d["@setup"]
-        if tile_id in channel_tile_ids:
-            view_transform = d["ViewTransform"]
-            if isinstance(view_transform, list):
-                view_transform = view_transform[-1]
+#     # Get channel tile stage positions
+#     stage_positions_xyz: dict[int, tuple[float, float, float]] = {}
+#     for d in data["SpimData"]["ViewRegistrations"]["ViewRegistration"]:
+#         tile_id = d["@setup"]
+#         if tile_id in channel_tile_ids:
+#             view_transform = d["ViewTransform"]
+#             if isinstance(view_transform, list):
+#                 view_transform = view_transform[-1]
 
-            nums = [float(val) for val in view_transform["affine"].split(" ")]
-            stage_positions_xyz[tile_id] = tuple(nums[3::4])
+#             nums = [float(val) for val in view_transform["affine"].split(" ")]
+#             stage_positions_xyz[tile_id] = tuple(nums[3::4])
 
-    # Calculate delta_x and delta_y
-    positions_arr_xyz = np.array([pos for pos in stage_positions_xyz.values()])
-    x_pos = list(set(positions_arr_xyz[:, 0]))
-    x_pos = sorted(x_pos)
-    delta_x = x_pos[1] - x_pos[0]
-    y_pos = list(set(positions_arr_xyz[:, 1]))
-    y_pos = sorted(y_pos)
-    delta_y = y_pos[1] - y_pos[0]
+#     # Calculate delta_x and delta_y
+#     positions_arr_xyz = np.array([pos for pos in stage_positions_xyz.values()])
+#     x_pos = list(set(positions_arr_xyz[:, 0]))
+#     x_pos = sorted(x_pos)
+#     delta_x = x_pos[1] - x_pos[0]
+#     y_pos = list(set(positions_arr_xyz[:, 1]))
+#     y_pos = sorted(y_pos)
+#     delta_y = y_pos[1] - y_pos[0]
 
-    M = np.array([[(1. / delta_x), 0.],
-                  [0., (1. / delta_y)]])
-    tile_layout = np.ones((len(y_pos), len(x_pos))) * -1
-    for tile_id, s_pos in stage_positions_xyz.items():
-        index = M @ np.array([s_pos[0] - x_pos[0],
-                              s_pos[1] - y_pos[0]])
+#     M = np.array([[(1. / delta_x), 0.],
+#                   [0., (1. / delta_y)]])
+#     tile_layout = np.ones((len(y_pos), len(x_pos))) * -1
+#     for tile_id, s_pos in stage_positions_xyz.items():
+#         index = M @ np.array([s_pos[0] - x_pos[0],
+#                               s_pos[1] - y_pos[0]])
 
-        # Round to nearest integer
-        iy = int(round(index[1]))
-        ix = int(round(index[0]))
+#         # Round to nearest integer
+#         iy = int(round(index[1]))
+#         ix = int(round(index[0]))
 
-        tile_layout[iy, ix] = tile_id
+#         tile_layout[iy, ix] = tile_id
 
-    tile_layout = tile_layout.astype(int)
+#     tile_layout = tile_layout.astype(int)
 
-    return tile_layout
+#     return tile_layout
