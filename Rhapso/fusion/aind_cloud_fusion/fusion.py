@@ -394,48 +394,48 @@ def run_fusion(  # noqa: C901
     write_ds = output_volume.path  
 
     # Distribute with Ray approach
-    # @ray.remote
-    # def process_fusion_task(curr_cell, src_ids, tile_arrays, tile_transforms, tile_sizes_zyx, tile_aabbs,
-    #                         output_volume_size, output_volume_origin, output_volume, blend_module, tile_paths,
-    #                         write_root, write_ds):
-    #     print("start cpu fusion")
-    #     cpu_fusion(tile_arrays, tile_transforms, tile_sizes_zyx, tile_aabbs, output_volume_size, output_volume_origin,
-    #                output_volume, blend_module, curr_cell, src_ids, tile_paths, write_root, write_ds)
-    #     print("finish cpu fusion")
+    @ray.remote
+    def process_fusion_task(curr_cell, src_ids, tile_arrays, tile_transforms, tile_sizes_zyx, tile_aabbs,
+                            output_volume_size, output_volume_origin, output_volume, blend_module, tile_paths,
+                            write_root, write_ds):
+        print("start cpu fusion")
+        cpu_fusion(tile_arrays, tile_transforms, tile_sizes_zyx, tile_aabbs, output_volume_size, output_volume_origin,
+                   output_volume, blend_module, curr_cell, src_ids, tile_paths, write_root, write_ds)
+        print("finish cpu fusion")
         
-    #     return {
-    #         'cell': curr_cell,
-    #         'src_count': len(src_ids)
-    #     }
+        return {
+            'cell': curr_cell,
+            'src_count': len(src_ids)
+        }
 
-    # # Submit tasks to Ray (same structure as your DoG example)
-    # futures = [
-    #     process_fusion_task.remote(curr_cell, src_ids, tile_arrays, tile_transforms, tile_sizes_zyx, tile_aabbs,
-    #                                output_volume_size, output_volume_origin, output_volume, blend_module, tile_paths,
-    #                                write_root, write_ds)
-    #     for (curr_cell, src_ids) in overlap_volume_sampler
-    # ]
+    # Submit tasks to Ray (same structure as your DoG example)
+    futures = [
+        process_fusion_task.remote(curr_cell, src_ids, tile_arrays, tile_transforms, tile_sizes_zyx, tile_aabbs,
+                                   output_volume_size, output_volume_origin, output_volume, blend_module, tile_paths,
+                                   write_root, write_ds)
+        for (curr_cell, src_ids) in overlap_volume_sampler
+    ]
 
-    # # Gather results (will raise if any task errored)
-    # results = ray.get(futures)
+    # Gather results (will raise if any task errored)
+    results = ray.get(futures)
 
     # Iterative approach
-    for (curr_cell, src_ids) in overlap_volume_sampler:
-        cpu_fusion(
-            tile_arrays,
-            tile_transforms,
-            tile_sizes_zyx,
-            tile_aabbs,
-            output_volume_size,
-            output_volume_origin,
-            output_volume,
-            blend_module,
-            curr_cell,
-            src_ids,
-            tile_paths,
-            write_root,
-            write_ds
-        )
+    # for (curr_cell, src_ids) in overlap_volume_sampler:
+    #     cpu_fusion(
+    #         tile_arrays,
+    #         tile_transforms,
+    #         tile_sizes_zyx,
+    #         tile_aabbs,
+    #         output_volume_size,
+    #         output_volume_origin,
+    #         output_volume,
+    #         blend_module,
+    #         curr_cell,
+    #         src_ids,
+    #         tile_paths,
+    #         write_root,
+    #         write_ds
+    #     )
 
 def cpu_fusion(
     tile_arrays: dict[int, input_output.InputArray],
