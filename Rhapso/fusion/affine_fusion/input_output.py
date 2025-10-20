@@ -18,6 +18,9 @@ from numcodecs import Blosc
 from io import BytesIO
 from . import geometry as geometry
 
+from botocore.client import Config
+from botocore import UNSIGNED
+
 def read_config_yaml(yaml_path: str) -> dict:
     with open(yaml_path, "r") as f:
         yaml_dict = yaml.safe_load(f)
@@ -308,6 +311,7 @@ class BigStitcherDataset(Dataset):
 
         if xml_path.startswith('s3://'):
             s3 = boto3.client('s3')
+            # s3 = boto3.client('s3', config=Config(signature_version=UNSIGNED))
             bucket_name, key = xml_path[5:].split('/', 1)
             response = s3.get_object(Bucket=bucket_name, Key=key)
             file_stream = BytesIO(response['Body'].read())
@@ -436,6 +440,7 @@ class BigStitcherDatasetChannel(BigStitcherDataset):
         if self.xml_path.startswith('s3://'):
             # Handle S3 path
             s3 = boto3.client('s3')
+            # s3 = boto3.client('s3', config=Config(signature_version=UNSIGNED))
             bucket_name, key = self.xml_path[5:].split('/', 1)
             response = s3.get_object(Bucket=bucket_name, Key=key)
             file_stream = BytesIO(response['Body'].read())
@@ -511,6 +516,11 @@ class BigStitcherDatasetChannel(BigStitcherDataset):
                     arr = None
                     if self.datastore == 0:  # Dask
                         tile_zarr = da.from_zarr(full_resolution_p)
+                        arr = InputDask(tile_zarr)
+                    
+                        # tile_zarr = da.from_zarr(
+                        # full_resolution_p,
+                        # storage_options={"anon": True})
                         arr = InputDask(tile_zarr)
 
                     elif self.datastore == 1:  # Tensorstore
@@ -612,7 +622,11 @@ class BigStitcherDatasetChannel(BigStitcherDataset):
         return tile_arrays
 
     def _list_bucket_directory(self, bucket_name: str, directory_path: str):
-        client = boto3.client("s3")
+
+        # Unsigned client so public buckets that deny signed principals work
+        client = boto3.client("s3", config=Config(signature_version=UNSIGNED))
+
+        # client = boto3.client("s3")
         result = client.list_objects(
             Bucket=bucket_name, Prefix=directory_path, Delimiter="/"
         )

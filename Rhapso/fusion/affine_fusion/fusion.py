@@ -394,48 +394,48 @@ def run_fusion(  # noqa: C901
     write_ds = output_volume.path  
 
     # Distribute with Ray approach
-    # @ray.remote
-    # def process_fusion_task(curr_cell, src_ids, tile_arrays, tile_transforms, tile_sizes_zyx, tile_aabbs,
-    #                         output_volume_size, output_volume_origin, output_volume, blend_module, tile_paths,
-    #                         write_root, write_ds):
-    #     print("start cpu fusion")
-    #     cpu_fusion(tile_arrays, tile_transforms, tile_sizes_zyx, tile_aabbs, output_volume_size, output_volume_origin,
-    #                output_volume, blend_module, curr_cell, src_ids, tile_paths, write_root, write_ds)
-    #     print("finish cpu fusion")
+    @ray.remote
+    def process_fusion_task(curr_cell, src_ids, tile_arrays, tile_transforms, tile_sizes_zyx, tile_aabbs,
+                            output_volume_size, output_volume_origin, output_volume, blend_module, tile_paths,
+                            write_root, write_ds):
+        print("start cpu fusion")
+        cpu_fusion(tile_arrays, tile_transforms, tile_sizes_zyx, tile_aabbs, output_volume_size, output_volume_origin,
+                   output_volume, blend_module, curr_cell, src_ids, tile_paths, write_root, write_ds)
+        print("finish cpu fusion")
         
-    #     return {
-    #         'cell': curr_cell,
-    #         'src_count': len(src_ids)
-    #     }
+        return {
+            'cell': curr_cell,
+            'src_count': len(src_ids)
+        }
 
-    # # Submit tasks to Ray (same structure as your DoG example)
-    # futures = [
-    #     process_fusion_task.remote(curr_cell, src_ids, tile_arrays, tile_transforms, tile_sizes_zyx, tile_aabbs,
-    #                                output_volume_size, output_volume_origin, output_volume, blend_module, tile_paths,
-    #                                write_root, write_ds)
-    #     for (curr_cell, src_ids) in overlap_volume_sampler
-    # ]
+    # Submit tasks to Ray (same structure as your DoG example)
+    futures = [
+        process_fusion_task.remote(curr_cell, src_ids, tile_arrays, tile_transforms, tile_sizes_zyx, tile_aabbs,
+                                   output_volume_size, output_volume_origin, output_volume, blend_module, tile_paths,
+                                   write_root, write_ds)
+        for (curr_cell, src_ids) in overlap_volume_sampler
+    ]
 
-    # # Gather results (will raise if any task errored)
-    # results = ray.get(futures)
+    # Gather results (will raise if any task errored)
+    results = ray.get(futures)
 
     # Iterative approach
-    for (curr_cell, src_ids) in overlap_volume_sampler:
-        cpu_fusion(
-            tile_arrays,
-            tile_transforms,
-            tile_sizes_zyx,
-            tile_aabbs,
-            output_volume_size,
-            output_volume_origin,
-            output_volume,
-            blend_module,
-            curr_cell,
-            src_ids,
-            tile_paths,
-            write_root,
-            write_ds
-        )
+    # for (curr_cell, src_ids) in overlap_volume_sampler:
+    #     cpu_fusion(
+    #         tile_arrays,
+    #         tile_transforms,
+    #         tile_sizes_zyx,
+    #         tile_aabbs,
+    #         output_volume_size,
+    #         output_volume_origin,
+    #         output_volume,
+    #         blend_module,
+    #         curr_cell,
+    #         src_ids,
+    #         tile_paths,
+    #         write_root,
+    #         write_ds
+    #     )
 
 def cpu_fusion(
     tile_arrays: dict[int, input_output.InputArray],
@@ -453,7 +453,8 @@ def cpu_fusion(
     write_ds
 ):
     overlap_contributions: list[torch.Tensor] = []
-    s3 = s3fs.S3FileSystem(anon=False)
+    # s3 = s3fs.S3FileSystem(anon=False)
+    s3_read = s3fs.S3FileSystem(anon=True)
 
     for t_id in src_ids:
         # Retrieve source image
@@ -465,7 +466,7 @@ def cpu_fusion(
                                             device='cpu')
 
         src_path = tile_paths[t_id]
-        store = s3fs.S3Map(root=src_path, s3=s3)
+        store = s3fs.S3Map(root=src_path, s3=s3_read)
         zarr_arr = zarr.open(store=store, mode="r")
         src_img = zarr_arr[image_slice]
         
@@ -511,7 +512,8 @@ def cpu_fusion(
     # Old Approach
     # output_volume[output_slice] = output_chunk
 
-    out_store = s3fs.S3Map(root=write_root, s3=s3)
+    s3_write = s3fs.S3FileSystem(anon=False)
+    out_store = s3fs.S3Map(root=write_root, s3=s3_write)
     arr = zarr.open(store=out_store, mode="a")[write_ds]
     arr[output_slice] = np.ascontiguousarray(output_chunk)
 

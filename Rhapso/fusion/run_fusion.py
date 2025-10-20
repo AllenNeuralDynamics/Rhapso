@@ -9,15 +9,18 @@ import time
 from pathlib import Path
 import xml.etree.ElementTree as ET
 import yaml
-import aind_cloud_fusion.fusion as fusion
-import aind_cloud_fusion.input_output as input_output
-import aind_cloud_fusion.script_utils as utils
+# import aind_cloud_fusion.fusion as fusion
+# import aind_cloud_fusion.input_output as input_output
+# import aind_cloud_fusion.script_utils as utils
 import xml.etree.ElementTree as ET
 import boto3
 from io import BytesIO
-# from .aind_cloud_fusion import fusion as fusion
-# from .aind_cloud_fusion import input_output as input_output
-# from .aind_cloud_fusion import script_utils as utils
+from .affine_fusion import fusion as fusion
+from .affine_fusion import input_output as input_output
+from .affine_fusion import script_utils as utils
+
+from botocore.client import Config
+from botocore import UNSIGNED
 
 def get_tile_zyx_resolution(input_xml_path: str) -> list[int]: 
     """
@@ -26,6 +29,7 @@ def get_tile_zyx_resolution(input_xml_path: str) -> list[int]:
     if input_xml_path.startswith('s3://'):
         # Handle S3 path
         s3 = boto3.resource('s3')
+        # s3 = boto3.client('s3', config=Config(signature_version=UNSIGNED))
         bucket_name, key = input_xml_path[5:].split('/', 1)
         bucket = s3.Bucket(bucket_name)
         obj = bucket.Object(key)
@@ -82,8 +86,10 @@ def execute_job(yml_path, xml_path, output_path):
 if __name__ == '__main__':
 
     xml_path = 's3://aind-open-data/exaSPIM_720164_2025-07-07_17-55-45_processed_2025-07-15_16-22-02/tile_alignment/ip_affine_alignment/bigstitcher_affine.xml'
+    # yml_path = 's3://aind-scratch-data/sean.fite/worker_config.yml'
     yml_path = 's3://sean-fusion/worker_config.yml'
-    output_path = 's3://aind-scratch-data/exaSPIM_720164_2025-07-07_17-55-45_rhapso/fusion/fused.zarr'
+    # output_path = 's3://aind-scratch-data/sean.fite/exaSPIM_720164_2025-07-07_17-55-45_rhapso/fusion/fused.zarr'
+    output_path = 's3://sean-fusion'
 
     print(f'{xml_path=}')
     print(f'{yml_path=}')

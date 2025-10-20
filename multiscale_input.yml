@@ -1,0 +1,6 @@
+in_path: s3://sean-fusion/exaSPIM_720164_2025-07-07_17-55-45_rhapso/fusion/fused.zarr
+output_path: s3://rhapso-zar-sample
+resolution_zyx:
+- 1.0
+- 0.35
+- 0.35

@@ -1,6 +1,6 @@
-cluster_name: rhapso-ray-fusion-cluster-sean-2
-max_workers: 40
-min_workers: 40
+cluster_name: rhapso-ray-multiscale-cluster-sean-12029
+max_workers: 15
+min_workers: 15
 
 provider:
   type: aws
@@ -58,7 +58,7 @@ setup_commands:
 head_start_ray_commands:
   - ray stop
   - ray start --head --port=6379 --dashboard-host=0.0.0.0 --autoscaling-config=~/ray_bootstrap_config.yaml 
-  - python3 -m Rhapso.fusion.run_fusion
+  - python3 -m Rhapso.run
 
 worker_start_ray_commands:
   - ray stop
@@ -70,12 +70,12 @@ worker_start_ray_commands:
 # python setup.py bdist_wheel 
 
 # RAY UP / DOWN / CLEAR CACHE COMMANDS
-# ray up fusion_cluster_sean.yml --no-config-cache
-# ray down fusion_cluster_sean.yml
+# ray up multiscale_cluster_sean.yml --no-config-cache
+# ray down multiscale_cluster_sean.yml
 # rm -rf ~/.cache/ray
 
 # ACCESS RAY DASHBOARD
-# ssh -i /Users/seanfite/Desktop/AllenInstitute/Rhapso/Auth/AWS/EC2-SSH-Key/sean-rhapso.pem -L 8265:localhost:8265 ubuntu@35.92.69.149
+# ssh -i /Users/seanfite/Desktop/AllenInstitute/Rhapso/Auth/AWS/EC2-SSH-Key/sean-rhapso.pem -L 8265:localhost:8265 ubuntu@34.220.93.123
 # http://localhost:8265
 
 # TO FIX

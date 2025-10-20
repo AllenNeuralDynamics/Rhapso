@@ -9,6 +9,9 @@ from io import BytesIO
 import xmltodict
 import numpy as np
 
+from botocore.client import Config
+from botocore import UNSIGNED
+
 def check_collision(
     cell_box: geometry.AABB,
     t_aabb: geometry.AABB
@@ -362,6 +365,7 @@ def parse_yx_tile_layout(xml_path: str, channel: int) -> list[list[int]]:
     # --- load XML (S3 or local) ---
     if xml_path.startswith('s3://'):
         s3 = boto3.client('s3')
+        # s3 = boto3.client('s3', config=Config(signature_version=UNSIGNED))
         bucket_name, key = xml_path[5:].split('/', 1)
         response = s3.get_object(Bucket=bucket_name, Key=key)
         file_stream = BytesIO(response['Body'].read())

@@ -1,8 +1,7 @@
-from fusion.multiscale.blocked_array_writer import BlockedArrayWriter
-from fusion.multiscale.chunk_utils import ensure_shape_5d, ensure_array_5d
-from fusion.multiscale.ome_zarr_ import store_array, downsample_and_store, _get_bytes, write_ome_ngff_metadata
+from .multiscale.blocked_array_writer import BlockedArrayWriter
+from .multiscale.chunk_utils import ensure_shape_5d, ensure_array_5d
+from .multiscale.ome_zarr_ import store_array, downsample_and_store, _get_bytes, write_ome_ngff_metadata
 
-from dask.distributed import Client, LocalCluster
 from pathlib import Path 
 import logging
 import time
@@ -18,7 +17,9 @@ LOGGER.setLevel(logging.INFO)
 
 def run_multiscale(full_res_arr: dask.array, 
                    out_group: zarr.group,
-                   voxel_sizes_zyx: tuple): 
+                   voxel_sizes_zyx: tuple,
+                   input_path: str
+                   ): 
     
     arr = full_res_arr.rechunk((1, 1, 128, 128, 128))
     arr = ensure_array_5d(arr)
@@ -33,7 +34,6 @@ def run_multiscale(full_res_arr: dask.array,
     n_levels = 8   # Need 8 levels for exaspim 
     compressor = None
 
-    # Actual Processing
     write_ome_ngff_metadata(
             out_group,
             arr,
@@ -46,45 +46,42 @@ def run_multiscale(full_res_arr: dask.array,
 
     t0 = time.time()
     
-    store_array(arr, out_group, "0", block_shape, compressor)
-    pyramid = downsample_and_store(
-        arr, out_group, n_levels, scale_factors, block_shape, compressor
-    )
-    write_time = time.time() - t0
+    store_array(arr, out_group, "0", block_shape, input_path, compressor)
+    # pyramid = downsample_and_store(
+    #     arr, out_group, n_levels, scale_factors, block_shape, compressor
+    # )
+    # write_time = time.time() - t0
 
-    LOGGER.info(
-        f"Finished writing tile.\n"
-        f"Took {write_time}s. {_get_bytes(pyramid) / write_time / (1024 ** 2)} MiB/s"
-    )
+    # LOGGER.info(
+    #     f"Finished writing tile.\n"
+    #     f"Took {write_time}s. {_get_bytes(pyramid) / write_time / (1024 ** 2)} MiB/s"
+    # )
 
 def read_config_yaml(yaml_path: str) -> dict:
     if yaml_path.startswith('s3://'):
+        print(f"{yaml_path} yaml path")
         fs = s3fs.S3FileSystem(anon=False)  
         with fs.open(yaml_path, "r") as f:
             yaml_dict = yaml.safe_load(f)
     else:
         with open(yaml_path, "r") as f:
             yaml_dict = yaml.safe_load(f)
-        return yaml_dict
+    
+    return yaml_dict
 
 def write_config_yaml(yaml_path: str, yaml_data: dict) -> None:
     with open(yaml_path, "w") as file:
         yaml.dump(yaml_data, file)
 
 def main(): 
-    # Locate logging yaml, simply run multiscale on first yaml instance. 
-    # yml_path = str(glob.glob('../data/*.yml')[0])
-    yml_path = '/Users/seanfite/Desktop/Fusion/multiscale_input.yml'
+    yml_path = 's3://multiscale-sean/multiscale_input.yml'
     params = read_config_yaml(yml_path)
     in_path = params['in_path']
     output_path = params['output_path']
     voxel_sizes_zyx = tuple(params['resolution_zyx'])
 
-    # Initalize cluster.
-    client = Client(LocalCluster(n_workers=64, threads_per_worker=1, processes=True))
-
     # Run multiscaling
-    arr = zarr.open(in_path + '/0', mode='r')
+    arr = zarr.open(in_path + "/0", mode='r')
     arr = dask.array.from_zarr(arr)
 
     s3 = s3fs.S3FileSystem(
@@ -99,7 +96,7 @@ def main():
     out_group = zarr.group(store=store, overwrite=True)
 
     # out_group = zarr.open_group(output_path, mode='w')
-    run_multiscale(arr, out_group, voxel_sizes_zyx)    
+    run_multiscale(arr, out_group, voxel_sizes_zyx, in_path)    
 
     # Dump 'Done' file w/ Unique ID
     unique_id = str(uuid.uuid4())

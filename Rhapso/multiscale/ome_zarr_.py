@@ -1,7 +1,7 @@
-from fusion.multiscale.multiscale_ import downscale, multiscale
-from fusion.multiscale.reducers import windowed_mean, WindowedReducer
-from fusion.multiscale.chunk_utils import Union, Tuple
-from fusion.multiscale.blocked_array_writer import BlockedArrayWriter
+from .multiscale_ import downscale, multiscale
+from .reducers import windowed_mean, WindowedReducer
+from .chunk_utils import Union, Tuple
+from .blocked_array_writer import BlockedArrayWriter
 
 from ome_zarr.format import CurrentFormat
 from ome_zarr.writer import write_multiscales_metadata
@@ -218,6 +218,7 @@ def store_array(
     group: zarr.Group,
     path: str,
     block_shape: tuple,
+    input_path: str,
     compressor: Codec = None,
     dimension_separator: str = "/",
 ) -> zarr.Array:
@@ -251,7 +252,10 @@ def store_array(
         overwrite=True,
     )
 
-    BlockedArrayWriter.store(arr, ds, block_shape)
+    write_root = getattr(group.store, "root", None) or getattr(group.store, "path", None)
+    write_ds = path 
+
+    BlockedArrayWriter.store(arr, ds, block_shape, write_root, write_ds, input_path)
 
     return ds
 

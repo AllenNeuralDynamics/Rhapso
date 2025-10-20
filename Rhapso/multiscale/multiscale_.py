@@ -1,8 +1,8 @@
 from __future__ import annotations
 
-from fusion.multiscale.chunks import align_chunks, normalize_chunks
-from fusion.multiscale.reducers import WindowedReducer
-from fusion.multiscale.util import adjust_shape, broadcast_to_rank, logn
+from .chunks import align_chunks, normalize_chunks
+from .reducers import WindowedReducer
+from .util import adjust_shape, broadcast_to_rank, logn
 
 from typing import TYPE_CHECKING, Literal
 from dask.array.core import Array

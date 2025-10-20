@@ -1,9 +1,12 @@
-from fusion.multiscale.chunk_utils import expand_chunks
+from .chunk_utils import expand_chunks
 
 from typing import Tuple, Generator
 from numpy.typing import ArrayLike
 import logging
 import dask.array as da
+import s3fs, zarr
+import ray
+import numpy as np
 
 
 _LOGGER = logging.getLogger(__name__)
@@ -59,7 +62,8 @@ class BlockedArrayWriter:
 
     @staticmethod
     def store(
-        in_array: da.Array, out_array: ArrayLike, block_shape: tuple
+        in_array: da.Array, out_array: ArrayLike, block_shape: tuple, write_root: str, 
+        write_ds: str, input_path
     ) -> None:
         """
         Partitions the last 3 dimensions of a Dask array into non-overlapping blocks and
@@ -70,21 +74,33 @@ class BlockedArrayWriter:
         :param block_shape: Tuple of (block_depth, block_height, block_width)
         :param out_array: The output array
         """
-        # Iterate through the input array in steps equal to the block shape dimensions
-        for sl in BlockedArrayWriter.gen_slices(in_array.shape, block_shape):
-            block = in_array[sl]
-            print(block)
-            da.store(
-                block,
-                out_array,
-                regions=sl,
-                lock=False,
-                compute=False,
-                return_stored=False,
-            )
+        
+        @ray.remote(num_cpus=1)
+        def process_multiscale_task(sl, input_path, write_root, write_ds) -> tuple:
+            s3r = s3fs.S3FileSystem(anon=False)
+            src = zarr.open(s3fs.S3Map(root=input_path, s3=s3r), mode="r")[write_ds]
+            print("read done")
+
+            s3w = s3fs.S3FileSystem(anon=False)
+            dst = zarr.open(s3fs.S3Map(root=write_root, s3=s3w), mode="a")[write_ds]
+
+            block = src[sl]                            
+            dst[sl] = np.ascontiguousarray(block)  
+            print("write done")     
+            return None
+
+        ray.init()
+
+        futures = [
+            process_multiscale_task.remote(sl, input_path, write_root, write_ds)
+            for sl in BlockedArrayWriter.gen_slices(in_array.shape, block_shape)
+        ]
+
+        results = ray.get(futures)
+        
 
     @staticmethod
-    def get_block_shape(arr, target_size_mb=409600, mode="cycle"):
+    def get_block_shape(arr, target_size_mb=1024, mode="cycle"):
         """
         Given the shape and chunk size of a pre-chunked array, determine the optimal block shape
         closest to target_size. Expanded block dimensions are an integer multiple of the chunk dimension
