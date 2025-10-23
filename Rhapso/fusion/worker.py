@@ -3,23 +3,15 @@ Runs fusion from config file generated
 from dispim or exaspim scheduler.
 """
 
-import glob
 import os
-import uuid
-import time
-from pathlib import Path
-import yaml
 
-import aind_cloud_fusion.blend as blend
-import aind_cloud_fusion.fusion as fusion
-import aind_cloud_fusion.geometry as geometry
-import aind_cloud_fusion.io as io
-import aind_cloud_fusion.script_utils as script_utils
+from .affine_fusion import blend as blend
+from .affine_fusion import fusion as fusion
+from .affine_fusion import geometry as geometry
+from .affine_fusion import io as io
+from .affine_fusion import script_utils as script_utils
 
-
-def execute_job(yml_path: str,
-                xml_path: str,
-                output_path: str):
+def execute_job(yml_path: str, xml_path: str):
     """
     yml_path: Local yml path
     xml_path: Local xml path
@@ -65,9 +57,7 @@ def execute_job(yml_path: str,
     # Application Parameter: POST_REG_TFMS
     POST_REG_TFMS: list[geometry.Affine] = []   # NOTE: Please add optional post-reg transforms
 
-    _, _, _, tile_aabbs, output_volume_size, _ = fusion.initialize_fusion(
-        DATASET, POST_REG_TFMS, OUTPUT_PARAMS
-    )
+    _, _, _, _, tile_aabbs, _, _ = fusion.initialize_fusion(DATASET, POST_REG_TFMS, OUTPUT_PARAMS)
 
     # Application Object: BLENDING_MODULE
     BLENDING_MODULE = blend.WeightedLinearBlending(tile_aabbs)     # NOTE: Please choose your desired blending
@@ -83,29 +73,11 @@ def execute_job(yml_path: str,
             BLENDING_MODULE,
     )
 
-    # Log 'done' file for next capsule in pipeline.
-    # Unique log filename
-    unique_id = str(uuid.uuid4())
-    timestamp = int(time.time() * 1000)
-    unique_file_name = str(Path(output_path) / f"file_{timestamp}_{unique_id}.yml")
-
-    log_content = {}
-    log_content['output_path'] = OUTPUT_PARAMS.path
-    log_content['resolution_zyx'] = list(OUTPUT_PARAMS.resolution_zyx)
-
-    # with open(unique_file_name, "w") as file:
-    #     yaml.dump(log_content, file)
-
-
 if __name__ == '__main__':
-    yml_path = "/Users/seanfite/Desktop/Fusion/worker_0_ch488.yml"
+    yml_path = "s3://sean-fusion/worker_0_ch488.yml"
     xml_path = "s3://aind-open-data/HCR_802704_2025-08-30_02-00-00_processed_2025-10-01_21-09-24/image_tile_alignment/bigstitcher.xml"
-    output_path = "s3://sean-fusion/HCR_802704/fusion.zarr"
 
     print(f'{yml_path=}')
     print(f'{xml_path=}')
-    print(f'{output_path=}')
 
-    execute_job(yml_path,
-                xml_path,
-                output_path)
+    execute_job(yml_path, xml_path)

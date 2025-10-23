@@ -16,10 +16,10 @@ import numpy as np
 from pathlib import Path
 import fsspec
 
-import aind_cloud_fusion.io as io
-import aind_cloud_fusion.fusion as fusion
-import aind_cloud_fusion.geometry as geometry
-import aind_cloud_fusion.script_utils as script_utils
+import affine_fusion.io as io
+import affine_fusion.fusion as fusion
+import affine_fusion.geometry as geometry
+import affine_fusion.script_utils as script_utils
 
 """
 DATA CONTRACT:

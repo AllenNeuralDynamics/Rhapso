@@ -1,6 +1,6 @@
-cluster_name: rhapso-ray-fusion-cluster-sean-2
-max_workers: 40
-min_workers: 40
+cluster_name: rhapso-ray-fusion-cluster-sean-00192
+max_workers: 6
+min_workers: 6
 
 provider:
   type: aws
@@ -43,6 +43,8 @@ available_node_types:
 head_node_type: ray.head.default
 
 setup_commands:
+  - sudo sed -i -e 's|http://archive.ubuntu.com/ubuntu|https://us-west-2.ec2.archive.ubuntu.com/ubuntu|g' -e 's|http://security.ubuntu.com/ubuntu|https://us-west-2.ec2.archive.ubuntu.com/ubuntu|g' /etc/apt/sources.list
+  - sudo rm -rf /var/lib/apt/lists/* && sudo mkdir -p /var/lib/apt/lists/partial
   - sudo apt-get update -y 
   - sudo DEBIAN_FRONTEND=noninteractive apt install -y python3-pip 
   - sudo python3 -m pip install awscli
@@ -58,7 +60,7 @@ setup_commands:
 head_start_ray_commands:
   - ray stop
   - ray start --head --port=6379 --dashboard-host=0.0.0.0 --autoscaling-config=~/ray_bootstrap_config.yaml 
-  - python3 -m Rhapso.fusion.run_fusion
+  - python3 -m Rhapso.fusion.worker
 
 worker_start_ray_commands:
   - ray stop
@@ -75,7 +77,7 @@ worker_start_ray_commands:
 # rm -rf ~/.cache/ray
 
 # ACCESS RAY DASHBOARD
-# ssh -i /Users/seanfite/Desktop/AllenInstitute/Rhapso/Auth/AWS/EC2-SSH-Key/sean-rhapso.pem -L 8265:localhost:8265 ubuntu@35.92.69.149
+# ssh -i /Users/seanfite/Desktop/AllenInstitute/Rhapso/Auth/AWS/EC2-SSH-Key/sean-rhapso.pem -L 8265:localhost:8265 ubuntu@54.203.0.37
 # http://localhost:8265
 
 # TO FIX

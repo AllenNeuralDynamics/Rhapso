@@ -1,25 +1,24 @@
 """
 Defines all standard input to fusion algorithm.
 """
-
-import os
-import re
 from collections import OrderedDict
 from dataclasses import dataclass
 from pathlib import Path
-from typing import Optional
+
 import boto3
 import dask.array as da
 import numpy as np
+from numcodecs import Blosc
+import re
+import s3fs
 import tensorstore as ts
 import xmltodict
 import yaml
-from numcodecs import Blosc
-from io import BytesIO
-from . import geometry as geometry
+import zarr
+import fsspec
 
-from botocore.client import Config
-from botocore import UNSIGNED
+from . import geometry
+
 
 def read_config_yaml(yaml_path: str) -> dict:
     with open(yaml_path, "r") as f:
@@ -33,15 +32,13 @@ def write_config_yaml(yaml_path: str, yaml_data: dict) -> None:
 
 
 def open_zarr_s3(bucket: str, path: str) -> ts.TensorStore:
-    return ts.open(
-        {
-            "driver": "zarr",
-            "kvstore": {
-                "driver": "http",
-                "base_url": f"https://{bucket}.s3.us-west-2.amazonaws.com/{path}",
-            },
-        }
-    ).result()
+    return ts.open({
+        'driver': 'zarr',
+        'kvstore': {
+            'driver': 'http',
+            'base_url': f'https://{bucket}.s3.us-west-2.amazonaws.com/{path}',
+        },
+    }).result()
 
 
 class InputArray:
@@ -74,7 +71,7 @@ class InputTensorstore(InputArray):
         self.arr = arr
 
     def __getitem__(self, slice):
-        return np.array(self.arr[slice].read().result())
+        return np.array(self.arr[slice])
 
     @property
     def shape(self):
@@ -131,23 +128,17 @@ class BigStitcherDataset(Dataset):
     Intended for the base registration channel.
     """
 
-    def __init__(
-        self, xml_path: str, s3_path: str, datastore: int, level: int = 0
-    ):
+    def __init__(self, xml_path: str, s3_path: str, datastore: int, level: int = 0):
         self.xml_path = xml_path
         self.s3_path = s3_path
 
-        assert datastore in [
-            0,
-            1,
-            2,
-        ], "Only 0 = Dask, 1 = Tensorstore"
-        self.datastore = datastore
+        assert datastore in [0, 1], \
+            f"Only 0 = Dask and 1 = Tensorstore supported."
+        self.datastore = datastore  # {0 = Dask, 1 = Tensorstore}
 
         allowed_levels = [0, 1, 2, 3, 4, 5]
-        assert (
-            level in allowed_levels
-        ), f"Level {level} is not in {allowed_levels}"
+        assert level in allowed_levels, \
+            f"Level {level} is not in {allowed_levels}"
         self.level = level
 
         self.tile_cache: dict[int, InputArray] = {}
@@ -156,20 +147,28 @@ class BigStitcherDataset(Dataset):
     @property
     def tile_volumes_tczyx(self) -> dict[int, InputArray]:
         if len(self.tile_cache) != 0:
-            return self.tile_cache
+            tile_paths = self._extract_tile_paths(self.xml_path)
+            tile_paths = self._extract_tile_paths(self.xml_path)
+            for t_id, t_path in tile_paths.items():
+                if not self.s3_path.endswith('/'):
+                    self.s3_path = self.s3_path + '/'
+
+                level_str = '/' + str(self.level)  # Ex: '/0'
+                tile_paths[t_id] = self.s3_path + Path(t_path).name + level_str
+            return self.tile_cache, tile_paths
 
         # Otherwise, fetch for first time
         tile_paths = self._extract_tile_paths(self.xml_path)
         for t_id, t_path in tile_paths.items():
-            if not self.s3_path.endswith("/"):
-                self.s3_path = self.s3_path + "/"
+            if not self.s3_path.endswith('/'):
+                self.s3_path = self.s3_path + '/'
 
-            level_str = "/" + str(self.level)  # Ex: '/0'
+            level_str = '/' + str(self.level)  # Ex: '/0'
             tile_paths[t_id] = self.s3_path + Path(t_path).name + level_str
 
         tile_arrays: dict[int, InputArray] = {}
         for tile_id, t_path in tile_paths.items():
-
+            
             arr = None
             if self.datastore == 0:  # Dask
                 tile_zarr = da.from_zarr(t_path)
@@ -177,22 +176,20 @@ class BigStitcherDataset(Dataset):
             elif self.datastore == 1:  # Tensorstore
                 # Referencing the following naming convention:
                 # s3://BUCKET_NAME/DATASET_NAME/TILE/NAME/CHANNEL
-                parts = t_path.split("/")
+                parts = t_path.split('/')
                 bucket = parts[2]
-                third_slash_index = (
-                    len(parts[0]) + len(parts[1]) + len(parts[2]) + 3
-                )
+                third_slash_index = len(parts[0]) + len(parts[1]) + len(parts[2]) + 3
                 obj = t_path[third_slash_index:]
 
                 tile_zarr = open_zarr_s3(bucket, obj)
                 arr = InputTensorstore(tile_zarr)
-
-            print(f"Loading Tile {tile_id}")
+            
+            print(f'Loading Tile {tile_id} / {len(tile_paths)}')
             tile_arrays[int(tile_id)] = arr
 
         self.tile_cache = tile_arrays
 
-        return tile_arrays
+        return tile_arrays, tile_paths
 
     @property
     def tile_transforms_zyx(self) -> dict[int, list[geometry.Transform]]:
@@ -217,25 +214,13 @@ class BigStitcherDataset(Dataset):
             matrix_stack = [geometry.Affine(tfm)]
 
             # 2) Append up/down-sampling transforms
-            sf = 2.0**self.level
-            up = geometry.Affine(
-                np.array(
-                    [
-                        [sf, 0.0, 0.0, 0.0],
-                        [0.0, sf, 0.0, 0.0],
-                        [0.0, 0.0, sf, 0.0],
-                    ]
-                )
-            )
-            down = geometry.Affine(
-                np.array(
-                    [
-                        [1.0 / sf, 0.0, 0.0, 0.0],
-                        [0.0, 1.0 / sf, 0.0, 0.0],
-                        [0.0, 0.0, 1.0 / sf, 0.0],
-                    ]
-                )
-            )
+            sf = 2. ** self.level
+            up = geometry.Affine(np.array([[sf, 0., 0., 0.],
+                                           [0., sf, 0., 0.],
+                                           [0., 0., sf, 0.]]))
+            down = geometry.Affine(np.array([[1./sf, 0., 0., 0.],
+                                             [0., 1./sf, 0., 0.],
+                                             [0., 0., 1./sf, 0.]]))
             matrix_stack.insert(0, up)
             matrix_stack.append(down)
             tile_net_tfms[int(tile_id)] = matrix_stack
@@ -246,8 +231,12 @@ class BigStitcherDataset(Dataset):
 
     @property
     def tile_resolution_zyx(self) -> tuple[float, float, float]:
-        with open(self.xml_path, "r") as file:
-            data: OrderedDict = xmltodict.parse(file.read())
+        if self.xml_path.startswith("s3://"):
+            with fsspec.open(self.xml_path, mode="rt") as f:
+                data: OrderedDict = xmltodict.parse(f.read())
+        else:
+            with open(self.xml_path, "r") as file:
+                data: OrderedDict = xmltodict.parse(file.read())
 
         resolution_str = data["SpimData"]["SequenceDescription"]["ViewSetups"][
             "ViewSetup"
@@ -271,8 +260,13 @@ class BigStitcherDataset(Dataset):
             Dictionary of tile ids to tile paths.
         """
         view_paths: dict[int, str] = {}
-        with open(xml_path, "r") as file:
-            data: OrderedDict = xmltodict.parse(file.read())
+
+        if xml_path.startswith("s3://"):
+            with fsspec.open(xml_path, mode="rt") as f:
+                data: OrderedDict = xmltodict.parse(f.read())
+        else:
+            with open(xml_path, "r") as file:
+                data: OrderedDict = xmltodict.parse(file.read())
 
         parent = data["SpimData"]["SequenceDescription"]["ImageLoader"][
             "zarr"
@@ -283,7 +277,7 @@ class BigStitcherDataset(Dataset):
                 "zgroup"
             ]
         ):
-            view_paths[i] = parent + "/" + zgroup["path"]
+            view_paths[i] = parent + "/" + zgroup["@path"]
 
         return view_paths
 
@@ -308,14 +302,10 @@ class BigStitcherDataset(Dataset):
         """
 
         view_transforms: dict[int, list[dict]] = {}
-
-        if xml_path.startswith('s3://'):
-            s3 = boto3.client('s3')
-            # s3 = boto3.client('s3', config=Config(signature_version=UNSIGNED))
-            bucket_name, key = xml_path[5:].split('/', 1)
-            response = s3.get_object(Bucket=bucket_name, Key=key)
-            file_stream = BytesIO(response['Body'].read())
-            data = xmltodict.parse(file_stream.read().decode('utf-8'))
+        
+        if xml_path.startswith("s3://"):
+            with fsspec.open(xml_path, mode="rt") as f:
+                data: OrderedDict = xmltodict.parse(f.read())
         else:
             with open(xml_path, "r") as file:
                 data: OrderedDict = xmltodict.parse(file.read())
@@ -404,20 +394,12 @@ class BigStitcherDatasetChannel(BigStitcherDataset):
     NOTE: Only loads full resolution images/registrations.
     """
 
-    def __init__(
-        self,
-        xml_path: str,
-        s3_path: str,
-        channel_num: int,
-        datastore: int,
-        smartspim=False,
-    ):
+    def __init__(self, xml_path: str, s3_path: str, channel_num: int, datastore: int):
         """
         Only new information required is channel number.
         """
         super().__init__(xml_path, s3_path, datastore)
         self.channel_num = channel_num
-        self.smartspim = smartspim
 
         self.tile_cache: dict[int, InputArray] = {}
 
@@ -430,218 +412,86 @@ class BigStitcherDatasetChannel(BigStitcherDataset):
         if len(self.tile_cache) != 0:
             return self.tile_cache
 
-        if self.smartspim:
-            return self._get_smartspim_tile_volumes_tczyx()
-
         # Otherwise fetch for first time
-        tile_arrays: dict[int, InputArray] = {}
-        tile_specs = []
-
-        if self.xml_path.startswith('s3://'):
-            # Handle S3 path
-            s3 = boto3.client('s3')
-            # s3 = boto3.client('s3', config=Config(signature_version=UNSIGNED))
-            bucket_name, key = self.xml_path[5:].split('/', 1)
-            response = s3.get_object(Bucket=bucket_name, Key=key)
-            file_stream = BytesIO(response['Body'].read())
-            data = xmltodict.parse(file_stream.read().decode('utf-8'))
-        else:
-            with open(self.xml_path, "r") as file:
-                data: OrderedDict = xmltodict.parse(file.read())
-
-        tile_id_lut = {}
-        for zgroup in data["SpimData"]["SequenceDescription"]["ImageLoader"][
-            "zgroups"
-        ]["zgroup"]:
-            tile_id = zgroup["@setup"]
-            tile_name = zgroup["path"]
-            s_parts = tile_name.split("_")
-            
-            match = re.search(r'ch_(\d+)', tile_name)
-            ch = int(match.group(1))
-
-            # For tile format - tile_x_0000_y_0000_z_0000_ch_488
-            # location_ch = (int(s_parts[2]), 
-            #                int(s_parts[4]), 
-            #                int(s_parts[6]), 
-            #                ch)
-            
-            # For Tile format - tile_000000_ch_488
-            location_ch = (0, 0, int(tile_id), ch)
-            
-            tile_id_lut[location_ch] = int(tile_id)
-
-        # Reference path: s3://aind-open-data/HCR_677594_2023-10-20_15-10-36/SPIM.ome.zarr/
-        # Reference tilename: <tile_name, no underscores>_X_####_Y_####_Z_####_ch_###.zarr
-        slash_2 = self.s3_path.find("/", self.s3_path.find("/") + 1)
-        slash_3 = self.s3_path.find(
-            "/", self.s3_path.find("/", self.s3_path.find("/") + 1) + 1
-        )
-        bucket_name = self.s3_path[slash_2 + 1 : slash_3]
-        directory_path = self.s3_path[slash_3 + 1 :]
-
-        for p in self._list_bucket_directory(bucket_name, directory_path):
-            if p.endswith(".zgroup"):
-                continue
-
-            # Data loading
-            channel_num = -1
-            search_result = re.search(r"(\d*)\.zarr.?$", p)
-            if search_result:
-                channel_num = int(search_result.group(1))
-                if channel_num == self.channel_num:
-
-                    full_resolution_p = self.s3_path + p + "/0"
-                    s_parts = p.split("_")
-                    
-                    match = re.search(r'ch_(\d+)', p)
-                    ch = int(match.group(1))
-                    
-                    # For tile format - tile_x_0000_y_0000_z_0000_ch_488
-                    # location_ch = (
-                    #     int(s_parts[2]),
-                    #     int(s_parts[4]),
-                    #     int(s_parts[6]),
-                    #     ch
-                    # )
-
-                    # For Tile format - tile_000000_ch_488
-                    view = s_parts[1]
-                    location_ch = (0, 0, int(view), ch)
-
-                    tile_id = tile_id_lut[location_ch]
-
-                    tile_specs.append(full_resolution_p)
-
-                    arr = None
-                    if self.datastore == 0:  # Dask
-                        tile_zarr = da.from_zarr(full_resolution_p)
-                        arr = InputDask(tile_zarr)
-                    
-                        # tile_zarr = da.from_zarr(
-                        # full_resolution_p,
-                        # storage_options={"anon": True})
-                        arr = InputDask(tile_zarr)
-
-                    elif self.datastore == 1:  # Tensorstore
-                        # Referencing the following naming convention:
-                        # s3://BUCKET_NAME/DATASET_NAME/TILE/NAME/CHANNEL
-                        parts = full_resolution_p.split("/")
-                        bucket = parts[2]
-                        third_slash_index = (
-                            len(parts[0]) + len(parts[1]) + len(parts[2]) + 3
-                        )
-                        obj = full_resolution_p[third_slash_index:]
-
-                        tile_zarr = open_zarr_s3(bucket, obj)
-                        arr = InputTensorstore(tile_zarr)
-
-                    print(f"Loading Tile {tile_id}")
-                    tile_arrays[int(tile_id)] = arr
-
-        self.tile_cache = tile_arrays
-
-        return tile_arrays, tile_specs
-
-    def _get_smartspim_tile_volumes_tczyx(
-        self, multiscale: Optional[str] = "0"
-    ) -> dict[int, InputArray]:
-        """
-        Smartspim does not follow the same naming convention as exaspim/dispim.
-        The naming convention is so divergent, this method exists.
-        """
-
         tile_arrays: dict[int, InputArray] = {}
 
         with open(self.xml_path, "r") as file:
             data: OrderedDict = xmltodict.parse(file.read())
         tile_id_lut = {}
-        for zgroup in data["SpimData"]["SequenceDescription"]["ImageLoader"][
-            "zgroups"
-        ]["zgroup"]:
-            tile_id = zgroup["@setup"]
-            tile_name = zgroup["path"]
-            tile_id_lut[tile_name] = int(tile_id)
+        for zgroup in data['SpimData']['SequenceDescription']['ImageLoader']['zgroups']['zgroup']:
+            tile_id = zgroup['@setup']
+            tile_name = zgroup['path']
+            s_parts = tile_name.split('_')
+            location = (int(s_parts[2]),
+                        int(s_parts[4]),
+                        int(s_parts[6]))
+            tile_id_lut[location] = int(tile_id)
 
-        # Reference path: s3://aind-open-data/SmartSPIM_{number}/SmartSPIM/Channel/Tilename.zarr
-        # Reference tilename: #####_#####.zarr, which is consistent across channels.
-        slash_2 = self.s3_path.find("/", self.s3_path.find("/") + 1)
-        slash_3 = self.s3_path.find(
-            "/", self.s3_path.find("/", self.s3_path.find("/") + 1) + 1
-        )
-        bucket_name = self.s3_path[slash_2 + 1 : slash_3]
-        directory_path = self.s3_path[slash_3 + 1 :]
+        # Reference path: s3://aind-open-data/HCR_677594_2023-10-20_15-10-36/SPIM.ome.zarr/
+        # Reference tilename: <tile_name, no underscores>_X_####_Y_####_Z_####_ch_###.zarr
+        slash_2 = self.s3_path.find('/', self.s3_path.find('/') + 1)
+        slash_3 = self.s3_path.find('/', self.s3_path.find('/', self.s3_path.find('/') + 1) + 1)
+        bucket_name = self.s3_path[slash_2 + 1:slash_3]
+        directory_path = self.s3_path[slash_3 + 1:]
 
-        print("BUCKET name: ", bucket_name)
-        print("DIRECTORY PATH: ", directory_path)
-        print("S3 path: ", self.s3_path)
-        print("Tile id lut: ", tile_id_lut)
+        for p in self._list_bucket_directory(bucket_name, directory_path):
+            if p.endswith('.zgroup'):
+                continue
 
-        if self.s3_path.startswith("s3://"):
+            # Data loading
+            channel_num = -1
+            search_result = re.search(r'(\d*)\.zarr.?$', p)
+            if search_result:
+                channel_num = int(search_result.group(1))
+                if channel_num == self.channel_num:
 
-            for p in self._list_bucket_directory(bucket_name, directory_path):
-                if p.endswith(".zgroup"):
-                    continue
+                    full_resolution_p = self.s3_path + p + '/0'
+                    s_parts = p.split('_')
+                    location = (int(s_parts[2]),
+                                int(s_parts[4]),
+                                int(s_parts[6]))
+                    tile_id = tile_id_lut[location]
 
-                full_resolution_p = self.s3_path + p + f"/{multiscale}"
-                tile_id = tile_id_lut[p]
+                    arr = None
+                    if self.datastore == 0:  # Dask
+                        tile_zarr = da.from_zarr(full_resolution_p)
+                        arr = InputDask(tile_zarr)
 
-                arr = None
-                if self.datastore == 0:  # Dask
-                    tile_zarr = da.from_zarr(full_resolution_p)
-                    arr = InputDask(tile_zarr)
+                    elif self.datastore == 1:  # Tensorstore
+                        # Referencing the following naming convention:
+                        # s3://BUCKET_NAME/DATASET_NAME/TILE/NAME/CHANNEL
+                        parts = full_resolution_p.split('/')
+                        bucket = parts[2]
+                        third_slash_index = len(parts[0]) + len(parts[1]) + len(parts[2]) + 3
+                        obj = full_resolution_p[third_slash_index:]
 
-                if self.datastore == 1:
-                    assert False, print("This is not supported.")
+                        tile_zarr = open_zarr_s3(bucket, obj)
+                        arr = InputTensorstore(tile_zarr)
 
-                print(f"Loading Tile {tile_id}")
-                tile_arrays[int(tile_id)] = arr
-
-        else:
-            # Reading data localy
-            local_dir = Path(os.path.abspath(self.s3_path))
-
-            for zarr_tile in local_dir.glob("*.zarr"):
-
-                full_resolution_p = zarr_tile.joinpath(multiscale)
-                tile_id = tile_id_lut[zarr_tile.name]
-
-                arr = None
-                if self.datastore == 0:  # Dask
-                    tile_zarr = da.from_zarr(full_resolution_p)
-                    arr = InputDask(tile_zarr)
-
-                if self.datastore == 1:
-                    assert False, print("This is not supported.")
-
-                print(f"Loading Tile {tile_id}")
-                tile_arrays[int(tile_id)] = arr
+                    print(f'Loading Tile {tile_id} / {len(tile_id_lut)}')
+                    tile_arrays[int(tile_id)] = arr
 
         self.tile_cache = tile_arrays
 
         return tile_arrays
 
     def _list_bucket_directory(self, bucket_name: str, directory_path: str):
-
-        # Unsigned client so public buckets that deny signed principals work
-        client = boto3.client("s3", config=Config(signature_version=UNSIGNED))
-
-        # client = boto3.client("s3")
+        client = boto3.client("s3")
         result = client.list_objects(
             Bucket=bucket_name, Prefix=directory_path, Delimiter="/"
         )
 
-        paths = []  # These are paths
+        paths = []   # These are paths
         for o in result.get("CommonPrefixes"):
             paths.append(o.get("Prefix"))
 
         # Parse the ending files from the paths
         files = []
         for p in paths:
-            if p.endswith("/"):
+            if p.endswith('/'):
                 p = p.rstrip("/")  # Remove trailing slash from directories
 
-            parts = p.split("/")
+            parts = p.split('/')
             files.append(parts[-1])
 
         return files
@@ -650,9 +500,9 @@ class BigStitcherDatasetChannel(BigStitcherDataset):
 class OutputArray:
     def __setitem__(self, index, value):
         raise NotImplementedError("Please implement in InputArray subclass.")
+    
 
-
-class OutputDask(OutputArray):
+class OutputDask(OutputArray): 
     def __init__(self, arr: da.Array):
         self.arr = arr
 
@@ -667,12 +517,30 @@ class OutputTensorstore(OutputArray):
     def __setitem__(self, index, value):
         self.arr[index].write(value).result()
 
+
 @dataclass
 class OutputParameters:
     path: str
-    datastore: int = 0 # {0 == Dask, 1 == Tensorstore}
-    chunksize: tuple[int, int, int, int, int] = (1, 1, 128, 128, 128)
-    resolution_zyx: tuple[float, float, float] = (1.0, 1.0, 1.0)
+    chunksize: tuple[int, int, int, int, int]
+    resolution_zyx: tuple[float, float, float]
+    datastore: int  # {0 == Dask, 1 == Tensorstore}
     dtype: np.dtype = np.uint16
     dimension_separator: str = "/"
-    compressor = Blosc(cname="zstd", clevel=1, shuffle=Blosc.SHUFFLE)
+    compressor = Blosc(cname='zstd', clevel=1, shuffle=Blosc.SHUFFLE)
+
+
+@dataclass
+class RuntimeParameters:
+    """
+    Simplified Runtime Parameters
+    option:
+        0: single process exectution
+        1: multiprocessing execution
+        2: dask execution
+    pool_size: number of processes/vCPUs for options {1, 2}
+    worker_cells:
+        list of cells/chunks this execution operates on
+    """
+    option: int
+    pool_size: int
+    worker_cells: list[tuple[int, int, int]]

@@ -2,31 +2,28 @@
 Utilities for scripts.
 """
 
-import re
-from pathlib import Path
 import boto3
+import re
 import yaml
-from io import BytesIO
-
+import fsspec
 
 def read_config_yaml(yaml_path: str) -> dict:
-    if yaml_path.startswith('s3://'):
-        s3 = boto3.client('s3')
-        bucket_name, key = yaml_path[5:].split('/', 1)
-        response = s3.get_object(Bucket=bucket_name, Key=key)
-        file_stream = BytesIO(response['Body'].read())
-        yaml_dict = yaml.safe_load(file_stream)
+    if yaml_path.startswith("s3://"):
+        with fsspec.open(yaml_path, "rt") as f:
+            yaml_dict = yaml.safe_load(f)
     else:
         with open(yaml_path, "r") as f:
             yaml_dict = yaml.safe_load(f)
     
     return yaml_dict
 
-
 def write_config_yaml(yaml_path: str, yaml_data: dict) -> None:
-    with open(yaml_path, "w") as file:
-        yaml.dump(yaml_data, file)
-
+    if yaml_path.startswith("s3://"):
+        with fsspec.open(yaml_path, "wt") as file:
+            yaml.dump(yaml_data, file)
+    else:
+        with open(yaml_path, "w") as file:
+            yaml.dump(yaml_data, file)
 
 def list_all_tiles_in_bucket_path(
     bucket_SPIM_folder: str, bucket_name="aind-open-data"
@@ -59,7 +56,6 @@ def list_all_tiles_in_bucket_path(
         tiles.append(o.get("Prefix"))
     return tiles
 
-
 def extract_channel_from_tile_path(t_path: str) -> int:
     """
     Extracts channel from tile path naming convention:
@@ -81,7 +77,6 @@ def extract_channel_from_tile_path(t_path: str) -> int:
     match = re.search(pattern, t_path)
     channel = int(match.group(2))
     return channel
-
 
 def get_unique_channels_for_dataset(dataset_path: str) -> list:
     """
@@ -114,10 +109,3 @@ def get_unique_channels_for_dataset(dataset_path: str) -> list:
             unique_list_of_channels.append(channel)
 
     return unique_list_of_channels
-
-
-def get_folder_regex(dataset_path, regex):
-    dataset_path = Path(dataset_path)
-    print(f"Reading data from: {dataset_path}")
-    channels = [str(i) for i in list(dataset_path.glob(regex))]
-    return channels
