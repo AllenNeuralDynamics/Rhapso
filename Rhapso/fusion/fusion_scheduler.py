@@ -34,11 +34,14 @@ worker_cells: [list of cell 3-ples]
 """
 
 def create_starter_ymls(xml_path: str,
-                        output_path: str,
+                        yaml_output_dir: str,
+                        zarr_output_base_path: str,
                         num_workers: int = 64):
     """
-    xml_path: Local xml path
-    output_path: Local results path
+    xml_path: Path to BigStitcher XML file (local or S3)
+    yaml_output_dir: Directory path where YAML config files will be written
+    zarr_output_base_path: S3 base path for zarr output data (used in YAML configs)
+    num_workers: Total number of workers to distribute work across
     """
 
     # Construct I/O cloud paths from local paths in xml
@@ -64,10 +67,6 @@ def create_starter_ymls(xml_path: str,
     
     # input_s3_path = 's3://aind-open-data/' + parts[2] + '/' + parts[3] + '/'
     input_s3_path = parsed_path
-    datetime_str = datetime.now().strftime("%Y-%m-%d_%H-%M-%S")
-    #output_s3_path_base = 's3://aind-open-data/' + parts[2] + f'_full_res_{datetime_str}/'
-    # output_s3_path_base = 's3://aind-open-data/' + parts[2] + f'/fused_full_res/' 
-    output_s3_path_base = "s3://sean-fusion/output/"   
 
     # Init application objects to init fusion scheduling.
     # Application Object: DATASET
@@ -76,8 +75,9 @@ def create_starter_ymls(xml_path: str,
     DATASET = io.BigStitcherDataset(xml_path, s3_path, datastore=0)
 
     # Application Object: OUTPUT_PARAMS
+    # Using a dummy path since we're just calculating dimensions, not writing output here
     OUTPUT_PARAMS = io.OutputParameters(
-        path=output_path,
+        path=zarr_output_base_path + 'temp.zarr',
         chunksize=(1, 1, 128, 128, 128),
         resolution_zyx=DATASET.tile_resolution_zyx,
         datastore=0
@@ -97,7 +97,8 @@ def create_starter_ymls(xml_path: str,
     # Not required here
 
     # Initalize fusion
-    _, _, _, _, output_volume_size, _ = fusion.initialize_fusion(
+    (tile_arrays, tile_paths, tile_transforms, tile_sizes_zyx, 
+     tile_aabbs, output_volume_size, output_volume_origin) = fusion.initialize_fusion(
         DATASET, POST_REG_TFMS, OUTPUT_PARAMS
     )
 
@@ -121,12 +122,23 @@ def create_starter_ymls(xml_path: str,
     channels = script_utils.get_unique_channels_for_dataset(input_s3_path)
     total_cells = len(cell_coords) * len(channels)
     n = int(np.ceil(total_cells / num_workers))
-    print(f'Each worker assigned {n} cells')
+    
+    print(f'\nDataset Info:')
+    print(f'  Channels detected: {channels}')
+    print(f'  Total cells: {total_cells}')
+    print(f'  Cells per channel: {len(cell_coords)}')
+    print(f'  Requested workers: {num_workers}')
+    print(f'  Workers per channel: {int(num_workers/len(channels))}')
+    print(f'  Each worker assigned {n} cells\n')
 
     #divide the workers up by channel
+    yaml_files_created = []
     for worker_id in range(int(num_workers/len(channels))):
         for i, ch in enumerate(channels):
-            print(f'Generating Worker {worker_id} Yaml')
+            yaml_filename = f'worker_{worker_id}_ch{ch}.yml'
+            print(f'Generating {yaml_filename}')
+            yaml_files_created.append(yaml_filename)
+            
             start = worker_id * n
             end = (worker_id + 1) * n
             worker_cells = cell_coords[start:end, :].tolist()
@@ -140,18 +152,23 @@ def create_starter_ymls(xml_path: str,
             ch_X_configs['dataset_type'] = dataset_type
             ch_X_configs['channel'] = ch
             ch_X_configs['input_path'] = input_s3_path
-            ch_X_configs['output_path'] = output_s3_path_base + f'channel_{ch}.zarr'
+            ch_X_configs['output_path'] = zarr_output_base_path + f'channel_{ch}.zarr'
             ch_X_configs['worker_cells'] = worker_cells
-            script_utils.write_config_yaml(str(output_path +'/'+ f'worker_{worker_id}_ch{ch}.yml'), ch_X_configs)
+            script_utils.write_config_yaml(str(yaml_output_dir + '/' + yaml_filename), ch_X_configs)
+    
+    print(f'\nCreated {len(yaml_files_created)} YAML files: {yaml_files_created}')
 
 
 if __name__ == '__main__':
     xml_path = "s3://aind-open-data/HCR_802704_2025-08-30_02-00-00_processed_2025-10-01_21-09-24/image_tile_alignment/bigstitcher.xml"
-    output_path = "s3://sean-fusion/HCR_802704/channel_488.zarr"
+    yaml_output_dir = "s3://martin-test-bucket/HCR_802704/yaml_configs"
+    zarr_output_base_path = "s3://martin-test-bucket/output/"
 
     print(f'{xml_path=}')
-    print(f'{output_path=}')
+    print(f'{yaml_output_dir=}')
+    print(f'{zarr_output_base_path=}')
 
     create_starter_ymls(xml_path,
-                        output_path,
+                        yaml_output_dir,
+                        zarr_output_base_path,
                         num_workers = 3)

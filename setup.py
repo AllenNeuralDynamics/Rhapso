@@ -47,7 +47,7 @@ setup(
         "aind-data-schema==2.0.5",  
         "numba==0.59.1",
         "czifile==2019.7.2.1",
-        "xarray-multiscale==1.1.0", 
+        "xarray-multiscale==1.2.0", 
         "natsort==8.4.0",
         "packaging>=24.1",
         "llvmlite==0.42.*",

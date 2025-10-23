@@ -74,7 +74,7 @@ def execute_job(yml_path: str, xml_path: str):
     )
 
 if __name__ == '__main__':
-    yml_path = "s3://sean-fusion/worker_0_ch488.yml"
+    yml_path = "s3://martin-test-bucket/HCR_802704/yaml_configs/worker_0_ch488.yml"
     xml_path = "s3://aind-open-data/HCR_802704_2025-08-30_02-00-00_processed_2025-10-01_21-09-24/image_tile_alignment/bigstitcher.xml"
 
     print(f'{yml_path=}')
