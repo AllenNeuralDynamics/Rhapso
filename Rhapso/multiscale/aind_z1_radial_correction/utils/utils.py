@@ -8,59 +8,60 @@ from pathlib import Path
 from typing import List
 from urllib.parse import urlparse
 
-from aind_data_schema.core.processing import (
-    DataProcess,
-    PipelineProcess,
-    Processing,
-)
-from packaging import version
+# Commented out - only needed for generate_processing function which is not used by worker
+# from aind_data_schema.core.processing import (
+#     DataProcess,
+#     PipelineProcess,
+#     Processing,
+# )
+# from packaging import version
 
 
-def generate_processing(
-    data_processes: List[DataProcess],
-    dest_processing: str,
-    prefix: str,
-    processor_full_name: str,
-    pipeline_version: str,
-):
-    """
-    Generates data description for the output folder.
-
-    Parameters
-    ------------------------
-
-    data_processes: List[dict]
-        List with the processes aplied in the pipeline.
-
-    dest_processing: PathLike
-        Path where the processing file will be placed.
-
-    processor_full_name: str
-        Person in charged of running the pipeline
-        for this data asset
-
-    pipeline_version: str
-        Terastitcher pipeline version
-
-    """
-    # flake8: noqa: E501
-    processing_pipeline = PipelineProcess(
-        data_processes=data_processes,
-        processor_full_name=processor_full_name,
-        pipeline_version=pipeline_version,
-        pipeline_url="",
-        note="Metadata for radial correction",
-    )
-
-    processing = Processing(
-        processing_pipeline=processing_pipeline,
-        notes="This processing only contains metadata about radial correction \
-            and needs to be compiled with other steps at the end",
-    )
-
-    processing.write_standard_file(
-        output_directory=dest_processing, prefix=prefix
-    )
+# def generate_processing(
+#     data_processes: List[DataProcess],
+#     dest_processing: str,
+#     prefix: str,
+#     processor_full_name: str,
+#     pipeline_version: str,
+# ):
+#     """
+#     Generates data description for the output folder.
+#
+#     Parameters
+#     ------------------------
+#
+#     data_processes: List[dict]
+#         List with the processes aplied in the pipeline.
+#
+#     dest_processing: PathLike
+#         Path where the processing file will be placed.
+#
+#     processor_full_name: str
+#         Person in charged of running the pipeline
+#         for this data asset
+#
+#     pipeline_version: str
+#         Terastitcher pipeline version
+#
+#     """
+#     # flake8: noqa: E501
+#     processing_pipeline = PipelineProcess(
+#         data_processes=data_processes,
+#         processor_full_name=processor_full_name,
+#         pipeline_version=pipeline_version,
+#         pipeline_url="",
+#         note="Metadata for radial correction",
+#     )
+#
+#     processing = Processing(
+#         processing_pipeline=processing_pipeline,
+#         notes="This processing only contains metadata about radial correction \
+#             and needs to be compiled with other steps at the end",
+#     )
+#
+#     processing.write_standard_file(
+#         output_directory=dest_processing, prefix=prefix
+#     )
 
 
 def read_json_as_dict(filepath: str) -> dict:

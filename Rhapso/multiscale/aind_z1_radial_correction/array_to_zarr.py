@@ -7,15 +7,15 @@ from typing import Dict, List, Optional
 import dask.array as da
 import numpy as np
 import zarr
-from aind_hcr_data_transformation.compress.czi_to_zarr import (
+from Rhapso.multiscale.aind_hcr_data_transformation.compress.czi_to_zarr import (
     _get_pyramid_metadata,
     compute_pyramid,
     write_ome_ngff_metadata,
 )
-from aind_hcr_data_transformation.compress.zarr_writer import (
+from Rhapso.multiscale.aind_hcr_data_transformation.compress.zarr_writer import (
     BlockedArrayWriter,
 )
-from aind_hcr_data_transformation.utils.utils import pad_array_n_d
+from Rhapso.multiscale.aind_hcr_data_transformation.utils.utils import pad_array_n_d
 from numcodecs.blosc import Blosc
 from numpy.typing import ArrayLike
 from ome_zarr.io import parse_url
@@ -184,7 +184,13 @@ def convert_array_to_zarr(
     )
 
     # Writing multiscales
-    previous_scale = da.from_array(array, pyramid_group.chunks)
+    # Handle both numpy arrays and dask arrays
+    if isinstance(array, da.Array):
+        # Already a dask array, rechunk if needed
+        previous_scale = da.rechunk(array, chunks=pyramid_group.chunks)
+    else:
+        # Convert numpy array to dask array
+        previous_scale = da.from_array(array, pyramid_group.chunks)
 
     block_shape = list(
         BlockedArrayWriter.get_block_shape(
