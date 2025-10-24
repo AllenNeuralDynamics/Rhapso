@@ -1,4 +1,4 @@
-cluster_name: rhapso-ray-fusion-cluster-sean-00192
+cluster_name: rhapso-ray-fusion-cluster-martin-00001
 max_workers: 6
 min_workers: 6
 
@@ -10,15 +10,14 @@ provider:
 
 auth:
   ssh_user: ubuntu
-  ssh_private_key: /Users/seanfite/Desktop/AllenInstitute/Rhapso/Auth/AWS/EC2-SSH-Key/sean-rhapso.pem
-  # ssh_private_key: /Users/seanfite/Desktop/AllenInstitute/Rhapso/Auth/AWS/EC2-SSH-Key/aind-ray-cluster.pem
+  ssh_private_key: ~/.ssh/martin-ray-rhapso-new.pem 
 
 available_node_types:
   ray.head.default:
     node_config:
       InstanceType: r5.4xlarge
       ImageId: ami-0ec1bf4a8f92e7bd1
-      KeyName: sean-rhapso
+      KeyName: martin-ray-rhapso-new
       IamInstanceProfile:
         Name: RhapsoInstanceProfile
       TagSpecifications:
@@ -31,7 +30,7 @@ available_node_types:
     node_config:
       InstanceType: r5.4xlarge
       ImageId: ami-0ec1bf4a8f92e7bd1 
-      KeyName: sean-rhapso
+      KeyName: martin-ray-rhapso-new
       IamInstanceProfile:
         Name: RhapsoInstanceProfile
       TagSpecifications:
@@ -51,11 +50,10 @@ setup_commands:
   - sudo python3 -m pip install "ray[default]==2.9.1"  
   - sudo python3 -m pip install protobuf==4.23.4 
   - sudo -E python3 -m pip install --no-cache-dir torch --index-url https://download.pytorch.org/whl/cpu
-  - aws s3 cp s3://rhapso-whl-v2/Rhapso-0.1.8-py3-none-any.whl /tmp/Rhapso-0.1.8-py3-none-any.whl
-  # - aws s3 cp s3://aind-scratch-data/sean.fite/Rhapso-0.1.8-py3-none-any.whl /tmp/Rhapso-0.1.8-py3-none-any.whl  
+  - aws s3 cp s3://martin-test-bucket/rhapso-0.1.8-py3-none-any.whl /tmp/rhapso-0.1.8-py3-none-any.whl
   - echo 'export PATH=$HOME/.local/bin:$PATH' >> ~/.bashrc
   - source ~/.bashrc
-  - pip install --force-reinstall /tmp/Rhapso-0.1.8-py3-none-any.whl 
+  - pip install --force-reinstall /tmp/rhapso-0.1.8-py3-none-any.whl 
 
 head_start_ray_commands:
   - ray stop
