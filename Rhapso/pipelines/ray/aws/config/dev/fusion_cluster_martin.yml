@@ -1,0 +1,119 @@
+cluster_name: rhapso-ray-fusion-cluster-martin-00007
+max_workers: 6
+min_workers: 6
+
+provider:
+  type: aws
+  region: us-west-2
+  availability_zone: us-west-2a
+  cache_stopped_nodes: False
+
+auth:
+  ssh_user: ubuntu
+  ssh_private_key: ~/.ssh/martin-ray-rhapso-new.pem 
+
+available_node_types:
+  ray.head.default:
+    node_config:
+      InstanceType: r5.4xlarge
+      ImageId: ami-0ec1bf4a8f92e7bd1
+      KeyName: martin-ray-rhapso-new
+      IamInstanceProfile:
+        Name: RhapsoInstanceProfile
+      TagSpecifications:
+        - ResourceType: instance
+          Tags:
+            - Key: project
+              Value: rhapso
+
+  ray.worker.default:
+    node_config:
+      InstanceType: r5.4xlarge
+      ImageId: ami-0ec1bf4a8f92e7bd1 
+      KeyName: martin-ray-rhapso-new
+      IamInstanceProfile:
+        Name: RhapsoInstanceProfile
+      TagSpecifications:
+        - ResourceType: instance
+          Tags:
+            - Key: project
+              Value: rhapso
+
+head_node_type: ray.head.default
+
+setup_commands:
+
+  - sudo DEBIAN_FRONTEND=noninteractive apt-get update -y
+  - sudo DEBIAN_FRONTEND=noninteractive apt-get install -y python3-pip
+  - sudo pip3 install awscli
+  - aws s3 cp s3://martin-test-bucket/rhapso-0.1.8-py3-none-any.whl /tmp/rhapso-0.1.8-py3-none-any.whl
+
+    # Install all packages in a single command with versions pinned for stability.
+  - echo "Installing all python dependencies..."
+  - sudo pip3 install \
+      /tmp/rhapso-0.1.8-py3-none-any.whl \
+      protobuf==4.25.3 \
+      click==8.2.1 \
+      boto3==1.35.92 \
+      botocore==1.35.93 \
+      s3transfer==0.10.4 \
+      aiobotocore==2.17.0 \
+      bioio==1.3.0 \
+      dask[array]==2024.12.1 \
+      dask-image==2024.5.3 \
+      distributed==2024.12.1 \
+      zarr==2.18.3 \
+      matplotlib==3.10.0 \
+      scipy==1.13.1 \
+      tifffile==2025.1.10 \
+      s3fs==2024.12.0 \
+      numcodecs==0.13.1 \
+      memory-profiler==0.61.0 \
+      pandas==2.3.2 \
+      numpy==1.26.4 \
+      scikit-image==0.22.0 \
+      scikit-learn==1.7.2 \
+      pillow==11.3.0 \
+      lxml==6.0.2 \
+      xmltodict==1.0.2 \
+      xarray==2025.6.1 \
+      ome-zarr==0.11.1 \
+      toolz==1.0.0 \
+      nptyping==2.5.0 \
+      tensorstore==0.1.45 \
+      ray[default]==2.49.2
+
+  # Install PyTorch CPU-only version
+  - sudo -E python3 -m pip install --no-cache-dir torch --index-url https://download.pytorch.org/whl/cpu
+
+  - echo "Cleaning up..."
+  - sudo pip3 cache purge
+  - rm -rf /tmp/pip-*
+  - echo "Installation and setup complete!"
+
+head_start_ray_commands:
+  - ray stop
+  - ray start --head --port=6379 --dashboard-host=0.0.0.0 --autoscaling-config=~/ray_bootstrap_config.yaml
+
+worker_start_ray_commands:
+  - ray stop
+  - ray start --address=$RAY_HEAD_IP:6379
+
+# SETUP
+# ---------------------
+# CREATE WHL FILE
+# python setup.py bdist_wheel 
+
+# RAY UP / DOWN / CLEAR CACHE COMMANDS
+# ray up fusion_cluster_sean.yml --no-config-cache
+# ray down fusion_cluster_sean.yml
+# rm -rf ~/.cache/ray
+
+# ACCESS RAY DASHBOARD
+# ssh -i /Users/seanfite/Desktop/AllenInstitute/Rhapso/Auth/AWS/EC2-SSH-Key/sean-rhapso.pem -L 8265:localhost:8265 ubuntu@54.203.0.37
+# http://localhost:8265
+
+# TO FIX
+# ---------------------
+# awscli 1.40.25 requires botocore==1.38.26, but you have botocore 1.35.93 which is incompatible
+# awscli 1.40.25 requires s3transfer<0.14.0,>=0.13.0, but you have s3transfer 0.10.4 which is incompatible 
