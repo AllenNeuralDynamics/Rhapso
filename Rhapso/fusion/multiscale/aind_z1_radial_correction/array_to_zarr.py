@@ -61,7 +61,7 @@ def convert_array_to_zarr(
         "clevel": 3,
         "shuffle": Blosc.SHUFFLE,
     },
-    target_block_size_mb: Optional[int] = 24000,
+    target_size_mb: Optional[int] = 24000,
 ):
     """
     Converts an array to zarr format
@@ -197,7 +197,7 @@ def convert_array_to_zarr(
     block_shape = list(
         BlockedArrayWriter.get_block_shape(
             arr=previous_scale,
-            target_block_size_mb=target_block_size_mb,
+            target_size_mb=target_size_mb,
             chunks=chunk_size,
         )
     )
@@ -238,15 +238,8 @@ def convert_array_to_zarr(
             )
 
         logger.info(f"Level {level}/{n_lvls-1}: Writing to storage...")
-        import sys
-        sys.stdout.flush()
-        try:
-            BlockedArrayWriter.store(array_to_write, pyramid_group, block_shape)
-            logger.info(f"Level {level}/{n_lvls-1}: ✓ Complete ({level+1}/{n_lvls} levels done)")
-        except Exception as e:
-            logger.error(f"Level {level}/{n_lvls-1}: FAILED with error: {e}")
-            logger.exception("Full traceback:")
-            raise
+        BlockedArrayWriter.store(array_to_write, pyramid_group, block_shape)
+        logger.info(f"Level {level}/{n_lvls-1}: ✓ Complete ({level+1}/{n_lvls} levels done)")
 
 if __name__ == "__main__":
     BASE_PATH = "/data"

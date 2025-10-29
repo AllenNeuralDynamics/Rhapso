@@ -188,19 +188,18 @@ class BlockedArrayWriter:
 
     @staticmethod
     def store(
-        in_array: ArrayLike, out_array: ArrayLike, block_shape: tuple
+        in_array: da.Array, out_array: ArrayLike, block_shape: tuple
     ) -> None:
         """
-        Partitions the last 3 dimensions of an array
+        Partitions the last 3 dimensions of a Dask array
         into non-overlapping blocks and writes them sequentially
         to a Zarr array. This is meant to reduce the
         scheduling burden for massive (terabyte-scale) arrays.
 
-        :param in_array: The input array (can be dask array or numpy array)
+        :param in_array: The input Dask array
         :param block_shape: Tuple of (block_depth, block_height, block_width)
         :param out_array: The output array
         """
-        import sys
         logger = logging.getLogger(__name__)
         
         # Calculate total number of blocks for progress tracking
@@ -209,42 +208,40 @@ class BlockedArrayWriter:
             total_blocks *= (arr_dim + block_dim - 1) // block_dim
         
         logger.info(f"   Writing {total_blocks} blocks (block shape: {block_shape})...")
-        sys.stdout.flush()
         
         # Iterate through the input array in
         # steps equal to the block shape dimensions
         block_idx = 0
+        log_interval = max(1, total_blocks // 10)  # Log ~10 times total
+        
         for sl in BlockedArrayWriter.gen_slices(in_array.shape, block_shape):
-            logger.info(f"   Progress: {block_idx}/{total_blocks} blocks ({(block_idx/total_blocks)*100:.1f}%)")
-            block_idx += 1
-            
-            # Read block from input array
             block = in_array[sl]
+            da.store(
+                block,
+                out_array,
+                regions=sl,
+                lock=False,
+                compute=True,
+                return_stored=False,
+            )
             
-            # If it's a dask array, compute it to get numpy array
-            if hasattr(block, 'compute'):
-                block = block.compute()
-            
-            # Write block directly to output array (writes to S3)
-            out_array[sl] = block
-            
-            
-
-        logger.info(f"   ✓ All {total_blocks} blocks written successfully!")
-        sys.stdout.flush()
+            block_idx += 1
+            if block_idx % log_interval == 0 or block_idx == total_blocks:
+                progress_pct = (block_idx / total_blocks) * 100
+                logger.info(f"   Progress: {block_idx}/{total_blocks} blocks ({progress_pct:.1f}%)")
 
     @staticmethod
-    def get_block_shape(arr, target_block_size_mb=409600, mode="cycle", chunks=None):
+    def get_block_shape(arr, target_size_mb=409600, mode="cycle", chunks=None):
         """
         Given the shape and chunk size of a pre-chunked
         array, determine the optimal block shape closest
-        to target block size. Expanded block dimensions are
+        to target_size. Expanded block dimensions are
         an integer multiple of the chunk dimension
         to ensure optimal access patterns.
 
         Args:
             arr: the input array
-            target_block_size_mb: target block size in megabytes,
+            target_size_mb: target block size in megabytes,
             default is 409600 mode: strategy.
             Must be one of "cycle", or "iso"
 
@@ -262,7 +259,7 @@ class BlockedArrayWriter:
         return expand_chunks(
             chunks,
             arr.shape[-3:],
-            target_block_size_mb * 1024**2,
+            target_size_mb * 1024**2,
             arr.itemsize,
             mode,
         )
