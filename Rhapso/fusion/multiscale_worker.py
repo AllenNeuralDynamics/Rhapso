@@ -71,8 +71,12 @@ def run():
     logger.info(f"Dataset size: {total_size_gb:.2f} GB")
     
     # Use dask array directly instead of computing (don't load into memory)
+    # Original implementation (loads entire array into memory - causes OOM for large datasets):
+    array = dataset.compute()
+    
+    # New implementation (keeps lazy evaluation for memory efficiency):
     logger.info("Using Dask array for lazy/chunked processing (not loading into memory)")
-    array = dataset
+    # array = dataset
     
     
     compressor_kwargs = {
