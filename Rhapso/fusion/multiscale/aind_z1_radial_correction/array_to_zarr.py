@@ -62,6 +62,8 @@ def convert_array_to_zarr(
         "shuffle": Blosc.SHUFFLE,
     },
     target_block_size_mb: Optional[int] = 24000,
+    use_ray: Optional[bool] = True,
+    ray_num_cpus: Optional[int] = None,
 ):
     """
     Converts an array to zarr format
@@ -241,7 +243,7 @@ def convert_array_to_zarr(
         import sys
         sys.stdout.flush()
         try:
-            BlockedArrayWriter.store(array_to_write, pyramid_group, block_shape)
+            BlockedArrayWriter.store(array_to_write, pyramid_group, block_shape, use_ray=use_ray, ray_num_cpus=ray_num_cpus)
             logger.info(f"Level {level}/{n_lvls-1}: ✓ Complete ({level+1}/{n_lvls} levels done)")
         except Exception as e:
             logger.error(f"Level {level}/{n_lvls-1}: FAILED with error: {e}")
