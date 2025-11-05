@@ -64,6 +64,7 @@ def convert_array_to_zarr(
     target_block_size_mb: Optional[int] = 24000,
     use_ray: Optional[bool] = True,
     ray_num_cpus: Optional[int] = None,
+    dont_copy_fullscale: Optional[bool] = False,
 ):
     """
     Converts an array to zarr format
@@ -155,11 +156,24 @@ def convert_array_to_zarr(
     scale_factor = [int(s) for s in scale_factor]
     voxel_size = [float(v) for v in voxel_size]
 
-    new_channel_group = root_group.create_group(
-        name=stack_name, overwrite=True
-    )
+    # If dont_copy_fullscale is True, try to open existing group instead of overwriting
+    if dont_copy_fullscale:
+        try:
+            # Try to open existing group in read-write mode
+            new_channel_group = root_group[stack_name]
+            logger.info(f"Opened existing channel group: {stack_name}")
+        except KeyError:
+            # Group doesn't exist, create it
+            new_channel_group = root_group.create_group(
+                name=stack_name, overwrite=True
+            )
+            logger.info(f"Created new channel group: {stack_name}")
+    else:
+        new_channel_group = root_group.create_group(
+            name=stack_name, overwrite=True
+        )
 
-    # Writing OME-NGFF metadata
+    # Writing OME-NGFF metadata (always write to ensure metadata is up to date)
     write_ome_ngff_metadata(
         group=new_channel_group,
         arr_shape=dataset_shape,
@@ -176,25 +190,14 @@ def convert_array_to_zarr(
         origin = [0,0,0]
     )
 
-    # Writing first multiscale by default
-    pyramid_group = new_channel_group.create_dataset(
-        name="0",
-        shape=dataset_shape,
-        chunks=chunk_size,
-        dtype=array.dtype,
-        compressor=compressor,
-        dimension_separator="/",
-        overwrite=True,
-    )
-
     # Writing multiscales
     # Handle both numpy arrays and dask arrays
     if isinstance(array, da.Array):
         # Already a dask array, rechunk if needed
-        previous_scale = da.rechunk(array, chunks=pyramid_group.chunks)
+        previous_scale = da.rechunk(array, chunks=chunk_size)
     else:
         # Convert numpy array to dask array
-        previous_scale = da.from_array(array, pyramid_group.chunks)
+        previous_scale = da.from_array(array, chunk_size)
 
     block_shape = list(
         BlockedArrayWriter.get_block_shape(
@@ -205,14 +208,41 @@ def convert_array_to_zarr(
     )
     block_shape = extra_axes + tuple(block_shape)
 
-    logger.info(f"Writing {n_lvls} pyramid levels...")
+    # Determine start level based on dont_copy_fullscale flag
+    start_level = 1 if dont_copy_fullscale else 0
+    levels_to_write = n_lvls - start_level
     
-    for level in range(0, n_lvls):
-        if not level:
+    if dont_copy_fullscale:
+        logger.info(f"Skipping level 0 (fullscale) - will only write levels 1-{n_lvls-1}")
+        # Open existing level 0 dataset to read from for computing level 1
+        try:
+            existing_level0 = new_channel_group["0"]
+            pyramid_group = existing_level0
+            logger.info(f"Using existing level 0 from {output_path} for downsampling")
+        except KeyError:
+            logger.error(f"Level 0 not found at {output_path}/0. Cannot skip fullscale copy if level 0 doesn't exist.")
+            raise ValueError(f"Level 0 not found at {output_path}/0. Set dont_copy_fullscale=False or ensure level 0 exists.")
+    else:
+        logger.info(f"Writing {n_lvls} pyramid levels...")
+        # Writing first multiscale by default
+        pyramid_group = new_channel_group.create_dataset(
+            name="0",
+            shape=dataset_shape,
+            chunks=chunk_size,
+            dtype=array.dtype,
+            compressor=compressor,
+            dimension_separator="/",
+            overwrite=True,
+        )
+    
+    for level in range(start_level, n_lvls):
+        if level == 0:
+            # Only reached if dont_copy_fullscale is False
             array_to_write = previous_scale
             logger.info(f"Level {level}/{n_lvls-1}: Writing full resolution - shape {array_to_write.shape}")
 
         else:
+            # Read from the previous level (either written level 0 or existing level 0)
             previous_scale = da.from_zarr(pyramid_group, pyramid_group.chunks)
             new_scale_factor = (
                 [1] * (len(previous_scale.shape) - len(scale_factor))
@@ -244,7 +274,7 @@ def convert_array_to_zarr(
         sys.stdout.flush()
         try:
             BlockedArrayWriter.store(array_to_write, pyramid_group, block_shape, use_ray=use_ray, ray_num_cpus=ray_num_cpus)
-            logger.info(f"Level {level}/{n_lvls-1}: ✓ Complete ({level+1}/{n_lvls} levels done)")
+            logger.info(f"Level {level}/{n_lvls-1}: ✓ Complete ({level-start_level+1}/{levels_to_write} levels done)")
         except Exception as e:
             logger.error(f"Level {level}/{n_lvls-1}: FAILED with error: {e}")
             logger.exception("Full traceback:")

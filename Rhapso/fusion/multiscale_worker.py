@@ -28,7 +28,10 @@ def run():
     
     # Input and output paths
     input_zarr_path = "s3://martin-test-bucket/output7/channel_488.zarr"
-    output_zarr_path = "s3://martin-test-bucket/output10/multiscale_channel_488.zarr"
+    output_zarr_path = "s3://martin-test-bucket/output7/channel_488.zarr"
+    
+    # Set dont_copy_fullscale to True to skip writing level 0 when input == output
+    dont_copy_fullscale = input_zarr_path == output_zarr_path
     
     # Set parameters for multiscale conversion
     # Adjust these parameters based on your data characteristics
@@ -43,6 +46,8 @@ def run():
     logger.info(f"Starting multiscale conversion")
     logger.info(f"Input: {input_zarr_path}")
     logger.info(f"Output: {output_zarr_path}")
+    if dont_copy_fullscale:
+        logger.info(f"dont_copy_fullscale=True: Will skip writing level 0 and only write levels 1-{n_lvls-1}")
     
     # Load the zarr dataset
     # Assuming the data is in the root or scale "0" of the zarr
@@ -124,6 +129,7 @@ def run():
             target_block_size_mb=target_block_size_mb,
             use_ray=use_ray,
             ray_num_cpus=ray_num_cpus,
+            dont_copy_fullscale=dont_copy_fullscale,
         )
     except MemoryError as e:
         elapsed_seconds = time.time() - start_time
