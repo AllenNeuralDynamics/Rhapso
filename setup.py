@@ -12,6 +12,9 @@ To install certain dependencies, use the following commands:
 - For detection-related libraries:
   pip install .[detection]
 
+- For multiscale-related libraries:
+  pip install -e .[multiscale]
+
 '''
 
 setup(
@@ -38,6 +41,15 @@ setup(
         's3fs==2024.12.0',
         'scikit-learn'
     ],
+    extras_require={
+        'multiscale': [
+            'czifile',
+            'xarray_multiscale',
+            'natsort',
+            'aind_data_transformation',
+            'ray',
+        ],
+    },
     python_requires='>=3.7', 
     classifiers=[
         'Development Status :: 3 - Alpha',
@@ -51,3 +63,4 @@ setup(
         'Operating System :: OS Independent',
     ],
 )
+ 

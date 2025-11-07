@@ -1,4 +1,4 @@
-cluster_name: rhapso-ray-fusion-cluster-martin-00009
+cluster_name: rhapso-ray-martin-multiscale-cluster-14
 max_workers: 6
 min_workers: 6
 
@@ -51,7 +51,7 @@ setup_commands:
     # Install all packages in a single command with versions pinned for stability.
   - echo "Installing all python dependencies..."
   - sudo pip3 install \
-      /tmp/rhapso-0.1.8-py3-none-any.whl \
+      "/tmp/rhapso-0.1.8-py3-none-any.whl[multiscale]" \
       protobuf==4.25.3 \
       click==8.2.1 \
       boto3==1.35.92 \

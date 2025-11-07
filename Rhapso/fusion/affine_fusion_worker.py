@@ -212,7 +212,7 @@ if __name__ == '__main__':
 
     xml_path = "s3://aind-open-data/HCR_802704_2025-08-30_02-00-00_processed_2025-10-01_21-09-24/image_tile_alignment/bigstitcher.xml"
     image_data_input_path = "s3://aind-open-data/HCR_802704_2025-08-30_02-00-00_processed_2025-10-01_21-09-24/image_radial_correction/"
-    output_s3_path = "s3://martin-test-bucket/output7/channel_488.zarr"
+    output_s3_path = "s3://martin-test-bucket/fusion_output/HCR_802704_output_1/channel_488.zarr"
     dataset_type = "BigStitcherDataset"
     channel = None                      # list channel num (int) if fusing a specific channel from an xml of multiple channels
     ray_cluster_config_path = 'Rhapso/pipelines/ray/aws/config/dev/fusion_cluster_martin.yml'
