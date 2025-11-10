@@ -101,12 +101,21 @@ def initialize_fusion(
         int(global_tile_boundaries[5] - global_tile_boundaries[4]),
     ]
 
+    _raw_out_z = OUTPUT_VOLUME_SIZE[0]
+    _raw_out_y = OUTPUT_VOLUME_SIZE[1]
+    _raw_out_x = OUTPUT_VOLUME_SIZE[2]
+    print("[fusion] RAW output_size zyx:", (_raw_out_z, _raw_out_y, _raw_out_x))
+    print("[fusion] chunksize (t,c,z,y,x):", output_params.chunksize)
+
     # Rounding up the OUTPUT_VOLUME_SIZE to the nearest chunk
     # b/c zarr-python has occasional errors writing at the boundaries.
     # This ensures a multiple of chunksize without losing data.
     remainder_0 = OUTPUT_VOLUME_SIZE[0] % output_params.chunksize[2]
     remainder_1 = OUTPUT_VOLUME_SIZE[1] % output_params.chunksize[3]
     remainder_2 = OUTPUT_VOLUME_SIZE[2] % output_params.chunksize[4]
+
+    print("[fusion] remainders z,y,x:", (remainder_0, remainder_1, remainder_2))
+
     if remainder_0 > 0:
         OUTPUT_VOLUME_SIZE[0] -= remainder_0
         OUTPUT_VOLUME_SIZE[0] += output_params.chunksize[2]
@@ -118,11 +127,23 @@ def initialize_fusion(
         OUTPUT_VOLUME_SIZE[2] += output_params.chunksize[4]
     OUTPUT_VOLUME_SIZE = tuple(OUTPUT_VOLUME_SIZE)
 
+    print("[fusion] ROUNDED output_size zyx:", OUTPUT_VOLUME_SIZE)
+    print(
+        "[fusion] PAD applied z,y,x:",
+        (
+            OUTPUT_VOLUME_SIZE[0] - _raw_out_z,
+            OUTPUT_VOLUME_SIZE[1] - _raw_out_y,
+            OUTPUT_VOLUME_SIZE[2] - _raw_out_x,
+        ),
+    )
+
     OUTPUT_VOLUME_ORIGIN = (
         torch.min(tile_boundary_point_cloud_zyx[:, 0]).item(),
         torch.min(tile_boundary_point_cloud_zyx[:, 1]).item(),
         torch.min(tile_boundary_point_cloud_zyx[:, 2]).item(),
     )
+
+    print("[fusion] OUTPUT_VOLUME_ORIGIN (z,y,x):", OUTPUT_VOLUME_ORIGIN)
 
     # Shift AABB's into Output Volume where
     # absolute position of output volume is moved to (0, 0, 0)
@@ -258,7 +279,6 @@ def initialize_output_volume_tensorstore(
         }
     }).result()
 
-
 def initialize_output_volume(
     output_params: io.OutputParameters,
     output_volume_size: tuple[int, int, int],
@@ -331,39 +351,39 @@ def run_fusion(
     num_cells = len(cells)
     LOGGER.info(f'Coloring {num_cells} cells')
 
-    @ray.remote
-    def process_color_cell(curr_cell, tile_paths, write_root, write_ds, tile_transforms, 
-                           tile_sizes_zyx, tile_aabbs, output_volume, output_volume_origin, cell_size, 
-                           blend_module
-        ):     
-        z, y, x = curr_cell
-        color_cell(tile_paths, write_root, write_ds, tile_transforms, tile_sizes_zyx, tile_aabbs, 
-                   output_volume, output_volume_origin, cell_size, blend_module, z, y, x, 
-                   torch.device("cpu")
-        )
+    # @ray.remote(num_cpus=1)
+    # def process_color_cell(curr_cell, tile_paths, write_root, write_ds, tile_transforms, 
+    #                        tile_sizes_zyx, tile_aabbs, output_volume, output_volume_origin, cell_size, 
+    #                        blend_module
+    #     ):     
+    #     z, y, x = curr_cell
+    #     color_cell(tile_paths, write_root, write_ds, tile_transforms, tile_sizes_zyx, tile_aabbs, 
+    #                output_volume, output_volume_origin, cell_size, blend_module, z, y, x, 
+    #                torch.device("cpu")
+    #     )
         
-        return {"cell": curr_cell}
+    #     return None
 
-    # submit exactly like your loop, one task per cell
-    futures = [
-        process_color_cell.remote((z, y, x), tile_paths, write_root, write_ds,
-                                    tile_transforms, tile_sizes_zyx, tile_aabbs, output_volume, 
-                                    output_volume_origin, cell_size, blend_module
-        )
-        for (z, y, x) in cells
-    ]
+    # # submit one task per cell
+    # futures = [
+    #     process_color_cell.remote((z, y, x), tile_paths, write_root, write_ds,
+    #                                 tile_transforms, tile_sizes_zyx, tile_aabbs, output_volume, 
+    #                                 output_volume_origin, cell_size, blend_module
+    #     )
+    #     for (z, y, x) in cells
+    # ]
 
-    ray.get(futures)
+    # ray.get(futures)
 
     # DEBUG - iterative approach
-    # for (z, y, x) in cells:
-    #     color_cell(
-    #         tile_paths, write_root, write_ds,
-    #         tile_transforms, tile_sizes_zyx, tile_aabbs,
-    #         output_volume, output_volume_origin,
-    #         cell_size, blend_module,
-    #         z, y, x, torch.device("cpu")
-    #     )
+    for (z, y, x) in cells:
+        color_cell(
+            tile_paths, write_root, write_ds,
+            tile_transforms, tile_sizes_zyx, tile_aabbs,
+            output_volume, output_volume_origin,
+            cell_size, blend_module,
+            z, y, x, torch.device("cpu")
+        )
 
 def color_cell(
     tile_paths,
@@ -425,6 +445,8 @@ def color_cell(
             overlapping_tiles.append(tile_id)
 
     # Interpolation for cell_contributions
+    print(len(overlapping_tiles))
+    
     cell_contributions: list[torch.Tensor] = []
     cell_contribution_tile_ids: list[int] = []
     for tile_id in overlapping_tiles:
@@ -511,11 +533,15 @@ def color_cell(
             slice(crop_min_y, crop_max_y),
             slice(crop_min_x, crop_max_x),
         )
+        
         s3_read = s3fs.S3FileSystem(anon=True)
         src_path = tile_paths[tile_id]
         store = s3fs.S3Map(root=src_path, s3=s3_read)
         zarr_arr = zarr.open(store=store, mode="r")
         image_crop = zarr_arr[image_crop_slice]
+
+        # print(f"image_crop shape={image_crop.shape} dtype={image_crop.dtype} bytes={image_crop.nbytes} ({image_crop.nbytes/1024**2:.2f} MiB)")
+        # print(f"image_crop_slice={image_crop_slice}")
         
         if isinstance(image_crop, da.Array):
             image_crop = image_crop.compute()
@@ -591,6 +617,9 @@ def color_cell(
     )
     # Convert from float32 -> canonical uint16
     output_chunk = np.array(fused_cell.cpu()).astype(np.uint16)
+
+    # print(f"output_chunk shape={output_chunk.shape} dtype={output_chunk.dtype} bytes={output_chunk.nbytes} ({output_chunk.nbytes/1024**2:.2f} MiB)")
+    # print(f"slice={output_slice}")  
 
     s3_write = s3fs.S3FileSystem(anon=False)
     out_store = s3fs.S3Map(root=write_root, s3=s3_write)

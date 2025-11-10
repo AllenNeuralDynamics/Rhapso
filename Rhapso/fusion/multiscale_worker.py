@@ -24,8 +24,8 @@ def run():
     """
     
     # Input and output paths
-    input_zarr_path = "s3://martin-test-bucket/output7/channel_488.zarr"
-    output_zarr_path = "s3://martin-test-bucket/output7/multiscale_channel_488.zarr"
+    input_zarr_path = "s3://sean-fusion/exaSPIM_output29/channel_488.zarr"
+    output_zarr_path = "s3://sean-fusion/exaSPIM_output29/multiscale_channel_488.zarr"
     
     # Set parameters for multiscale conversion
     # Adjust these parameters based on your data characteristics

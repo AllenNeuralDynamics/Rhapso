@@ -109,8 +109,8 @@ def execute_job(xml_path: str, image_data_input_path: str, output_s3_path: str, 
         start_cluster(yml_filename, ray_config_dir)
         
         # Application Parameters
-        cell_size = [640, 256, 256]    
-        chunksize = (1, 1, 640, 256, 256)   
+        cell_size = [640, 512, 512]    
+        chunksize = (1, 1, 128, 128, 128)   
         
         # Reconstruct objects on cluster and run fusion.run_fusion()
         channel_arg = f"channel={channel}" if channel is not None else "channel=None"
@@ -210,12 +210,12 @@ if __name__ == '__main__':
     signal.signal(signal.SIGINT, signal_handler)
     signal.signal(signal.SIGTERM, signal_handler)
 
-    xml_path = "s3://aind-open-data/HCR_802704_2025-08-30_02-00-00_processed_2025-10-01_21-09-24/image_tile_alignment/bigstitcher.xml"
-    image_data_input_path = "s3://aind-open-data/HCR_802704_2025-08-30_02-00-00_processed_2025-10-01_21-09-24/image_radial_correction/"
-    output_s3_path = "s3://martin-test-bucket/output7/channel_488.zarr"
+    xml_path = "s3://aind-open-data/exaSPIM_720164_2025-07-07_17-55-45_processed_2025-07-15_16-22-02/tile_alignment/ip_affine_alignment/bigstitcher_affine.xml"
+    image_data_input_path = "s3://aind-open-data/exaSPIM_720164_2025-07-07_17-55-45_processed_2025-07-15_16-22-02/flatfield_correction/SPIM.ome.zarr/"
+    output_s3_path = "s3://sean-fusion/11_4_exaSPIM_720164/channel_488.zarr"
     dataset_type = "BigStitcherDataset"
     channel = None                      # list channel num (int) if fusing a specific channel from an xml of multiple channels
-    ray_cluster_config_path = 'Rhapso/pipelines/ray/aws/config/dev/fusion_cluster_martin.yml'
+    ray_cluster_config_path = 'Rhapso/pipelines/ray/aws/config/dev/fusion_cluster_sean.yml'
 
     print(f'{xml_path=}')
     print(f'{image_data_input_path=}')

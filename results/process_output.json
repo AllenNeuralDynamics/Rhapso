@@ -1,0 +1,122 @@
+{
+  "ng_link": "https://neuroglancer-demo.appspot.com/#!s3://sean-fusion/exaSPIM_output36/NG_out.json",
+  "dimensions": {
+    "x": [
+      9.201793828644069e-08,
+      "m"
+    ],
+    "y": [
+      9.201793828644069e-08,
+      "m"
+    ],
+    "z": [
+      4.4860451398192966e-07,
+      "m"
+    ],
+    "c'": [
+      1,
+      ""
+    ],
+    "t": [
+      0.001,
+      "s"
+    ]
+  },
+  "layers": [
+    {
+      "type": "image",
+      "source": [
+        {
+          "url": "zarr://s3://sean-fusion/exaSPIM_output36/channel_488.zarr",
+          "transform": {
+            "matrix": [
+              [
+                1.0,
+                0.0,
+                0.0,
+                0.0,
+                0.0,
+                0.0
+              ],
+              [
+                0.0,
+                1.0,
+                0.0,
+                0.0,
+                0.0,
+                0.0
+              ],
+              [
+                0.0,
+                0.0,
+                1.0,
+                0.0,
+                0.0,
+                0.1982632279396057
+              ],
+              [
+                0.0,
+                0.0,
+                0.0,
+                1.0,
+                0.0,
+                -0.8770887851715088
+              ],
+              [
+                0.0,
+                0.0,
+                0.0,
+                0.0,
+                1.0,
+                0.507804274559021
+              ]
+            ],
+            "outputDimensions": {
+              "t": [
+                0.001,
+                "s"
+              ],
+              "c'": [
+                1,
+                ""
+              ],
+              "z": [
+                4.4860451398192966e-07,
+                "m"
+              ],
+              "y": [
+                9.201793828644069e-08,
+                "m"
+              ],
+              "x": [
+                9.201793828644069e-08,
+                "m"
+              ]
+            }
+          }
+        }
+      ],
+      "localDimensions": {
+        "c'": [
+          1,
+          ""
+        ]
+      },
+      "shaderControls": {
+        "normalized": {
+          "range": [
+            90,
+            400
+          ]
+        }
+      },
+      "shader": "#uicontrol vec3 color color(default=\"#59d5f8\")\n#uicontrol invlerp normalized\nvoid main() {\nemitRGB(color * normalized());\n}",
+      "visible": true,
+      "opacity": 1.0,
+      "name": "CH_488",
+      "blend": "additive"
+    }
+  ],
+  "showAxisLines": false,
+  "showScaleBar": false
+}

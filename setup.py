@@ -36,7 +36,22 @@ setup(
         'matplotlib==3.10.0',
         'memory-profiler==0.61.0',
         's3fs==2024.12.0',
-        'scikit-learn'
+        'click==8.2.1',
+        'scikit-learn',
+        'tensorstore',
+        'xmltodict',
+        'xarray',
+        'ome-zarr',
+        'toolz',
+        'nptyping',
+        "aind-data-schema==2.0.5",  
+        "numba==0.59.1",
+        "czifile==2019.7.2.1",
+        "xarray-multiscale==1.1.0", 
+        "natsort==8.4.0",
+        "packaging>=24.1",
+        "llvmlite==0.42.*",
+        "dask[distributed]==2024.12.1"
     ],
     python_requires='>=3.7', 
     classifiers=[

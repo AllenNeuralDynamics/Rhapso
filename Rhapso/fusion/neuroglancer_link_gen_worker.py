@@ -5,11 +5,11 @@ Worker script with hard-coded parameters to generate Neuroglancer link
 from Rhapso.fusion.neuroglancer_link_gen.main import generate_neuroglancer_link
 
 # Hard-coded parameters
-ZARR_PATH = "s3://martin-test-bucket/output7/multiscale_channel_488.zarr"
+ZARR_PATH = "s3://sean-fusion/exaSPIM_output36/channel_488.zarr"
 VMIN = 90
 VMAX = 400
-JSON_UPLOAD_BUCKET = "martin-test-bucket"
-JSON_UPLOAD_PATH = "NG_out.json"
+JSON_UPLOAD_BUCKET = "sean-fusion"
+JSON_UPLOAD_PATH = "exaSPIM_output36/NG_out.json"
 JSON_LOCAL_OUTPUT = "results"
 DATASET_TYPE = "hcr"
 OPACITY = 0.5

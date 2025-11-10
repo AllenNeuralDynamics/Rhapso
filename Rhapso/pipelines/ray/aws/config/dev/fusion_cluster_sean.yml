@@ -1,6 +1,6 @@
-cluster_name: rhapso-ray-fusion-cluster-sean-0
-max_workers: 10
-min_workers: 10
+cluster_name: rhapso-ray-fusion-cluster-sean-0001
+max_workers: 40
+min_workers: 40
 
 provider:
   type: aws
@@ -16,7 +16,7 @@ auth:
 available_node_types:
   ray.head.default:
     node_config:
-      InstanceType: r5.4xlarge
+      InstanceType: r5.8xlarge
       ImageId: ami-0ec1bf4a8f92e7bd1
       KeyName: sean-rhapso
       IamInstanceProfile:
@@ -51,7 +51,7 @@ setup_commands:
   - sudo python3 -m pip install "ray[default]==2.9.1"  
   - sudo python3 -m pip install protobuf==4.23.4 
   - sudo -E python3 -m pip install --no-cache-dir torch --index-url https://download.pytorch.org/whl/cpu
-  - aws s3 cp s3://rhapso-whl-v2/Rhapso-0.1.8-py3-none-any.whl /tmp/Rhapso-0.1.8-py3-none-any.whl
+  - aws s3 cp s3://rhapso-whl-v2/rhapso-0.1.8-py3-none-any.whl /tmp/Rhapso-0.1.8-py3-none-any.whl
   # - aws s3 cp s3://aind-scratch-data/sean.fite/Rhapso-0.1.8-py3-none-any.whl /tmp/Rhapso-0.1.8-py3-none-any.whl  
   - echo 'export PATH=$HOME/.local/bin:$PATH' >> ~/.bashrc
   - source ~/.bashrc
@@ -60,7 +60,7 @@ setup_commands:
 head_start_ray_commands:
   - ray stop
   - ray start --head --port=6379 --dashboard-host=0.0.0.0 --autoscaling-config=~/ray_bootstrap_config.yaml 
-  - python3 -m Rhapso.fusion.worker
+  - python3 -m Rhapso.fusion_old.worker
 
 worker_start_ray_commands:
   - ray stop
@@ -77,7 +77,7 @@ worker_start_ray_commands:
 # rm -rf ~/.cache/ray
 
 # ACCESS RAY DASHBOARD
-# ssh -i /Users/seanfite/Desktop/AllenInstitute/Rhapso/Auth/AWS/EC2-SSH-Key/sean-rhapso.pem -L 8265:localhost:8265 ubuntu@54.148.40.59
+# ssh -i /Users/seanfite/Desktop/AllenInstitute/Rhapso/Auth/AWS/EC2-SSH-Key/sean-rhapso.pem -L 8265:localhost:8265 ubuntu@54.188.203.207
 # http://localhost:8265
 
 # TO FIX
