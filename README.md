@@ -4,7 +4,6 @@
 
 [![License](https://img.shields.io/badge/license-MIT-brightgreen)](LICENSE)
 [![Python Version](https://img.shields.io/badge/python-3.11-blue.svg)](https://www.python.org/downloads/release/python-3110/)
-[![Build Status](https://img.shields.io/github/actions/workflow/status/AllenNeuralDynamics/Rhapso/ci.yml?branch=main)](https://github.com/AllenNeuralDynamics/Rhapso/actions)
 [![Documentation](https://img.shields.io/badge/docs-wiki-blue)](https://github.com/AllenNeuralDynamics/Rhapso/wiki)
 
 <!-- ## Example Usage Media Content Coming Soon....
@@ -34,7 +33,7 @@
 ## Summary
 Rhapso is a set of Python components for registration, alignment, and stitching of large-scale, 3D, tile-based, multiscale microscopy datasets.
 
-Rhapso was developed by the Allen Institute for Neural Dynamics. Rhapso is comprised of stateless components that can be called using pipeline scripts with the option to run on a single machine or scale out with Ray to AWS clusters.
+Rhapso was developed by the Allen Institute for Neural Dynamics. Rhapso is comprised of stateless components. You can call these components using pipeline scripts with the option to run on a single machine or scale out with Ray to cloud based (currently only supporting AWS) clusters.
 
 Current data loaders support Zarr and Tiff.
 
