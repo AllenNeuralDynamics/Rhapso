@@ -32,18 +32,18 @@
 <br>
 
 ## Summary
-Rhapso is a set of Python components for aligning and stitching large-scale, 3D, tile-based, multiscale microscopy datasets.
+Rhapso is a set of Python components for registration, alignment, and stitching of large-scale, 3D, tile-based, multiscale microscopy datasets.
 
-Rhapso is developed in collaboration with the Allen Institute for Neural Dynamics, initially supporting AIND’s ExaSPIM pipeline. Rhapso includes end-to-end pipeline scripts that run on a single machine or scale out with Ray to AWS clusters.
+Rhapso was developed by the Allen Institute for Neural Dynamics. Rhapso is comprised of stateless components that can be called using pipeline scripts with the option to run on a single machine or scale out with Ray to AWS clusters.
 
-Current data loaders support Zarr and TIFF.
+Current data loaders support Zarr and Tiff.
 
 <br>
 
 ## Features
-- **Interest Point Detection** - using DOG to find interesting points
-- **Interest Point Matching** - using descriptor based RANSAC to match interest points
-- **Global Optimization** - alignin matched points per view
+- **Interest Point Detection** - using DOG based feature detection
+- **Interest Point Matching** - using descriptor based RANSAC to match feature points
+- **Global Optimization** - aligning matched features per view globally
 - **Validation and Visualization Tools** - validate component specific results for the best output
 
 ---
@@ -52,15 +52,15 @@ Current data loaders support Zarr and TIFF.
 
 ## Performance
 
-**Performance (exaSPIM reference)**
+**Interest Point Detection Performance Example (130TB Zarr dataset)**
 
 | Environment           | Resources            | Avg runtime |
 |:----------------------|:---------------------|:-----------:|
-| Local single machine  | 10 CPU, 10 GB RAM    | ~70 min     |
-| AWS Ray cluster       | 80 CPU, 640 GB RAM   | ~40 min     |
+| Local single machine  | 10 CPU, 10 GB RAM    | ~120 min    |
+| AWS Ray cluster       | 80 CPU, 640 GB RAM   | ~30 min     |
 
 <br>
-*Actual times vary by dataset size, tiling, and parameter choices.*
+*Actual times vary by pipeline components, dataset size, tiling, and parameter choices.*
 
 ---
 
