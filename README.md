@@ -30,6 +30,14 @@
 
 <br>
 
+**Update 11/26/25** 
+--------
+Rhapso is still loading... and while we wrap up development, a couple things to know if you are outside the Allen Institute: 
+   - This process requires a very specific XML structure to work.
+   - Fusion/Mutliscale is included but still under testing and development
+
+<br>
+
 ## Summary
 Rhapso is a set of Python components for registration, alignment, and stitching of large-scale, 3D, tile-based, multiscale microscopy datasets.
 
