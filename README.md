@@ -39,7 +39,7 @@ Rhapso is still loading... and while we wrap up development, a couple things to 
 <br>
 
 ## Summary
-Rhapso is a set of Python components for registration, alignment, and stitching of large-scale, 3D, tile-based, multiscale microscopy datasets.
+Rhapso is a set of Python components for registration, alignment, and stitching of large-scale, 3D, overlapping tile-based, multiscale microscopy datasets.
 
 Rhapso was developed by the Allen Institute for Neural Dynamics. Rhapso is comprised of stateless components. You can call these components using a pipeline script, with the option to run on a single machine or scale out with Ray to cloud based (currently only supporting AWS) clusters.
 
@@ -52,6 +52,25 @@ Current data loaders support Zarr and Tiff.
 - **Interest Point Matching** - using descriptor based RANSAC to match feature points
 - **Global Optimization** - aligning matched features per tile, globally
 - **Validation and Visualization Tools** - validate component specific results for the best output
+
+---
+
+<br>
+
+## High Level Approach to Registration, Alignment, and Fusion
+
+We first run **interest point detection** to capture feature points in the dataset, focusing on overlapping regions between tiles. These points drive all downstream alignment.
+
+Next, we perform **alignment** in two-three stages, with regularized models:
+
+1. **Rigid matching + solver** – Match interest points with a rigid model and solve for globally consistent rigid transforms between all tiles.
+2. **Affine matching + solver** – Starting from the rigid solution, repeat matching with an affine model to recover more precise tile transforms.
+3. **Split affine matching + solver** – For very large z-stacks, we recommend first running the split dataset component to chunk tiles into smaller Z-bounds, then repeating affine matching and solving in “split affine” mode to refine local alignment. 
+
+All resulting transforms are written back into the input XML.
+
+Whether you split or not, once the XML contains your final transforms, you are ready for **fusion**. We recommend viewing the aligned XML in FIJI/BDV to visually confirm alignment quality before running fusion.
+
 
 ---
 
