@@ -63,8 +63,8 @@ Current data loaders support Zarr and Tiff.
 
 | Environment           | Resources            | Avg runtime |
 |:----------------------|:---------------------|:-----------:|
-| Local single machine  | 10 CPU, 10 GB RAM    | ~120 min    |
-| AWS Ray cluster       | 80 CPU, 640 GB RAM   | ~30 min     |
+| Local single machine  | 10 CPU,  10 GB RAM   | ~120 min    |
+| AWS Ray cluster       | 560 CPU, 4.4 TB RAM  | ~30 min     |
 
 <br>
 *Actual times vary by pipeline components, dataset size, tiling, and parameter choices.*
