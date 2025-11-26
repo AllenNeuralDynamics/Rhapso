@@ -50,7 +50,7 @@ Current data loaders support Zarr and Tiff.
 ## Features
 - **Interest Point Detection** - using DOG based feature detection
 - **Interest Point Matching** - using descriptor based RANSAC to match feature points
-- **Global Optimization** - aligning matched features per view globally
+- **Global Optimization** - aligning matched features per tile, globally
 - **Validation and Visualization Tools** - validate component specific results for the best output
 
 ---
