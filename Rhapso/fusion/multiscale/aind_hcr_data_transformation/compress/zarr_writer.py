@@ -12,6 +12,34 @@ import dask.array as da
 import numpy as np
 from numpy.typing import ArrayLike
 
+try:
+    import ray
+    RAY_AVAILABLE = True
+    
+    @ray.remote
+    def _process_block_remote(in_array, out_array, sl, block_idx, total_blocks):
+        """
+        Ray remote function to process a single block.
+        Reads block from input, computes if lazy, writes to output.
+        
+        Returns the block index for progress tracking.
+        """
+        # Read block from input array
+        block = in_array[sl]
+        
+        # If it's a dask array, compute it to get numpy array
+        if hasattr(block, 'compute'):
+            block = block.compute()
+        
+        # Write block directly to output array (writes to S3)
+        out_array[sl] = block
+        
+        return block_idx
+    
+except ImportError:
+    RAY_AVAILABLE = False
+    _process_block_remote = None  # Not available
+
 
 def _get_size(shape: Tuple[int, ...], itemsize: int) -> int:
     """
@@ -188,18 +216,20 @@ class BlockedArrayWriter:
 
     @staticmethod
     def store(
-        in_array: da.Array, out_array: ArrayLike, block_shape: tuple
+        in_array: ArrayLike, out_array: ArrayLike, block_shape: tuple, use_ray: bool = True, ray_num_cpus: int = None
     ) -> None:
         """
-        Partitions the last 3 dimensions of a Dask array
-        into non-overlapping blocks and writes them sequentially
-        to a Zarr array. This is meant to reduce the
-        scheduling burden for massive (terabyte-scale) arrays.
+        Partitions the last 3 dimensions of an array
+        into non-overlapping blocks and writes them to a Zarr array.
+        Can use Ray for parallel processing or sequential processing.
 
-        :param in_array: The input Dask array
+        :param in_array: The input array (can be dask array or numpy array)
         :param block_shape: Tuple of (block_depth, block_height, block_width)
         :param out_array: The output array
+        :param use_ray: If True, use Ray for parallel processing. If False, use sequential processing.
+        :param ray_num_cpus: Number of CPUs to use for Ray. If None, uses all available CPUs.
         """
+        import sys
         logger = logging.getLogger(__name__)
         
         # Calculate total number of blocks for progress tracking
@@ -207,41 +237,104 @@ class BlockedArrayWriter:
         for arr_dim, block_dim in zip(in_array.shape, block_shape):
             total_blocks *= (arr_dim + block_dim - 1) // block_dim
         
-        logger.info(f"   Writing {total_blocks} blocks (block shape: {block_shape})...")
+        # Check if Ray should be used
+        use_ray = use_ray and RAY_AVAILABLE
         
-        # Iterate through the input array in
-        # steps equal to the block shape dimensions
-        block_idx = 0
-        log_interval = max(1, total_blocks // 10)  # Log ~10 times total
-        
-        for sl in BlockedArrayWriter.gen_slices(in_array.shape, block_shape):
-            block = in_array[sl]
-            da.store(
-                block,
-                out_array,
-                regions=sl,
-                lock=False,
-                compute=True,
-                return_stored=False,
-            )
+        if use_ray:
+            # Initialize Ray if not already initialized
+            if not ray.is_initialized():
+                logger.info("   Initializing Ray for parallel processing...")
+                
+                # Configure Ray with memory limits and object spilling
+                import os
+                
+                # Set environment variables for Ray memory management BEFORE initialization
+                # These must be set before ray.init() is called
+                os.environ.setdefault("RAY_memory_monitor_refresh_ms", "250")
+                os.environ.setdefault("RAY_memory_usage_threshold", "0.85")  # Kill workers at 85% memory usage
+                
+                ray_config = {
+                    "ignore_reinit_error": True,
+                    "object_store_memory": int(8 * 1024 * 1024 * 1024),  # 8 GB for object store
+                }
+                
+                # Set number of CPUs if specified
+                if ray_num_cpus is not None:
+                    ray_config["num_cpus"] = ray_num_cpus
+                    logger.info(f"   Limiting Ray to {ray_num_cpus} CPUs to prevent OOM")
+                else:
+                    ray_config["num_cpus"] = None  # Use all available CPUs
+                
+                ray.init(**ray_config)
+                actual_cpus = ray.cluster_resources().get('CPU', 0)
+                logger.info(f"   Ray initialized with {actual_cpus} CPUs and 8 GB object store")
+                logger.info(f"   Memory monitor will kill workers at 85% memory usage")
             
-            block_idx += 1
-            if block_idx % log_interval == 0 or block_idx == total_blocks:
-                progress_pct = (block_idx / total_blocks) * 100
-                logger.info(f"   Progress: {block_idx}/{total_blocks} blocks ({progress_pct:.1f}%)")
+            logger.info(f"   Writing {total_blocks} blocks IN PARALLEL using Ray (block shape: {block_shape})...")
+            sys.stdout.flush()
+            
+            # Submit all blocks as Ray tasks
+            futures = []
+            block_idx = 0
+            for sl in BlockedArrayWriter.gen_slices(in_array.shape, block_shape):
+                future = _process_block_remote.remote(in_array, out_array, sl, block_idx, total_blocks)
+                futures.append(future)
+                block_idx += 1
+            
+            # Wait for all tasks to complete and show progress
+            completed = 0
+            while futures:
+                # Wait for at least one task to complete
+                done, futures = ray.wait(futures, num_returns=1, timeout=1.0)
+                completed += len(done)
+                if done:
+                    progress_pct = (completed / total_blocks) * 100
+                    logger.info(f"   Progress: {completed}/{total_blocks} blocks ({progress_pct:.1f}%)")
+                    sys.stdout.flush()
+            
+            logger.info(f"   ✓ All {total_blocks} blocks written successfully using Ray!")
+            
+        else:
+            # Sequential processing (original implementation)
+            if not RAY_AVAILABLE:
+                logger.warning("   Ray not available, falling back to sequential processing")
+            else:
+                logger.info("   Using sequential processing (Ray disabled)")
+            
+            logger.info(f"   Writing {total_blocks} blocks SEQUENTIALLY (block shape: {block_shape})...")
+            sys.stdout.flush()
+            
+            block_idx = 0
+            for sl in BlockedArrayWriter.gen_slices(in_array.shape, block_shape):
+                logger.info(f"   Progress: {block_idx}/{total_blocks} blocks ({(block_idx/total_blocks)*100:.1f}%)")
+                block_idx += 1
+                
+                # Read block from input array
+                block = in_array[sl]
+                
+                # If it's a dask array, compute it to get numpy array
+                if hasattr(block, 'compute'):
+                    block = block.compute()
+                
+                # Write block directly to output array (writes to S3)
+                out_array[sl] = block
+            
+            logger.info(f"   ✓ All {total_blocks} blocks written successfully!")
+        
+        sys.stdout.flush()
 
     @staticmethod
-    def get_block_shape(arr, target_size_mb=409600, mode="cycle", chunks=None):
+    def get_block_shape(arr, target_block_size_mb=409600, mode="cycle", chunks=None):
         """
         Given the shape and chunk size of a pre-chunked
         array, determine the optimal block shape closest
-        to target_size. Expanded block dimensions are
+        to target block size. Expanded block dimensions are
         an integer multiple of the chunk dimension
         to ensure optimal access patterns.
 
         Args:
             arr: the input array
-            target_size_mb: target block size in megabytes,
+            target_block_size_mb: target block size in megabytes,
             default is 409600 mode: strategy.
             Must be one of "cycle", or "iso"
 
@@ -259,7 +352,7 @@ class BlockedArrayWriter:
         return expand_chunks(
             chunks,
             arr.shape[-3:],
-            target_size_mb * 1024**2,
+            target_block_size_mb * 1024**2,
             arr.itemsize,
             mode,
         )

@@ -5,7 +5,7 @@ Worker script with hard-coded parameters to generate Neuroglancer link
 from Rhapso.fusion.neuroglancer_link_gen.main import generate_neuroglancer_link
 
 # Hard-coded parameters
-ZARR_PATH = "s3://martin-test-bucket/output7/multiscale_channel_488.zarr"
+ZARR_PATH = "s3://martin-test-bucket/output7/channel_488.zarr"
 VMIN = 90
 VMAX = 400
 JSON_UPLOAD_BUCKET = "martin-test-bucket"
