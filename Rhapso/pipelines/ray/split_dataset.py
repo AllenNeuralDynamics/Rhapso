@@ -37,6 +37,7 @@ class SplitDataset:
 
         split = ComputeGridRules(data_global, self.target_image_size, self.target_overlap)
         xyz_size, xyz_overlap, min_step_size = split.run()
+        # overlap different, step_size is [64, 64, 64]
         print("Split rules computed")
 
         split_images = SplitImages(xyz_size, xyz_overlap, min_step_size, data_global, self.n5_path, self.point_density, self.min_points, self.max_points, 

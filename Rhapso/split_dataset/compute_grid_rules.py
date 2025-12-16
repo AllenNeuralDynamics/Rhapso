@@ -65,7 +65,8 @@ class ComputeGridRules:
         Executes the entry point of the script.
         """
         # image_sizes, min_size = self.collect_image_sizes()
-        min_step_size = self.find_min_step_size()
+        # min_step_size = self.find_min_step_size()
+        min_step_size = [1, 1, 1]
         
         sx = self.closest_larger_long_divisible_by(self.target_image_size[0], min_step_size[0])
         sy = self.closest_larger_long_divisible_by(self.target_image_size[1], min_step_size[1])
