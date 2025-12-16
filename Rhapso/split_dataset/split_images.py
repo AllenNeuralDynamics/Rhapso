@@ -105,14 +105,6 @@ class SplitImages:
         
         return dim_intervals
     
-    def last_image_size_1(self, l, s, o):
-        num = l - 2 * (s - o) - o
-        den = s - o
-        rem = num % den if num >= 0 else -((-num) % den)  
-        size = o + rem
-        if size < 0:
-            size = l + size
-        return size
 
     def last_image_size(self, L, S, O):
         stride = S - O
@@ -146,7 +138,7 @@ class SplitImages:
                 l = length
                 s = self.target_image_size[i]
                 o = self.target_overlap[i]
-                last_image_size = self.last_image_size(l, s, o) # 96
+                last_image_size = self.last_image_size(l, s, o)
                 
                 final_size = 0
                 if last_image_size != s:
@@ -242,7 +234,6 @@ class SplitImages:
     def split_images(self, timepoints, interest_points, fake_label):
         old_setups_df = deepcopy(self.view_setups_df)
         old_registrations_df = deepcopy(self.view_registrations_df)
-        print("Running split_images with skip_ips =", self.skip_ips)
 
         new_to_old_setup_id = {}
         new_setup_id_to_interval = {}
