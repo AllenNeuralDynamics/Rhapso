@@ -342,7 +342,6 @@ class SaveXML:
         wrapper.append(base_loader)
         for other_loader in other_imageloaders:
             wrapper.append(other_loader)
-            print("Added multiple ImageLoader sources to split.viewerimgloader wrapper.")
 
         # Inner <SequenceDescription> that holds the original ViewSetups/Timepoints/MissingViews
         inner_seq = ET.Element('SequenceDescription')
