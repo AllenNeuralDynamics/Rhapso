@@ -309,6 +309,8 @@ class SaveXML:
         if fmt == 'split.viewerimgloader':
             return xml
 
+        # Collect any other ImageLoader siblings (other sources)
+        other_imageloaders = []
         # Collect ORIGINAL ViewSetups / Timepoints / MissingViews that are siblings
         orig_viewsetups = None
         orig_timepoints = None
@@ -316,15 +318,18 @@ class SaveXML:
 
         for ch in children[base_loader_idx + 1:]:
             name = tn(ch)
-            if name == 'ViewSetups':
+            if name == 'ImageLoader':
+                other_imageloaders.append(ch)
+            elif name == 'ViewSetups':
                 orig_viewsetups = ch
             elif name == 'Timepoints':
                 orig_timepoints = ch
             elif name == 'MissingViews':
                 orig_missingviews = ch
+            
 
         # Remove them from the outer SequenceDescription
-        for node in (orig_viewsetups, orig_timepoints, orig_missingviews):
+        for node in (orig_viewsetups, orig_timepoints, orig_missingviews, *other_imageloaders):
             if node is not None and node in seq:
                 seq.remove(node)
 
@@ -335,9 +340,13 @@ class SaveXML:
         wrapper = ET.Element('ImageLoader', {'format': 'split.viewerimgloader'})
         # First child: original loader
         wrapper.append(base_loader)
+        for other_loader in other_imageloaders:
+            wrapper.append(other_loader)
+            print("Added multiple ImageLoader sources to split.viewerimgloader wrapper.")
 
         # Inner <SequenceDescription> that holds the original ViewSetups/Timepoints/MissingViews
         inner_seq = ET.Element('SequenceDescription')
+
         if orig_viewsetups is not None:
             inner_seq.append(orig_viewsetups)
         if orig_timepoints is not None:
