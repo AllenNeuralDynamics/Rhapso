@@ -1,6 +1,6 @@
 # Rhapso
 
-**Rhapso** is a modular Python toolkit for aligning and fusing large-scale microscopy datasets. 
+**Rhapso** is a modular Python toolkit for interest point based registration, alignment, and fusing of large-scale microscopy datasets. 
 
 [![License](https://img.shields.io/badge/license-MIT-brightgreen)](LICENSE)
 [![Python Version](https://img.shields.io/badge/python-3.11-blue.svg)](https://www.python.org/downloads/release/python-3110/)
@@ -13,6 +13,7 @@
 
 ## Table of Contents
 - [Summary](#summary)
+- [Contact](#contact)
 - [Features](#features)
 - [Performance](#performance)
 - [Layout](#layout)
@@ -44,6 +45,11 @@ Rhapso is a set of Python components for registration, alignment, and stitching 
 Rhapso was developed by the Allen Institute for Neural Dynamics. Rhapso is comprised of stateless components. You can call these components using a pipeline script, with the option to run on a single machine or scale out with Ray to cloud based (currently only supporting AWS) clusters.
 
 Current data loaders support Zarr and Tiff.
+
+<br>
+
+## Contact
+Questions or want to contribute? Please open an issue..
 
 <br>
 
