@@ -52,6 +52,10 @@ jobs:
     needs: bump-and-tag
     steps:
     - uses: actions/checkout@v5
+      with:
+        ref: main
+        fetch-depth: 0
+        token: ${{ secrets.GITHUB_TOKEN }}
     - name: Set up Python 3.11
       uses: actions/setup-python@v5
       with:
