@@ -2,14 +2,12 @@ name: Tag and Publish to PyPI
 on:
   push:
     branches:
-      - ci-122-publish-to-pypi
+      - main
 
 jobs:
   bump-and-tag:
     name: Bump version and Tag
     runs-on: ubuntu-latest
-    outputs:
-      new_version: ${{ steps.output_version.outputs.new_version }}
     steps:
     - name: Checkout
       uses: actions/checkout@v5
@@ -38,19 +36,16 @@ jobs:
       run: |
         files_to_add="${{ env.VERSION_FILE }}"
         echo "FILES_TO_ADD=$files_to_add" >> "$GITHUB_ENV"
-    - name: Set output
-      id: output_version
-      run: echo "new_version=${{ env.VERSION }}" >> "$GITHUB_OUTPUT"
-    # - name: Commit and Push version bump
-    #   uses: EndBug/add-and-commit@v9
-    #   with:
-    #     default_author: github_actions
-    #     message: "ci: version bump [skip actions]"
-    #     add: ${{ env.FILES_TO_ADD }}
-  #   - name: Update tag
-  #     run: |
-  #       git tag "v${{ env.VERSION }}"
-  #       git push origin "v${{ env.VERSION }}"
+    - name: Commit and Push version bump
+      uses: EndBug/add-and-commit@v9
+      with:
+        default_author: github_actions
+        message: "ci: version bump [skip actions]"
+        add: ${{ env.FILES_TO_ADD }}
+    - name: Update tag
+      run: |
+        git tag "v${{ env.VERSION }}"
+        git push origin "v${{ env.VERSION }}"
   publish:
     runs-on: ubuntu-latest
     name: Publish package
@@ -67,8 +62,8 @@ jobs:
         pip install setuptools wheel
         cd ..
         python setup.py sdist bdist_wheel
-    # - name: Publish on PyPI
-    #   uses: pypa/gh-action-pypi-publish@release/v1
-    #   with:
-    #     verbose: true
-    #     password: ${{ secrets.AIND_PYPI_TOKEN }}
+    - name: Publish on PyPI
+      uses: pypa/gh-action-pypi-publish@release/v1
+      with:
+        verbose: true
+        password: ${{ secrets.AIND_PYPI_TOKEN }}
