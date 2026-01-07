@@ -8,6 +8,8 @@ jobs:
   bump-and-tag:
     name: Bump version and Tag
     runs-on: ubuntu-latest
+    outputs:
+      new_version: ${{ steps.tag_version.outputs.new_version }}
     steps:
     - name: Checkout
       uses: actions/checkout@v5
@@ -53,7 +55,7 @@ jobs:
     steps:
     - uses: actions/checkout@v5
       with:
-        ref: main
+        ref: 'v${{ needs.bump-and-tag.outputs.new_version }}'
         fetch-depth: 0
         token: ${{ secrets.GITHUB_TOKEN }}
     - name: Set up Python 3.11
