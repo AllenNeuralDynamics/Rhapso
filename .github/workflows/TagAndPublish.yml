@@ -1,0 +1,74 @@
+name: Tag and Publish to PyPI
+on:
+  push:
+    branches:
+      - ci-122-publish-to-pypi
+
+jobs:
+  bump-and-tag:
+    name: Bump version and Tag
+    runs-on: ubuntu-latest
+    outputs:
+      new_version: ${{ steps.output_version.outputs.new_version }}
+    steps:
+    - name: Checkout
+      uses: actions/checkout@v5
+      with:
+        ref: main
+        fetch-depth: 0
+        token: ${{ secrets.GITHUB_TOKEN }}
+    - name: Compute new version number
+      id: tag_version
+      uses: mathieudutour/github-tag-action@v6.2
+      with:
+        github_token: ${{ secrets.GITHUB_TOKEN }}
+        default_bump: patch
+        dry_run: true  # Perform dryrun first to calculate new version
+    - name: Get version file name set variables
+      run: |
+        setup_file="./setup.py"
+        echo "VERSION_FILE=$setup_file" >> "$GITHUB_ENV"
+        echo "VERSION=${{ steps.tag_version.outputs.new_version }}" >> "$GITHUB_ENV"
+        echo "New Version: ${{ steps.tag_version.outputs.new_version }}"
+    - name: Update version file with new version
+      run: |
+        grep "version" "$VERSION_FILE"
+        sed -i --debug --expression="s|version.*|version=\'${{ env.VERSION }}\',|" "$VERSION_FILE"
+    - name: Set files to commit
+      run: |
+        files_to_add="${{ env.VERSION_FILE }}"
+        echo "FILES_TO_ADD=$files_to_add" >> "$GITHUB_ENV"
+    - name: Set output
+      id: output_version
+      run: echo "new_version=${{ env.VERSION }}" >> "$GITHUB_OUTPUT"
+    # - name: Commit and Push version bump
+    #   uses: EndBug/add-and-commit@v9
+    #   with:
+    #     default_author: github_actions
+    #     message: "ci: version bump [skip actions]"
+    #     add: ${{ env.FILES_TO_ADD }}
+  #   - name: Update tag
+  #     run: |
+  #       git tag "v${{ env.VERSION }}"
+  #       git push origin "v${{ env.VERSION }}"
+  publish:
+    runs-on: ubuntu-latest
+    name: Publish package
+    needs: bump-and-tag
+    steps:
+    - uses: actions/checkout@v5
+    - name: Set up Python 3.11
+      uses: actions/setup-python@v5
+      with:
+        python-version: '3.11'
+    - name: Install dependencies
+      run: |
+        cd ./Rhapso
+        pip install setuptools wheel
+        cd ..
+        python setup.py sdist bdist_wheel
+    # - name: Publish on PyPI
+    #   uses: pypa/gh-action-pypi-publish@release/v1
+    #   with:
+    #     verbose: true
+    #     password: ${{ secrets.AIND_PYPI_TOKEN }}
