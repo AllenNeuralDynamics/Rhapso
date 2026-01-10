@@ -1,35 +1,28 @@
 from setuptools import setup, find_packages
+from pathlib import Path   
 
-'''
-To install certain dependencies, use the following commands:
-
-- For matching-related libraries:
-  pip install .[matching]
-
-- For n5 reader libraries:
-  pip install .[n5_reader]
-
-- For detection-related libraries:
-  pip install .[detection]
-
-'''
+# read README.md for the long project description
+this_directory = Path(__file__).parent
+long_description = (this_directory / "README.md").read_text(encoding="utf-8")
 
 setup(
     name='Rhapso',
-    version='0.1.92',
+    version='0.1.93',
     author='ND',
     author_email='sean.fite@alleninstitute.org',
     description='A python package for aligning and stitching light sheet fluorescence microscopy images together',
+    long_description=long_description,                 
+    long_description_content_type='text/markdown',       
     packages=find_packages(),
     install_requires=[
         'pandas',
-        'dask[array]==2024.12.1',  
+        'dask[array]==2024.12.1',
         'zarr==2.18.3',
         'scipy==1.13.1',
-        'scikit-image', 
+        'scikit-image',
         'bioio==1.3.0',
         'bioio-tifffile==1.0.0',
-        'tifffile==2025.1.10',  
+        'tifffile==2025.1.10',
         'dask-image==2024.5.3',
         'boto3==1.35.92',
         'numcodecs==0.13.1',
@@ -38,7 +31,7 @@ setup(
         's3fs==2024.12.0',
         'scikit-learn'
     ],
-    python_requires='>=3.7', 
+    python_requires='>=3.7',
     classifiers=[
         'Development Status :: 3 - Alpha',
         'Intended Audience :: Developers',
