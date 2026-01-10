@@ -68,7 +68,5 @@ jobs:
         if: steps.tag_step.outputs.created == 'true'
         uses: pypa/gh-action-pypi-publish@release/v1
         with:
-          user: __token__
-          password: ${{ secrets.AIND_PYPI_TOKEN }}
-          skip-existing: true
           verbose: true
+          password: ${{ secrets.AIND_PYPI_TOKEN }}

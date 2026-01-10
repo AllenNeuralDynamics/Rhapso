@@ -16,9 +16,9 @@ To install certain dependencies, use the following commands:
 
 setup(
     name='Rhapso',
-    version='0.1.91',
+    version='0.1.92',
     author='ND',
-    author_email='alleninstitute.org',
+    author_email='sean.fite@alleninstitute.org',
     description='A python package for aligning and stitching light sheet fluorescence microscopy images together',
     packages=find_packages(),
     install_requires=[
