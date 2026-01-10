@@ -16,10 +16,10 @@ To install certain dependencies, use the following commands:
 
 setup(
     name='Rhapso',
-    version='0.1.8',
-    author='Team OCTO',
+    version='0.1.9',
+    author='ND',
     author_email='alleninstitute.org',
-    description='A python package for stitching light sheet fluorescence microscopy images together',
+    description='A python package for aligning and stitching light sheet fluorescence microscopy images together',
     packages=find_packages(),
     install_requires=[
         'pandas',
