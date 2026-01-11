@@ -7,12 +7,18 @@ long_description = (this_directory / "README.md").read_text(encoding="utf-8")
 
 setup(
     name='Rhapso',
-    version='0.1.93',
+    version='0.1.94',
     author='ND',
     author_email='sean.fite@alleninstitute.org',
     description='A python package for aligning and stitching light sheet fluorescence microscopy images together',
     long_description=long_description,                 
-    long_description_content_type='text/markdown',       
+    long_description_content_type='text/markdown', 
+    url='https://github.com/AllenNeuralDynamics/Rhapso',
+    project_urls={
+        'Source': 'https://github.com/AllenNeuralDynamics/Rhapso',
+        'Bug Tracker': 'https://github.com/AllenNeuralDynamics/Rhapso/issues',
+        'Changelog': 'https://github.com/AllenNeuralDynamics/Rhapso/releases',
+    },
     packages=find_packages(),
     install_requires=[
         'pandas',
@@ -44,3 +50,4 @@ setup(
         'Operating System :: OS Independent',
     ],
 )
+
