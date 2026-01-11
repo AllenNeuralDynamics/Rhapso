@@ -13,11 +13,9 @@ setup(
     description='A python package for aligning and stitching light sheet fluorescence microscopy images together',
     long_description=long_description,                 
     long_description_content_type='text/markdown', 
-    url='https://github.com/AllenNeuralDynamics/Rhapso',
     project_urls={
         'Source': 'https://github.com/AllenNeuralDynamics/Rhapso',
-        'Bug Tracker': 'https://github.com/AllenNeuralDynamics/Rhapso/issues',
-        'Changelog': 'https://github.com/AllenNeuralDynamics/Rhapso/releases',
+        'Roadmap': 'https://github.com/AllenNeuralDynamics/Rhapso/issues',
     },
     packages=find_packages(),
     install_requires=[
@@ -50,4 +48,5 @@ setup(
         'Operating System :: OS Independent',
     ],
 )
+
 
