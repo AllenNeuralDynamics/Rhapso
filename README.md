@@ -71,49 +71,6 @@ Questions or want to contribute? Please open an issue..
 
 <br>
 
-## High Level Approach to Registration, Alignment, and Fusion
-
-This process has a lot of knobs and variations, and when used correctly, can work for a broad range of datasets.
-
-**First, figure out what type of alignment you need.**  
-- Are there translations to shift to?  
-- If so, you’ll likely want to start with a rigid alignment.
-
-Once you’ve run the rigid step, how does your data look?  
-- Did the required translations shrink to an acceptable level?  
-- If not, try again with new parameters, keeping the questions above in mind.
-
-At this point, the translational part of your alignment should be in good shape. Now ask: **are transformations needed?** If so, you likely need an affine alignment next.
-
-Your dataset should be correctly aligned at this point. If not, there are a number of reasons why, and we have listed some common recurrences and will keep this up to date.
-
-There is a special case in some datasets where the z-stack is very large. In this case, you can use the split-dataset utility, which splits each tile into chunks. Then you can run split-affine alignment, allowing for more precise transformations without such imposing global rails.
-
-**Common Causes of Poor Alignment**
-- Not enough quality matches (adjust sigma threshold until you do)
-- Data is not consistent looking (we take a global approach to params)
-- Large translations needed (extend search radius)
-- Translations that extend beyond overlapping span (increase overlap)
-
----
-
-<br>
-
-## Performance
-
-**Interest Point Detection Performance Example (130TB Zarr dataset)**
-
-| Environment           | Resources            | Avg runtime |
-|:----------------------|:---------------------|:-----------:|
-| Local single machine  | 10 CPU,  10 GB RAM   | ~120 min    |
-| AWS Ray cluster       | 560 CPU, 4.4 TB RAM  | ~30 min     |
-
-<br>
-*Actual times vary by pipeline components, dataset size, tiling, and parameter choices.*
-
----
-
-<br>
 
 ## Layout
 
@@ -172,6 +129,82 @@ python -m venv .venv && source .venv/bin/activate
 # install deps
 pip install -r requirements.txt
 ```
+---
+
+<br>
+
+## How to Start
+
+Rhapso is driven by **pipeline scripts**.
+
+- Each pipeline script has at minimum an associated **param file** (e.g. in `Rhapso/pipelines/ray/param/`).
+- If you are running on a cluster, you’ll also have a **Ray cluster config** (e.g. in `Rhapso/pipelines/ray/aws/config/`).
+
+A good way to get started:
+
+1. **Pick a template pipeline script**  
+   For example:
+   - `Rhapso/pipelines/ray/local/alignment_pipeline.py` (local)
+   - `Rhapso/pipelines/ray/aws/alignment_pipeline.py` (AWS/Ray cluster)
+
+3. **Point it to your param file**  
+   Update the `with open("...param.yml")` line so it reads your own parameter YAML.
+   - [Run Locally w/ Ray](#run-locally-with-ray)
+
+5. **(Optional) Point it to your cluster config**  
+   If you’re using AWS/Ray, update the cluster config path.
+   - [Run on AWS Cluster w/ Ray](#run-on-aws-cluster-with-ray)
+
+5. **Edit the params to match your dataset**  
+   Paths, downsampling, thresholds, matching/solver settings, etc.
+
+6. **Run the pipeline**  
+   The pipeline script will call the Rhapso components (detection, matching, solver, fusion) in the order defined in the script using the parameters you configured.
+
+---
+
+<br>
+
+## High Level Approach to Registration, Alignment, and Fusion
+
+This process has a lot of knobs and variations, and when used correctly, can work for a broad range of datasets.
+
+**First, figure out what type of alignment you need.**  
+- Are there translations to shift to?  
+- If so, you’ll likely want to start with a rigid alignment.
+
+Once you’ve run the rigid step, how does your data look?  
+- Did the required translations shrink to an acceptable level?  
+- If not, try again with new parameters, keeping the questions above in mind.
+
+At this point, the translational part of your alignment should be in good shape. Now ask: **are transformations needed?** If so, you likely need an affine alignment next.
+
+Your dataset should be correctly aligned at this point. If not, there are a number of reasons why, and we have listed some common recurrences and will keep this up to date.
+
+There is a special case in some datasets where the z-stack is very large. In this case, you can use the split-dataset utility, which splits each tile into chunks. Then you can run split-affine alignment, allowing for more precise transformations without such imposing global rails.
+
+**Common Causes of Poor Alignment**
+- Not enough quality matches (adjust sigma threshold until you do)
+- Data is not consistent looking (we take a global approach to params)
+- Large translations needed (extend search radius)
+- Translations that extend beyond overlapping span (increase overlap)
+
+---
+
+<br>
+
+## Performance
+
+**Interest Point Detection Performance Example (130TB Zarr dataset)**
+
+| Environment           | Resources            | Avg runtime |
+|:----------------------|:---------------------|:-----------:|
+| Local single machine  | 10 CPU,  10 GB RAM   | ~120 min    |
+| AWS Ray cluster       | 560 CPU, 4.4 TB RAM  | ~30 min     |
+
+<br>
+*Actual times vary by pipeline components, dataset size, tiling, and parameter choices.*
+
 ---
 
 <br>
