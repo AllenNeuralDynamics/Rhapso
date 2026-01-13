@@ -7,10 +7,10 @@ long_description = (this_directory / "README.md").read_text(encoding="utf-8")
 
 setup(
     name='Rhapso',
-    version='0.1.98',
+    version='0.1.99',
     author='ND',
     author_email='sean.fite@alleninstitute.org',
-    description='A python package for aligning and stitching light sheet fluorescence microscopy images together',
+    description='A python package for aligning and stitching light sheet fluorescence microscopy images',
     long_description=long_description,                 
     long_description_content_type='text/markdown', 
     project_urls={
@@ -48,6 +48,7 @@ setup(
         'Operating System :: OS Independent',
     ],
 )
+
 
 
 
