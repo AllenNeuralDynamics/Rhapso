@@ -1,9 +1,9 @@
 # Rhapso
 
-**Rhapso** is a modular Python toolkit for interest point based registration, alignment, and fusing of large-scale microscopy datasets. 
+This is the code base for **Rhapso**, a modular Python toolkit for the alignment and stitching of large-scale microscopy datasets. 
 
 [![License](https://img.shields.io/badge/license-MIT-brightgreen)](LICENSE)
-[![Python Version](https://img.shields.io/badge/python-3.11-blue.svg)](https://www.python.org/downloads/release/python-3110/)
+[![Python Version](https://img.shields.io/badge/python-3.10-blue.svg)](https://www.python.org/downloads/release/python-3100/)
 [![Documentation](https://img.shields.io/badge/docs-wiki-blue)](https://github.com/AllenNeuralDynamics/Rhapso/wiki)
 
 <!-- ## Example Usage Media Content Coming Soon....
@@ -14,7 +14,7 @@
 ## Table of Contents
 - [Summary](#summary)
 - [Contact](#contact)
-- [Features](#features)
+- [Supported Features](#supported-features)
 - [Performance](#performance)
 - [Layout](#layout)
 - [Installation](#installation)
@@ -31,7 +31,7 @@
 
 <br>
 
-**Update 11/26/25** 
+**Update 1/12/26** 
 --------
 Rhapso is still loading... and while we wrap up development, a couple things to know if you are outside the Allen Institute: 
    - This process requires a very specific XML structure to work.
@@ -40,11 +40,15 @@ Rhapso is still loading... and while we wrap up development, a couple things to 
 <br>
 
 ## Summary
-Rhapso is a set of Python components for registration, alignment, and stitching of large-scale, 3D, overlapping tile-based, multiscale microscopy datasets.
+Rhapso is a set of Python components used to register, align, and stitch large-scale, 3D, overlapping, tile-based, multiscale microscopy datasets. Its stateless components can run on a single machine or scale out across cloud-based clusters. 
 
-Rhapso was developed by the Allen Institute for Neural Dynamics. Rhapso is comprised of stateless components. You can call these components using a pipeline script, with the option to run on a single machine or scale out with Ray to cloud based (currently only supporting AWS) clusters.
+Rhapso is published on PyPI and can be installed with:
 
-Current data loaders support Zarr and Tiff.
+```bash
+pip install Rhapso
+```
+
+Rhapso was developed by the Allen Institute for Neural Dynamics.
 
 <br>
 
@@ -53,11 +57,15 @@ Questions or want to contribute? Please open an issue..
 
 <br>
 
-## Features
-- **Interest Point Detection** - using DOG based feature detection
-- **Interest Point Matching** - using descriptor based RANSAC to match feature points
-- **Global Optimization** - aligning matched features per tile, globally
-- **Validation and Visualization Tools** - validate component specific results for the best output
+## Supported Features
+- **Interest Point Detection** - DOG based feature detection
+- **Interest Point Matching** - Descriptor based RANSAC to match feature points
+- **Global Optimization** - Align matched features between tile pairs globally
+- **Validation and Visualization Tools** - Validate component specific results for the best output
+- **ZARR** - Zarr data as input
+- **TIFF** - Tiff data as input
+- **AWS** - AWS S3 based input/output and Ray based EC2 instances
+- **Scale** - Tested on 200 TB of data without downsampling
 
 ---
 
@@ -65,18 +73,31 @@ Questions or want to contribute? Please open an issue..
 
 ## High Level Approach to Registration, Alignment, and Fusion
 
-We first run **interest point detection** to capture feature points in the dataset, focusing on overlapping regions between tiles. These points drive all downstream alignment.
+This process has a lot of knobs and variations, and when used correctly, can work for a broad range of datasets.
 
-Next, we perform **alignment** in two-three stages, with regularized models:
+**First, figure out what type of alignment you need.**  
+- Are there translations to shift to?  
+- If so, you’ll likely want to start with a rigid alignment and double-check that the required translations do not span more than the overlapping distance.
 
-1. **Rigid matching + solver** – Match interest points with a rigid model and solve for globally consistent rigid transforms between all tiles.
-2. **Affine matching + solver** – Starting from the rigid solution, repeat matching with an affine model to recover more precise tile transforms.
-3. **Split affine matching + solver** – For very large z-stacks, we recommend first running the split dataset component to chunk tiles into smaller Z-bounds, then repeating affine matching and solving in “split affine” mode to refine local alignment. 
+**A very important thing to keep in mind:** interest-point–based alignment will not work well if you don’t find enough high-quality points that can be matched.  
+- Too few, even if they’re very good, will lead to poor alignment.  
+- The same is true if you have lots of low-quality matches.
 
-All resulting transforms are written back into the input XML.
+Once you’ve run the rigid step, how does your data look?  
+- Did the required translations shrink to an acceptable level?  
+- If not, try again with new parameters, keeping the questions above in mind.
 
-Whether you split or not, once the XML contains your final transforms, you are ready for **fusion**. We recommend viewing the aligned XML in FIJI/BDV to visually confirm alignment quality before running fusion.
+At this point, the translational part of your alignment should be in good shape. Now ask: **are additional transformations needed?** If so, you likely need an affine alignment next.
 
+Your dataset should be correctly aligned at this point. If not, there are a number of reasons why, and we have listed some common recurrences and will keep this up to date.
+
+There is a special case in some datasets where the z-stack is very large. In this case, you can use the split-dataset utility, which splits each tile into multiple tiles of your choosing. Then you can run split-affine alignment, allowing for more precise transformations without such imposing global rails.
+
+**Common Causes of Poor Alignment**
+- Not enough quality matches (adjust sigma threshold until you do)
+- Data is not consistent looking (we take a global approach to params)
+- Large translations needed (extened search radius)
+- Translations that extend beyond overlapping span (increase overlap)
 
 ---
 
@@ -130,6 +151,19 @@ Rhapso/
 
 
 ## Installation
+
+### Option 1: Install from PyPI (recommended)
+
+```bash
+# create and activate a virtual environment
+python -m venv .venv && source .venv/bin/activate
+# or: conda create -n rhapso python=3.10 && conda activate rhapso
+
+# install Rhapso from PyPI
+pip install Rhapso
+```
+
+### Option 2: Install from GitHub (developers)
 
  ```sh
 # clone the repo
@@ -222,19 +256,9 @@ with open("Rhapso/pipelines/ray/param/your_param_file.yml", "r") as file:
 Rhapso/pipelines/ray/aws/config/
 ```
 
-### 4. Update config file to point to whl location in setup_commands
-```python
-- aws s3 cp s3://rhapso-whl-v2/Rhapso-0.1.8-py3-none-any.whl /tmp/Rhapso-0.1.8-py3-none-any.whl  
-```
-
 ### 5. Update alignment pipeline script to point to config file
 ```python
 unified_yml = "your_cluster_config_file_name.yml"
-```
-
-### 6. Create whl file and upload to s3
-```python
-python setup.py sdist bdist_wheel
 ```
 
 ### 7. Run AWS alignment pipeline script
