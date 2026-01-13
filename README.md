@@ -92,7 +92,7 @@ There is a special case in some datasets where the z-stack is very large. In thi
 **Common Causes of Poor Alignment**
 - Not enough quality matches (adjust sigma threshold until you do)
 - Data is not consistent looking (we take a global approach to params)
-- Large translations needed (extened search radius)
+- Large translations needed (extend search radius)
 - Translations that extend beyond overlapping span (increase overlap)
 
 ---
