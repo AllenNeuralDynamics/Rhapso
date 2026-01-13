@@ -48,6 +48,8 @@ Rhapso is published on PyPI and can be installed with:
 pip install Rhapso
 ```
 
+<br>
+
 Rhapso was developed by the Allen Institute for Neural Dynamics.
 
 <br>
