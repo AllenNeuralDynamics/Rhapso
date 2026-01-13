@@ -40,7 +40,7 @@ Rhapso is still loading... and while we wrap up development, a couple things to 
 <br>
 
 ## Summary
-Rhapso is a set of Python components used to register, align, and stitch large-scale, 3D, overlapping, tile-based, multiscale microscopy datasets. Its stateless components can run on a single machine or scale out across cloud-based clusters. 
+Rhapso is a set of Python components used to register, align, and stitch large-scale, overlapping, tile-based, multiscale microscopy datasets. Its stateless components can run on a single machine or scale out across cloud-based clusters. 
 
 Rhapso is published on PyPI and can be installed with:
 
@@ -63,7 +63,7 @@ Questions or want to contribute? Please open an issue..
 - **Global Optimization** - Align matched features between tile pairs globally
 - **Validation and Visualization Tools** - Validate component specific results for the best output
 - **ZARR** - Zarr data as input
-- **TIFF** - Tiff data as input
+- **TIFF** - TIFF data as input
 - **AWS** - AWS S3 based input/output and Ray based EC2 instances
 - **Scale** - Tested on 200 TB of data without downsampling
 
@@ -77,21 +77,17 @@ This process has a lot of knobs and variations, and when used correctly, can wor
 
 **First, figure out what type of alignment you need.**  
 - Are there translations to shift to?  
-- If so, you’ll likely want to start with a rigid alignment and double-check that the required translations do not span more than the overlapping distance.
-
-**A very important thing to keep in mind:** interest-point–based alignment will not work well if you don’t find enough high-quality points that can be matched.  
-- Too few, even if they’re very good, will lead to poor alignment.  
-- The same is true if you have lots of low-quality matches.
+- If so, you’ll likely want to start with a rigid alignment.
 
 Once you’ve run the rigid step, how does your data look?  
 - Did the required translations shrink to an acceptable level?  
 - If not, try again with new parameters, keeping the questions above in mind.
 
-At this point, the translational part of your alignment should be in good shape. Now ask: **are additional transformations needed?** If so, you likely need an affine alignment next.
+At this point, the translational part of your alignment should be in good shape. Now ask: **are transformations needed?** If so, you likely need an affine alignment next.
 
 Your dataset should be correctly aligned at this point. If not, there are a number of reasons why, and we have listed some common recurrences and will keep this up to date.
 
-There is a special case in some datasets where the z-stack is very large. In this case, you can use the split-dataset utility, which splits each tile into multiple tiles of your choosing. Then you can run split-affine alignment, allowing for more precise transformations without such imposing global rails.
+There is a special case in some datasets where the z-stack is very large. In this case, you can use the split-dataset utility, which splits each tile into chunks. Then you can run split-affine alignment, allowing for more precise transformations without such imposing global rails.
 
 **Common Causes of Poor Alignment**
 - Not enough quality matches (adjust sigma threshold until you do)
