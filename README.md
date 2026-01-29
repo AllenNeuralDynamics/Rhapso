@@ -1,6 +1,6 @@
 # Rhapso
 
-This is the code base for **Rhapso**, a modular Python toolkit for the alignment and stitching of large-scale microscopy datasets. 
+This is the official code base for **Rhapso**, a modular Python toolkit for the alignment and stitching of large-scale microscopy datasets. 
 
 [![License](https://img.shields.io/badge/license-MIT-brightgreen)](LICENSE)
 [![Python Version](https://img.shields.io/badge/python-3.10-blue.svg)](https://www.python.org/downloads/release/python-3100/)
@@ -18,6 +18,8 @@ This is the code base for **Rhapso**, a modular Python toolkit for the alignment
 - [Performance](#performance)
 - [Layout](#layout)
 - [Installation](#installation)
+- [How To Start](#how-to-start)
+- [Try Rhapso on Sample Data](#try-rhapso-on-sample-data)
 - [Ray](#ray)
 - [Run Locally w/ Ray](#run-locally-with-ray)
 - [Run on AWS Cluster w/ Ray](#run-on-aws-cluster-with-ray)
@@ -42,13 +44,7 @@ Rhapso is still loading... and while we wrap up development, a couple things to 
 ## Summary
 Rhapso is a set of Python components used to register, align, and stitch large-scale, overlapping, tile-based, multiscale microscopy datasets. Its stateless components can run on a single machine or scale out across cloud-based clusters. 
 
-Rhapso is published on PyPI and can be installed with:
-
-```bash
-pip install Rhapso
-```
-
-<br>
+Rhapso is published on PyPI.
 
 Rhapso was developed by the Allen Institute for Neural Dynamics.
 
@@ -162,6 +158,24 @@ A good way to get started:
 
 6. **Run the pipeline**  
    The pipeline script will call the Rhapso components (detection, matching, solver, fusion) in the order defined in the script using the parameters you configured.
+
+---
+
+<br>
+
+## Try Rhapso on Sample Data
+
+The quickest way to get familiar with Rhapso is to run it on a real dataset. We have a small (10GB) Z1 example hosted in a public S3 bucket, so you can access it without special permissions. It’s a good starting point to copy and adapt for your own alignment workflows.
+
+XML (input)
+- s3://aind-open-data/HCR_802704_2025-08-30_02-00-00_processed_2025-10-01_21-09-24/image_tile_alignment/single_channel_xmls/channel_488.xml
+
+Image prefix (referenced by the XML)
+- s3://aind-open-data/HCR_802704_2025-08-30_02-00-00_processed_2025-10-01_21-09-24/image_radial_correction/
+
+<br>
+
+**Note:** Occasionally we clean up our aind-open-data bucket. If you find this dataset does not exist, please create an issue and we will replace it.
 
 ---
 
