@@ -7,13 +7,14 @@ GlobalOptimization iteratively refines per-tile transforms to achieve sub-pixel 
 """
 
 class GlobalOptimization:
-    def __init__(self, tiles, relative_threshold, absolute_threshold, min_matches, 
-                 damp, max_iterations, max_allowed_error, max_plateauwidth, run_type, metrics_output_path):
+    def __init__(self, tiles, relative_threshold, absolute_threshold, min_matches, damp, regularization_weight, 
+                 max_iterations, max_allowed_error, max_plateauwidth, run_type, metrics_output_path):
         self.tiles = tiles
         self.relative_threshold = relative_threshold
         self.absolute_threshold = absolute_threshold
         self.min_matches = min_matches
         self.damp = damp
+        self.regularization_weight = regularization_weight
         self.max_iterations = max_iterations
         self.max_allowed_error = max_allowed_error
         self.max_plateauwidth = max_plateauwidth
@@ -307,8 +308,7 @@ class GlobalOptimization:
         return affine_model
     
     def regularize_models(self, affine, rigid):
-        alpha=0.1
-        l1 = 1.0 - alpha
+        l1 = 1.0 - self.regularization_weight
 
         def to_array(model):
             return [
@@ -320,7 +320,7 @@ class GlobalOptimization:
         afs = to_array(affine)
         bfs = to_array(rigid)
 
-        rfs = [l1 * a + alpha * b for a, b in zip(afs, bfs)]
+        rfs = [l1 * a + self.regularization_weight * b for a, b in zip(afs, bfs)]
 
         keys = [
             'm00', 'm01', 'm02', 'm03',

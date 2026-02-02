@@ -2,22 +2,22 @@
 # INTEREST POINT DETECTION
 # -----------------------------------
 
-xml_file_path_detection: 's3://aind-open-data/HCR_807074_2025-08-26_15-45-00_processed_2025-09-03_17-17-18/image_tile_alignment/single_channel_xmls/channel_405.xml'
-image_file_prefix: 's3://aind-open-data/HCR_807074_2025-08-26_15-45-00_processed_2025-09-03_17-17-18/image_radial_correction/' 
-xml_output_file_path: &detection_xml_output_file_path 's3://rhapso-matching-test/rhapso-detection.xml'
-n5_output_file_prefix: &n5_output_file_prefix 's3://rhapso-matching-test/' 
+xml_file_path_detection: 's3://aind-scratch-data/sean.fite/exaSPIM_802450_dataset.xml'
+image_file_prefix: 's3://aind-open-data/exaSPIM_802450_2025-11-25_16-55-46_processed_2025-12-02_15-17-21/flatfield_correction/SPIM.ome.zarr/' 
+xml_output_file_path: &detection_xml_output_file_path 's3://aind-scratch-data/sean.fite/exaSPIM_802450/rhapso-detection.xml'
+n5_output_file_prefix: &n5_output_file_prefix 's3://aind-scratch-data/sean.fite/exaSPIM_802450/' 
 detection_run_type: 'ray' 
 file_type: 'zarr' 
 dsxy: 16
 dsz: 16
 min_intensity: 1                          # normalize - dog
 max_intensity: 5                          # normalize - dog
-sigma: 1.8                                # blur - dog
+sigma: 2.0                                # blur - dog
 threshold: 0.005                          # find peaks (min initial peak value) - dog (threshold / 3) 
-median_filter: 9                          # xysubtract - pre-dog
+median_filter: 10                         # xysubtract - pre-dog
 combine_distance: .5
 chunks_per_bound: 14                      # chunks per bound
-max_spots: 8000                           # max points per bound
+max_spots: 10000                          # max points per bound
 
 # SOLVER
 # -----------------------------------
@@ -36,34 +36,33 @@ fixed_tile: False
 # -- RIGID --
 run_type_solver_rigid: 'rigid'
 xml_file_path_solver_rigid: *detection_xml_output_file_path
-xml_file_path_output_rigid: &rigid_solver_xml_output 's3://rhapso-matching-test/rhapso-solver-rigid.xml'
+xml_file_path_output_rigid: &rigid_solver_xml_output 's3://aind-scratch-data/sean.fite/exaSPIM_802450/rhapso-solver-rigid.xml'
 regularization_weight_solver_rigid: 1.0
 
 # -- AFFINE --
 run_type_solver_affine: 'affine'
 xml_file_path_solver_affine: *rigid_solver_xml_output
-xml_file_path_output_affine: &affine_solver_xml_output 's3://rhapso-matching-test/rhapso-solver-affine.xml'
-regularization_weight_solver_affine: .05
+xml_file_path_output_affine: &affine_solver_xml_output 's3://aind-scratch-data/sean.fite/exaSPIM_802450/rhapso-solver-affine.xml'
+regularization_weight_solver_affine: 0.05
 
 # -- SPLIT AFFINE --
 run_type_solver_split_affine: 'split-affine'
-xml_file_path_solver_split_affine: 's3://rhapso-matching-test/rhapso-solver-split.xml'
-xml_file_path_output_split_affine: 's3://rhapso-matching-test/rhapso-solver-split-affine.xml'
-regularization_weight_solver_split_affine: .05
-
+xml_file_path_solver_split_affine: 's3://aind-scratch-data/sean.fite/exaSPIM_802450/rhapso-split.xml'
+xml_file_path_output_split_affine: &split_affine_solver_xml_output 's3://aind-scratch-data/sean.fite/exaSPIM_802450/rhapso-solver-split-affine.xml'
+regularization_weight_solver_split_affine: 0.05
 
 # SPLIT DATASET
 # -----------------------------------
 
 xml_file_path_split: *affine_solver_xml_output
-xml_output_file_path_split: &affine_split_solver_xml_output 's3://rhapso-matching-test/rhapso-solver-split.xml'
+xml_output_file_path_split: &affine_split_xml_output 's3://aind-scratch-data/sean.fite/exaSPIM_802450/rhapso-split.xml'
 n5_path_split: *n5_output_file_prefix
 point_density: 100.0 
 min_points: 20
 max_points: 500 
 error: 0.5 
 exclude_radius: 200.0
-target_image_size: [7000, 7000, 4000]
+target_image_size: [7040, 7040, 4000]
 target_overlap: [128, 128, 128]
 
 
@@ -80,13 +79,13 @@ xml_file_path_matching_rigid: *detection_xml_output_file_path
 # Candidates 
 num_neighbors_rigid: 3
 redundancy_rigid: 0
-significance_rigid: 3                   
-search_radius_rigid: 300
+significance_rigid: 3                 
+search_radius_rigid: 600
 num_required_neighbors_rigid: 3
 
 # Ransac
-model_min_matches_rigid: 15            
-inlier_threshold_rigid: 100                
+model_min_matches_rigid: 15             
+inlier_threshold_rigid: 100                 
 min_inlier_ratio_rigid: 0.1                  
 num_iterations_rigid: 10000
 regularization_weight_matching_rigid: 1.0
@@ -98,31 +97,31 @@ xml_file_path_matching_affine: *rigid_solver_xml_output
 # Candidates
 num_neighbors_affine: 3
 redundancy_affine: 0
-significance_affine: 3                  
-search_radius_affine: 100
+significance_affine: 3               
+search_radius_affine: 600
 num_required_neighbors_affine: 3
 
 # Ransac     
 model_min_matches_affine: 20            
-inlier_threshold_affine: 100                
-min_inlier_ratio_affine: 0.1               
+inlier_threshold_affine: 100               
+min_inlier_ratio_affine: 0.1              
 num_iterations_affine: 10000
-regularization_weight_matching_affine: .05
+regularization_weight_matching_affine: 0.05     
 
 # -- SPLIT AFFINE -- 
 match_type_split_affine: 'split-affine'  
-xml_file_path_matching_split_affine: *affine_split_solver_xml_output               
+xml_file_path_matching_split_affine: *affine_split_xml_output               
 
 # Candidates
 num_neighbors_split_affine: 3
 redundancy_split_affine: 1
-significance_split_affine: 3                 
-search_radius_split_affine: 100
+significance_split_affine: 3                  
+search_radius_split_affine: 600
 num_required_neighbors_split_affine: 3
 
 # Ransac     
 model_min_matches_split_affine: 20            
-inlier_threshold_split_affine: 50              
+inlier_threshold_split_affine: 50               
 min_inlier_ratio_split_affine: 0.1              
 num_iterations_split_affine: 10000
-regularization_weight_matching_split_affine: .05
+regularization_weight_matching_split_affine: 0.05     

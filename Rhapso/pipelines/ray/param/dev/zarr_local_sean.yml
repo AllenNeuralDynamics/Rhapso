@@ -37,16 +37,19 @@ fixed_tile: False
 run_type_solver_rigid: 'rigid'
 xml_file_path_solver_rigid: *detection_xml_output_file_path
 xml_file_path_output_rigid: &rigid_solver_xml_output '/Users/seanfite/Desktop/Rhapso-Output/rhapso-solver-rigid.xml'
+regularization_weight_solver_rigid: 1.0
 
 # -- AFFINE --
 run_type_solver_affine: 'affine'
 xml_file_path_solver_affine: *rigid_solver_xml_output
 xml_file_path_output_affine: &affine_solver_xml_output '/Users/seanfite/Desktop/Rhapso-Output/rhapso-solver-affine.xml'
+regularization_weight_solver_affine: 0.05
 
 # -- SPLIT AFFINE --
 run_type_solver_split_affine: 'split-affine'
 xml_file_path_solver_split_affine: '/Users/seanfite/Desktop/Rhapso-Output/rhapso-solver-split.xml'
 xml_file_path_output_split_affine: '/Users/seanfite/Desktop/Rhapso-Output/rhapso-solver-split-affine.xml'
+regularization_weight_solver_split_affine: 0.05
 
 
 # SPLIT DATASET
@@ -77,16 +80,16 @@ xml_file_path_matching_rigid: *detection_xml_output_file_path
 # Candidates 
 num_neighbors_rigid: 3
 redundancy_rigid: 0
-significance_rigid: 3                    # ratio of distance
+significance_rigid: 3                   
 search_radius_rigid: 300
 num_required_neighbors_rigid: 3
 
 # Ransac
-model_min_matches_rigid: 18              # min number inlier factor = 6
-inlier_factor_rigid: 100                 # max epsilon
-lambda_value_rigid: 0.1                  # min inlier ratio
+model_min_matches_rigid: 15           
+inlier_threshold_rigid: 100                
+min_inlier_ratio_rigid: 0.1                
 num_iterations_rigid: 10000
-regularization_weight_rigid: 1.0
+regularization_weight_matching_rigid: 1.0
 
 # -- AFFINE --
 match_type_affine: 'affine'  
@@ -95,16 +98,16 @@ xml_file_path_matching_affine: *rigid_solver_xml_output
 # Candidates
 num_neighbors_affine: 3
 redundancy_affine: 0
-significance_affine: 3                  # ratio of distance
+significance_affine: 3                 
 search_radius_affine: 100
 num_required_neighbors_affine: 3
 
 # Ransac     
-model_min_matches_affine: 24            # min number inlier factor = 5
-inlier_factor_affine: 30                # max epsilon
-lambda_value_affine: 0.05               # min inlier ratio
+model_min_matches_affine: 20           
+inlier_threshold_affine: 100          
+min_inlier_ratio_affine: 0.1               
 num_iterations_affine: 10000
-regularization_weight_affine: 1.0
+regularization_weight_matching_affine: 0.05
 
 # -- SPLIT AFFINE -- 
 match_type_split_affine: 'split-affine'  
@@ -113,13 +116,13 @@ xml_file_path_matching_split_affine: *affine_split_solver_xml_output
 # Candidates
 num_neighbors_split_affine: 3
 redundancy_split_affine: 1
-significance_split_affine: 3                  # ratio of distance
+significance_split_affine: 3                 
 search_radius_split_affine: 100
 num_required_neighbors_split_affine: 3
 
 # Ransac     
-model_min_matches_split_affine: 24            # min number inlier factor = 5
-inlier_factor_split_affine: 25                # max epsilon
-lambda_value_split_affine: 0.05               # min inlier ratio
+model_min_matches_split_affine: 20          
+inlier_threshold_split_affine: 50             
+min_inlier_ratio_split_affine: 0.1               
 num_iterations_split_affine: 10000
-regularization_weight_split_affine: 1.0
+regularization_weight_matching_split_affine: 0.05

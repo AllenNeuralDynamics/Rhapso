@@ -6,7 +6,7 @@ import ray
 
 class InterestPointMatching:
     def __init__(self, xml_input_path, n5_output_path, input_type, match_type, num_neighbors, redundancy, significance, 
-                 search_radius, num_required_neighbors, model_min_matches, inlier_factor, lambda_value, num_iterations, 
+                 search_radius, num_required_neighbors, model_min_matches, inlier_threshold, min_inlier_ratio, num_iterations, 
                  regularization_weight, image_file_prefix):
         self.xml_input_path = xml_input_path
         self.n5_output_path = n5_output_path
@@ -18,8 +18,8 @@ class InterestPointMatching:
         self.search_radius = search_radius
         self.num_required_neighbors = num_required_neighbors
         self.model_min_matches = model_min_matches        
-        self.inlier_factor = inlier_factor          
-        self.lambda_value = lambda_value               
+        self.inlier_threshold = inlier_threshold          
+        self.min_inlier_ratio = min_inlier_ratio               
         self.num_iterations = num_iterations
         self.regularization_weight = regularization_weight
         self.image_file_prefix = image_file_prefix
@@ -38,11 +38,11 @@ class InterestPointMatching:
         # Distribute interest point matching with Ray
         @ray.remote
         def match_pair(pointsA, pointsB, viewA_str, viewB_str, label, num_neighbors, redundancy, significance, num_required_neighbors, 
-                       match_type, inlier_factor, lambda_value, num_iterations, model_min_matches, regularization_weight, search_radius,
+                       match_type, inlier_threshold, min_inlier_ratio, num_iterations, model_min_matches, regularization_weight, search_radius,
                        view_registrations, input_type, image_file_prefix): 
             
-            matcher = RansacMatching(data_global, num_neighbors, redundancy, significance, num_required_neighbors, match_type, inlier_factor, 
-                                     lambda_value, num_iterations, model_min_matches, regularization_weight, search_radius, view_registrations,
+            matcher = RansacMatching(data_global, num_neighbors, redundancy, significance, num_required_neighbors, match_type, inlier_threshold, 
+                                     min_inlier_ratio, num_iterations, model_min_matches, regularization_weight, search_radius, view_registrations,
                                      input_type, image_file_prefix)
             
             pointsA, pointsB = matcher.filter_for_overlapping_points(pointsA, pointsB, viewA_str, viewB_str)
@@ -65,7 +65,7 @@ class InterestPointMatching:
         # --- Distribute ---
         futures = [
             match_pair.remote(pointsA, pointsB, viewA_str, viewB_str, label, self.num_neighbors, self.redundancy, self.significance, self.num_required_neighbors,
-                            self.match_type, self.inlier_factor, self.lambda_value, self.num_iterations, self.model_min_matches, self.regularization_weight, 
+                            self.match_type, self.inlier_threshold, self.min_inlier_ratio, self.num_iterations, self.model_min_matches, self.regularization_weight, 
                             self.search_radius, view_registrations, self.input_type, self.image_file_prefix)
             for pointsA, pointsB, viewA_str, viewB_str, label in process_pairs
         ]
@@ -88,8 +88,8 @@ class InterestPointMatching:
 # DEBUG MATCHING
 # all_results = []
 # for pointsA, pointsB, viewA_str, viewB_str, label in process_pairs:
-#     matcher = RansacMatching(data_global, self.num_neighbors, self.redundancy, self.significance, self.num_required_neighbors, self.match_type, self.inlier_factor, 
-#                              self.lambda_value, self.num_iterations, self.model_min_matches, self.regularization_weight, self.search_radius, view_registrations,
+#     matcher = RansacMatching(data_global, self.num_neighbors, self.redundancy, self.significance, self.num_required_neighbors, self.match_type, self.inlier_threshold, 
+#                              self.min_inlier_ratio, self.num_iterations, self.model_min_matches, self.regularization_weight, self.search_radius, view_registrations,
 #                              self.input_type, self.image_file_prefix)
     
 #     pointsA, pointsB = matcher.filter_for_overlapping_points(pointsA, pointsB, viewA_str, viewB_str)

@@ -16,7 +16,8 @@ This class implements the Solver pipeline for rigid, affine, and split-affine op
 
 class Solver:
     def __init__(self, xml_file_path_output, n5_input_path, xml_file_path, run_type, relative_threshold, absolute_threshold, 
-                 min_matches, damp, max_iterations, max_allowed_error, max_plateauwidth, metrics_output_path, fixed_tile):
+                 min_matches, damp, regularization_weight, max_iterations, max_allowed_error, max_plateauwidth, metrics_output_path, 
+                 fixed_tile):
         self.xml_file_path_output = xml_file_path_output
         self.n5_input_path = n5_input_path
         self.xml_file_path = xml_file_path
@@ -25,6 +26,7 @@ class Solver:
         self.absolute_threshold = absolute_threshold
         self.min_matches = min_matches
         self.damp = damp
+        self.regularization_weight = regularization_weight
         self.max_iterations = max_iterations
         self.max_allowed_error = max_allowed_error
         self.max_plateauwidth = max_plateauwidth
@@ -79,7 +81,8 @@ class Solver:
 
         # Update all points with transform models and iterate through all tiles (views) and optimize alignment
         global_optimization = GlobalOptimization(tc, self.relative_threshold, self.absolute_threshold, self.min_matches, self.damp, 
-                                                self.max_iterations, self.max_allowed_error, self.max_plateauwidth, self.run_type, self.metrics_output_path)
+                                                 self.regularization_weight, self.max_iterations, self.max_allowed_error, 
+                                                 self.max_plateauwidth, self.run_type, self.metrics_output_path)
         tiles, validation_stats = global_optimization.run()
         print("Global optimization complete")
         
@@ -102,7 +105,8 @@ class Solver:
 
             # Update all points with transform models and iterate through all tiles (views) and optimize alignment
             global_optimization = GlobalOptimization(tc, self.relative_threshold, self.absolute_threshold, self.min_matches, self.damp, 
-                                                    self.max_iterations, self.max_allowed_error, self.max_plateauwidth, self.run_type, self.metrics_output_path)
+                                                    self.regularization_weight, self.max_iterations, self.max_allowed_error, 
+                                                    self.max_plateauwidth, self.run_type, self.metrics_output_path)
             tiles_round_2, validation_stats_round_2 = global_optimization.run()
             print("Global optimization complete")
 

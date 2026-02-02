@@ -9,7 +9,7 @@ import ray
 ray.init()
 
 # Point to param file
-with open("Rhapso/pipelines/ray/param/dev/zarr_s3_sean.yml", "r") as file:
+with open("Rhapso/pipelines/ray/param/exaSPIM_802450.yml", "r") as file:
     config = yaml.safe_load(file)
 
 # -- INITIALIZE EACH COMPONENT --
@@ -46,10 +46,10 @@ interest_point_matching_rigid = InterestPointMatching(
     search_radius=config['search_radius_rigid'],
     num_required_neighbors=config['num_required_neighbors_rigid'],
     model_min_matches=config['model_min_matches_rigid'],
-    inlier_factor=config['inlier_factor_rigid'],
-    lambda_value=config['lambda_value_rigid'],
+    inlier_threshold=config['inlier_threshold_rigid'],
+    min_inlier_ratio=config['min_inlier_ratio_rigid'],
     num_iterations=config['num_iterations_rigid'],
-    regularization_weight=config['regularization_weight_rigid'],
+    regularization_weight=config['regularization_weight_matching_rigid'],
     image_file_prefix=config['image_file_prefix'],
 )             
 
@@ -65,10 +65,10 @@ interest_point_matching_affine = InterestPointMatching(
     search_radius=config['search_radius_affine'],
     num_required_neighbors=config['num_required_neighbors_affine'],
     model_min_matches=config['model_min_matches_affine'],
-    inlier_factor=config['inlier_factor_affine'],
-    lambda_value=config['lambda_value_affine'],
+    inlier_threshold=config['inlier_threshold_affine'],
+    min_inlier_ratio=config['min_inlier_ratio_affine'],
     num_iterations=config['num_iterations_affine'],
-    regularization_weight=config['regularization_weight_affine'],
+    regularization_weight=config['regularization_weight_matching_affine'],
     image_file_prefix=config['image_file_prefix'],
 )
 
@@ -84,10 +84,10 @@ interest_point_matching_split_affine = InterestPointMatching(
     search_radius=config['search_radius_split_affine'],
     num_required_neighbors=config['num_required_neighbors_split_affine'],
     model_min_matches=config['model_min_matches_split_affine'],
-    inlier_factor=config['inlier_factor_split_affine'],
-    lambda_value=config['lambda_value_split_affine'],
+    inlier_threshold=config['inlier_threshold_split_affine'],
+    min_inlier_ratio=config['min_inlier_ratio_split_affine'],
     num_iterations=config['num_iterations_split_affine'],
-    regularization_weight=config['regularization_weight_split_affine'],
+    regularization_weight=config['regularization_weight_matching_split_affine'],
     image_file_prefix=config['image_file_prefix'],
 )
 
@@ -101,6 +101,7 @@ solver_rigid = Solver(
     absolute_threshold=config['absolute_threshold'],
     min_matches=config['min_matches'],
     damp=config['damp'],
+    regularization_weight=config['regularization_weight_solver_rigid'],
     max_iterations=config['max_iterations'],
     max_allowed_error=config['max_allowed_error'],
     max_plateauwidth=config['max_plateauwidth'],
@@ -118,6 +119,7 @@ solver_affine = Solver(
     absolute_threshold=config['absolute_threshold'],
     min_matches=config['min_matches'],
     damp=config['damp'],
+    regularization_weight=config['regularization_weight_solver_affine'],
     max_iterations=config['max_iterations'],
     max_allowed_error=config['max_allowed_error'],
     max_plateauwidth=config['max_plateauwidth'],
@@ -135,6 +137,7 @@ solver_split_affine = Solver(
     absolute_threshold=config['absolute_threshold'],
     min_matches=config['min_matches'],
     damp=config['damp'],
+    regularization_weight=config['regularization_weight_solver_split_affine'],
     max_iterations=config['max_iterations'],
     max_allowed_error=config['max_allowed_error'],
     max_plateauwidth=config['max_plateauwidth'],
@@ -157,11 +160,11 @@ split_dataset = SplitDataset(
 )
 
 # -- ALIGNMENT PIPELINE --
-# interest_point_detection.run()
-# interest_point_matching_rigid.run()
+interest_point_detection.run()
+interest_point_matching_rigid.run()
 solver_rigid.run()
-# interest_point_matching_affine.run()
-# solver_affine.run()
-# split_dataset.run()
-# interest_point_matching_split_affine.run()
-# solver_split_affine.run()
+interest_point_matching_affine.run()
+solver_affine.run()
+split_dataset.run()
+interest_point_matching_split_affine.run()
+solver_split_affine.run()
