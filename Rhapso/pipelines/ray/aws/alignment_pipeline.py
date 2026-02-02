@@ -5,7 +5,7 @@ import json
 import base64, json
 from pathlib import Path
 
-with open("Rhapso/pipelines/ray/param/dev/zarr_s3_sean.yml", "r") as file:
+with open("Rhapso/pipelines/ray/param/exaSPIM_802450.yml", "r") as file:
     config = yaml.safe_load(file)
 
 serialized_config = base64.b64encode(json.dumps(config).encode()).decode()
@@ -51,10 +51,10 @@ matching_cmd_rigid = (
     "    search_radius=cfg[\\\"search_radius_rigid\\\"],\n"
     "    num_required_neighbors=cfg[\\\"num_required_neighbors_rigid\\\"],\n"
     "    model_min_matches=cfg[\\\"model_min_matches_rigid\\\"],\n"
-    "    inlier_factor=cfg[\\\"inlier_factor_rigid\\\"],\n"
-    "    lambda_value=cfg[\\\"lambda_value_rigid\\\"],\n"
+    "    inlier_threshold=cfg[\\\"inlier_threshold_rigid\\\"],\n"
+    "    min_inlier_ratio=cfg[\\\"min_inlier_ratio_rigid\\\"],\n"
     "    num_iterations=cfg[\\\"num_iterations_rigid\\\"],\n"
-    "    regularization_weight=cfg[\\\"regularization_weight_rigid\\\"],\n"
+    "    regularization_weight=cfg[\\\"regularization_weight_matching_rigid\\\"],\n"
     "    image_file_prefix=cfg[\\\"image_file_prefix\\\"]\n"
     ")\n"
     "ipm.run()\n"
@@ -80,10 +80,10 @@ matching_cmd_affine = (
     "    search_radius=cfg[\\\"search_radius_affine\\\"],\n"
     "    num_required_neighbors=cfg[\\\"num_required_neighbors_affine\\\"],\n"
     "    model_min_matches=cfg[\\\"model_min_matches_affine\\\"],\n"
-    "    inlier_factor=cfg[\\\"inlier_factor_affine\\\"],\n"
-    "    lambda_value=cfg[\\\"lambda_value_affine\\\"],\n"
+    "    inlier_threshold=cfg[\\\"inlier_threshold_affine\\\"],\n"
+    "    min_inlier_ratio=cfg[\\\"min_inlier_ratio_affine\\\"],\n"
     "    num_iterations=cfg[\\\"num_iterations_affine\\\"],\n"
-    "    regularization_weight=cfg[\\\"regularization_weight_affine\\\"],\n"
+    "    regularization_weight=cfg[\\\"regularization_weight_matching_affine\\\"],\n"
     "    image_file_prefix=cfg[\\\"image_file_prefix\\\"]\n"
     ")\n"
     "ipm.run()\n"
@@ -109,10 +109,10 @@ matching_cmd_split_affine = (
     "    search_radius=cfg[\\\"search_radius_split_affine\\\"],\n"
     "    num_required_neighbors=cfg[\\\"num_required_neighbors_split_affine\\\"],\n"
     "    model_min_matches=cfg[\\\"model_min_matches_split_affine\\\"],\n"
-    "    inlier_factor=cfg[\\\"inlier_factor_split_affine\\\"],\n"
-    "    lambda_value=cfg[\\\"lambda_value_split_affine\\\"],\n"
+    "    inlier_threshold=cfg[\\\"inlier_threshold_split_affine\\\"],\n"
+    "    min_inlier_ratio=cfg[\\\"min_inlier_ratio_split_affine\\\"],\n"
     "    num_iterations=cfg[\\\"num_iterations_split_affine\\\"],\n"
-    "    regularization_weight=cfg[\\\"regularization_weight_split_affine\\\"],\n"
+    "    regularization_weight=cfg[\\\"regularization_weight_matching_split_affine\\\"],\n"
     "    image_file_prefix=cfg[\\\"image_file_prefix\\\"]\n"
     ")\n"
     "ipm.run()\n"
@@ -151,6 +151,7 @@ solver_rigid = Solver(
     absolute_threshold=config['absolute_threshold'],
     min_matches=config['min_matches'],
     damp=config['damp'],
+    regularization_weight=config['regularization_weight_solver_rigid'],
     max_iterations=config['max_iterations'],
     max_allowed_error=config['max_allowed_error'],
     max_plateauwidth=config['max_plateauwidth'],
@@ -168,6 +169,7 @@ solver_affine = Solver(
     absolute_threshold=config['absolute_threshold'],
     min_matches=config['min_matches'],
     damp=config['damp'],
+    regularization_weight=config['regularization_weight_solver_affine'],
     max_iterations=config['max_iterations'],
     max_allowed_error=config['max_allowed_error'],
     max_plateauwidth=config['max_plateauwidth'],
@@ -185,6 +187,7 @@ solver_split_affine = Solver(
     absolute_threshold=config['absolute_threshold'],
     min_matches=config['min_matches'],
     damp=config['damp'],
+    regularization_weight=config['regularization_weight_solver_split_affine'],
     max_iterations=config['max_iterations'],
     max_allowed_error=config['max_allowed_error'],
     max_plateauwidth=config['max_plateauwidth'],
@@ -210,10 +213,10 @@ try:
     solver_rigid.run()
     exec_on_cluster("Matching (affine)", unified_yml, matching_cmd_affine, prefix)
     solver_affine.run()
-    exec_on_cluster("Split Dataset", unified_yml, split_cmd, prefix)
-    exec_on_cluster("Matching (split_affine)", unified_yml, matching_cmd_split_affine, prefix)
-    solver_split_affine.run()
-    print("\n✅ Pipeline complete.")
+    # exec_on_cluster("Split Dataset", unified_yml, split_cmd, prefix)
+    # exec_on_cluster("Matching (split_affine)", unified_yml, matching_cmd_split_affine, prefix)
+    # solver_split_affine.run()
+    # print("\n✅ Pipeline complete.")
 
 except subprocess.CalledProcessError as e:
     print(f"❌ Pipeline error: {e}")

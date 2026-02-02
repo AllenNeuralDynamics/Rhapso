@@ -27,7 +27,7 @@ class CustomBioImage(BioImage):
 
 class RansacMatching:
     def __init__(self, data_global, num_neighbors, redundancy, significance, num_required_neighbors, match_type, 
-                 max_epsilon, min_inlier_ratio, num_iterations, model_min_matches, regularization_weight, 
+                 inlier_threshold, min_inlier_ratio, num_iterations, model_min_matches, regularization_weight, 
                  search_radius, view_registrations, input_type, image_file_prefix):
         self.data_global = data_global
         self.num_neighbors = num_neighbors
@@ -35,7 +35,7 @@ class RansacMatching:
         self.significance = significance
         self.num_required_neighbors = num_required_neighbors
         self.match_type = match_type
-        self.max_epsilon = max_epsilon
+        self.inlier_threshold = inlier_threshold
         self.min_inlier_ratio = min_inlier_ratio
         self.num_iterations = num_iterations
         self.model_min_matches = model_min_matches
@@ -46,7 +46,7 @@ class RansacMatching:
         self.image_file_prefix = image_file_prefix
     
     def filter_inliers(self, candidates, initial_model):
-        max_trust = 4.0
+        max_trust = 6.0
             
         if len(candidates) < self.model_min_matches:
             return []
@@ -66,7 +66,7 @@ class RansacMatching:
             errors = []
             for match in temp:
                 p1 = np.array(match[1])
-                p2 = np.array(match[4])
+                p2 = np.array(match[5])
                 p1_h = np.append(p1, 1.0)
                 p1_trans = model_copy @ p1_h
                 error = np.linalg.norm(p1_trans[:3] - p2)
@@ -137,60 +137,55 @@ class RansacMatching:
         rigid_matrix[:3, 3] = t
 
         return rigid_matrix
-
+    
     def fit_affine_model(self, matches):
-        matches = np.array(matches)    # shape (N, 2, 3)
-        P = matches[:, 0]              # source points
-        Q = matches[:, 1]              # target points
-        weights = np.ones(P.shape[0])  # uniform weights
+        """
+        Fit a 3x4 affine transform such that:
+            Q ≈ M @ P + t
+        where P, Q are 3D column vectors (but stored here as row vectors).
+        """
+        matches = np.asarray(matches)          # shape (N, 2, 3)
+        P = matches[:, 0]                      # source points, shape (N, 3)
+        Q = matches[:, 1]                      # target points, shape (N, 3)
 
-        ws = np.sum(weights)
+        # Uniform weights for now (kept in case you add non-uniform later)
+        weights = np.ones(P.shape[0], dtype=float)
 
+        # Weighted centroids
         pc = np.average(P, axis=0, weights=weights)
         qc = np.average(Q, axis=0, weights=weights)
 
+        # Centered coordinates
         P_centered = P - pc
         Q_centered = Q - qc
 
-        A = np.zeros((3, 3))
-        B = np.zeros((3, 3))
-        
-        for i in range(P.shape[0]):
-            w = weights[i]
-            p = P_centered[i]
-            q = Q_centered[i]
+        # Weighted least squares: scale rows by sqrt(weight)
+        sqrt_w = np.sqrt(weights)[:, None]           # (N, 1)
+        P_w = P_centered * sqrt_w                    # (N, 3)
+        Q_w = Q_centered * sqrt_w                    # (N, 3)
 
-            A += w * np.outer(p, p)
-            B += w * np.outer(p, q)
+        # Solve P_w @ M^T ≈ Q_w  → M_T is 3x3, then transpose
+        M_T, *_ = np.linalg.lstsq(P_w, Q_w, rcond=None)
+        M = M_T.T
 
-        det = np.linalg.det(A)
-        if det == 0:
-            raise ValueError("Ill-defined data points (det=0)")
+        # Translation so that M @ pc ≈ qc
+        t = qc - M @ pc
 
-        try:
-            A_inv = np.linalg.inv(A)
-        except np.linalg.LinAlgError:
-            # If A is not invertible, use the pseudo-inverse
-            A_inv = np.linalg.pinv(A)
-
-        M = A_inv @ B  # 3x3 transformation matrix
-
-        t = qc - M @ pc  # translation
-
-        affine_matrix = np.eye(4)
+        # Pack into 4x4 affine matrix
+        affine_matrix = np.eye(4, dtype=float)
         affine_matrix[:3, :3] = M
         affine_matrix[:3, 3] = t
 
         return affine_matrix
     
-    def test(self, candidates, model, max_epsilon, min_inlier_ratio, min_num_inliers):
+    def test(self, candidates, model, inlier_threshold, min_inlier_ratio, min_num_inliers):
         inliers = []
         for idxA, pointA, view_a, label_a, idxB, pointB, view_b, label_b in candidates:
             p1_hom = np.append(pointA, 1.0)            
             transformed = model @ p1_hom                       
             distance = np.linalg.norm(transformed[:3] - pointB)
 
-            if distance < max_epsilon:
+            if distance < inlier_threshold:
                 inliers.append((idxA, pointA, view_a, label_a, idxB, pointB, view_b, label_b))
         
         ir = len(inliers) / len(candidates)
@@ -251,15 +246,16 @@ class RansacMatching:
                 regularized_model = self.model_regularization(point_pairs)
             except Exception as e:
                 print(e)
+                continue
 
             num_inliers = 0
-            is_good, tmp_inliers = self.test(candidates, regularized_model, self.max_epsilon, self.min_inlier_ratio, self.model_min_matches)
+            is_good, tmp_inliers = self.test(candidates, regularized_model, self.inlier_threshold, self.min_inlier_ratio, self.model_min_matches)
 
             while is_good and num_inliers < len(tmp_inliers):
                 num_inliers = len(tmp_inliers)
                 point_pairs = [(i[1], i[5]) for i in tmp_inliers]
                 regularized_model = self.model_regularization(point_pairs)
-                is_good, tmp_inliers = self.test(candidates, regularized_model, self.max_epsilon, self.min_inlier_ratio, self.model_min_matches)
+                is_good, tmp_inliers = self.test(candidates, regularized_model, self.inlier_threshold, self.min_inlier_ratio, self.model_min_matches)
 
             if len(tmp_inliers) > max_inliers:
                 best_inliers = tmp_inliers
