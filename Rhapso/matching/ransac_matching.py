@@ -46,7 +46,7 @@ class RansacMatching:
         self.image_file_prefix = image_file_prefix
     
     def filter_inliers(self, candidates, initial_model):
-        max_trust = 6.0
+        max_trust = 4.0
             
         if len(candidates) < self.model_min_matches:
             return []
