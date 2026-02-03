@@ -2,14 +2,13 @@ import numpy as np
 import random
 
 """
-Pre Align Tiles roughly align p1 with p2 to speed up global optimization rounds
+Utility class to roughly align p1 with p2 to speed up global optimization rounds
 """
 
 class PreAlignTiles:
-    def __init__(self, min_matches, run_type, fixed_tile):
+    def __init__(self, min_matches, run_type):
         self.min_matches = min_matches
         self.run_type = run_type
-        self.fixed_tile = fixed_tile
         
     def rigid_fit_model(self, rigid_model, matches):
         """
@@ -178,10 +177,6 @@ class PreAlignTiles:
         return affine_model
     
     def regularize_models(self, affine, rigid):
-        """
-        Blend affine and rigid models into a single "regularized" 3x4 affine by convex combination 
-        (90% affine, 10% rigid)
-        """
         alpha=0.1
         l1 = 1.0 - alpha
 
@@ -223,6 +218,8 @@ class PreAlignTiles:
         """
         Finds point matches in the target tile that connect to the reference tile.
         """
+
+        # Create a set of memory IDs for reference points
         reference_point_ids = {id(match['p1']) for match in reference_tile['matches']}
 
         # Collect matches in the target tile that connect to any reference point by object identity
@@ -242,7 +239,7 @@ class PreAlignTiles:
         return point
     
     def apply_transform_to_tile(self, tile):  
-        if self.run_type == "affine" or self.run_type == "split-affine":
+        if self.run_type == "affine":
             model = tile['model']['regularized'] 
         elif self.run_type == "rigid":
             model = tile['model']['b'] 
@@ -252,16 +249,7 @@ class PreAlignTiles:
             self.apply_model_in_place(match['p1']['w'], model)  
                 
     def pre_align(self, tiles):
-        """
-        Greedily seed an initial alignment
-        """
         random.shuffle(tiles['tiles'])
-
-        if getattr(self, "fixed_tile", None):
-            seed = next((t for t in tiles['tiles'] if t.get('view') == self.fixed_tile), None)
-            if seed is None:
-                raise ValueError(f"Fixed tile '{self.fixed_tile}' not found in tiles.")
-            tiles['fixed_tiles'] = [seed]
 
         unaligned_tiles = []
         aligned_tiles = []
@@ -279,9 +267,20 @@ class PreAlignTiles:
                 else:
                     unaligned_tiles.append(tile)
         
+        # DEBUG tool to align tile order with Big Stitcher for debugging
+        # target_match_order = [
+        #     759, 962, 1125, 60, 1055, 2073, 66, 602, 926,
+        #     612, 1226, 483, 911, 582, 720, 2205, 294, 1219, 34
+        # ]
+
+        # # Build map from match length → tile
+        # match_length_to_tile = {len(tile['matches']): tile for tile in unaligned_tiles}
+
+        # # Reorder unaligned_tiles according to target_match_order
+        # unaligned_tiles = [match_length_to_tile[match_len] for match_len in target_match_order]
+        
         ref_index = 0
         while ref_index < len(aligned_tiles):
-            
             if len(unaligned_tiles) == 0:
                 break
                 
@@ -309,15 +308,15 @@ class PreAlignTiles:
             # Always move to the next reference tile
             ref_index += 1
         
-        return unaligned_tiles
+        return unaligned_tiles, aligned_tiles
 
     def run(self, tiles):
         """
         Executes the entry point of the script.
         """
-        unaligned_tiles = self.pre_align(tiles)
+        unaligned_tiles, aligned_tiles = self.pre_align(tiles)
 
         if len(unaligned_tiles) > 0:
             print(f"aligned all tiles but: {len(unaligned_tiles)}")
 
-        return tiles['tiles']
+        return aligned_tiles

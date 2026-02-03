@@ -16,20 +16,23 @@ class XMLToDataFrame:
         image_loader_data = []
 
         for il in root.findall(".//ImageLoader/zgroups/zgroup"):
+            # print("il:", ET.tostring(il, encoding='unicode'))
             view_setup = il.get("setup")
-            timepoint = il.get("timepoint")
-            file_path = il.find("path").text if il.find("path") is not None else None
-            channel = file_path.split("_ch_", 1)[1].split(".ome.zarr", 1)[0]
+            timepoint = il.get("timepoint", il.get("tp"))
+            # TODO SM
+            # file_path = il.find("path").text if il.find("path") is not None else None
+            file_path = il.get("path")
 
             image_loader_data.append(
                 {
                     "view_setup": view_setup,
                     "timepoint": timepoint,
                     "series": 1,
-                    "channel": channel,
+                    "channel": 1,
                     "file_path": file_path,
                 }
             )
+            print(image_loader_data)
 
         return pd.DataFrame(image_loader_data)
 

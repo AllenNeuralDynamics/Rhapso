@@ -1,7 +1,8 @@
+from Rhapso.CLI.eval import MetricReviewCLI
+from Rhapso.pipelines.accuracy_metrics.matching_stats_pipeline import StatsPipeline
 from Rhapso.pipelines.ray.interest_point_detection import InterestPointDetection
 from Rhapso.pipelines.ray.interest_point_matching import InterestPointMatching
 from Rhapso.pipelines.ray.solver import Solver
-from Rhapso.pipelines.ray.split_dataset import SplitDataset
 import yaml
 import ray
 
@@ -9,8 +10,9 @@ import ray
 ray.init()
 
 # Point to param file
-with open("Rhapso/pipelines/ray/param/exaSPIM_802450.yml", "r") as file:
+with open("Rhapso/pipelines/ray/param/dev/zarr_local_sean.yml", "r") as file:
     config = yaml.safe_load(file)
+
 
 # -- INITIALIZE EACH COMPONENT --
 
@@ -31,7 +33,7 @@ interest_point_detection = InterestPointDetection(
     chunks_per_bound=config['chunks_per_bound'],
     run_type=config['detection_run_type'],
     max_spots=config['max_spots'],
-    median_filter=config['median_filter'],
+    median_filter=config['median_filter']
 )
 
 # INTEREST POINT MATCHING RIGID
@@ -46,11 +48,11 @@ interest_point_matching_rigid = InterestPointMatching(
     search_radius=config['search_radius_rigid'],
     num_required_neighbors=config['num_required_neighbors_rigid'],
     model_min_matches=config['model_min_matches_rigid'],
-    inlier_threshold=config['inlier_threshold_rigid'],
-    min_inlier_ratio=config['min_inlier_ratio_rigid'],
+    inlier_factor=config['inlier_factor_rigid'],
+    lambda_value=config['lambda_value_rigid'],
     num_iterations=config['num_iterations_rigid'],
-    regularization_weight=config['regularization_weight_matching_rigid'],
-    image_file_prefix=config['image_file_prefix'],
+    regularization_weight=config['regularization_weight_rigid'],
+    image_file_prefix=config['image_file_prefix']
 )             
 
 # INTEREST POINT MATCHING AFFINE
@@ -65,11 +67,11 @@ interest_point_matching_affine = InterestPointMatching(
     search_radius=config['search_radius_affine'],
     num_required_neighbors=config['num_required_neighbors_affine'],
     model_min_matches=config['model_min_matches_affine'],
-    inlier_threshold=config['inlier_threshold_affine'],
-    min_inlier_ratio=config['min_inlier_ratio_affine'],
+    inlier_factor=config['inlier_factor_affine'],
+    lambda_value=config['lambda_value_affine'],
     num_iterations=config['num_iterations_affine'],
-    regularization_weight=config['regularization_weight_matching_affine'],
-    image_file_prefix=config['image_file_prefix'],
+    regularization_weight=config['regularization_weight_affine'],
+    image_file_prefix=config['image_file_prefix']
 )
 
 # INTEREST POINT MATCHING SPLIT AFFINE
@@ -84,11 +86,11 @@ interest_point_matching_split_affine = InterestPointMatching(
     search_radius=config['search_radius_split_affine'],
     num_required_neighbors=config['num_required_neighbors_split_affine'],
     model_min_matches=config['model_min_matches_split_affine'],
-    inlier_threshold=config['inlier_threshold_split_affine'],
-    min_inlier_ratio=config['min_inlier_ratio_split_affine'],
+    inlier_factor=config['inlier_factor_split_affine'],
+    lambda_value=config['lambda_value_split_affine'],
     num_iterations=config['num_iterations_split_affine'],
-    regularization_weight=config['regularization_weight_matching_split_affine'],
-    image_file_prefix=config['image_file_prefix'],
+    regularization_weight=config['regularization_weight_split_affine'],
+    image_file_prefix=config['image_file_prefix']
 )
 
 # SOLVER RIGID
@@ -101,12 +103,10 @@ solver_rigid = Solver(
     absolute_threshold=config['absolute_threshold'],
     min_matches=config['min_matches'],
     damp=config['damp'],
-    regularization_weight=config['regularization_weight_solver_rigid'],
     max_iterations=config['max_iterations'],
     max_allowed_error=config['max_allowed_error'],
     max_plateauwidth=config['max_plateauwidth'],
     metrics_output_path=config['metrics_output_path'],
-    fixed_tile=config['fixed_tile']
 )
 
 # SOLVER AFFINE
@@ -119,12 +119,10 @@ solver_affine = Solver(
     absolute_threshold=config['absolute_threshold'],
     min_matches=config['min_matches'],
     damp=config['damp'],
-    regularization_weight=config['regularization_weight_solver_affine'],
     max_iterations=config['max_iterations'],
     max_allowed_error=config['max_allowed_error'],
     max_plateauwidth=config['max_plateauwidth'],
     metrics_output_path=config['metrics_output_path'],
-    fixed_tile=config['fixed_tile']
 )
 
 # SOLVER SPLIT AFFINE
@@ -137,34 +135,54 @@ solver_split_affine = Solver(
     absolute_threshold=config['absolute_threshold'],
     min_matches=config['min_matches'],
     damp=config['damp'],
-    regularization_weight=config['regularization_weight_solver_split_affine'],
     max_iterations=config['max_iterations'],
     max_allowed_error=config['max_allowed_error'],
     max_plateauwidth=config['max_plateauwidth'],
     metrics_output_path=config['metrics_output_path'],
-    fixed_tile=config['fixed_tile']
 )
 
-# SPLIT DATASETS
-split_dataset = SplitDataset(
-    xml_file_path=config['xml_file_path_split'],
-    xml_output_file_path=config['xml_output_file_path_split'],
-    n5_path=config['n5_path_split'],
-    point_density=config['point_density'],
-    min_points=config['min_points'],
-    max_points=config['max_points'],
-    error=config['error'],
-    exclude_radius=config['exclude_radius'], 
-    target_image_size=config['target_image_size'],
-    target_overlap=config['target_overlap'],
-)
+# -- RUN PIPELINE --
 
-# -- ALIGNMENT PIPELINE --
+eval_stats = StatsPipeline(
+    args = config['args'],
+    xml_file = config['xml_file'],
+    base_path = config['base_path'],
+    metrics_output_path = config['metrics_output_path'],
+    KDE_type = config['KDE_type'],
+    bandwidth = config['bandwidth'], 
+    view_id = config['view_id'], 
+    pair = config['pair'], 
+    plot = config['plot'],
+    thresholding= config['thresholding'],
+    min_alignment= config['min_alignment'],
+    max_alignment= config['max_alignment'], 
+    minimum_points= config['minimum_points'], 
+    maximum_points= config['maximum_points'], 
+    minimum_total_matches= config['minimum_total_matches'], 
+    maximum_total_matches= config['maximum_total_matches'], 
+    max_kde= config['max_kde'],
+    min_kde= config['min_kde'], 
+    max_cv= config['max_cv'],
+    min_cv= config['min_cv']
+    )
+
+evaluation = MetricReviewCLI(
+    file_path=config['file_path'],
+    matching_affine=interest_point_matching_affine,
+    solve_affine=solver_affine, 
+    matching_rigid=interest_point_matching_rigid, 
+    solve_rigid=solver_rigid)
+
+
 interest_point_detection.run()
 interest_point_matching_rigid.run()
 solver_rigid.run()
 interest_point_matching_affine.run()
 solver_affine.run()
-split_dataset.run()
-interest_point_matching_split_affine.run()
-solver_split_affine.run()
+
+# interest_point_matching_split_affine.run()
+# solver_split_affine.run()
+eval_stats.run()
+# Interactive Evaluation
+evaluation.run()
+

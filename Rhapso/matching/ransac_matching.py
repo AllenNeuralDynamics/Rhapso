@@ -27,7 +27,7 @@ class CustomBioImage(BioImage):
 
 class RansacMatching:
     def __init__(self, data_global, num_neighbors, redundancy, significance, num_required_neighbors, match_type, 
-                 inlier_threshold, min_inlier_ratio, num_iterations, model_min_matches, regularization_weight, 
+                 max_epsilon, min_inlier_ratio, num_iterations, model_min_matches, regularization_weight, 
                  search_radius, view_registrations, input_type, image_file_prefix):
         self.data_global = data_global
         self.num_neighbors = num_neighbors
@@ -35,7 +35,7 @@ class RansacMatching:
         self.significance = significance
         self.num_required_neighbors = num_required_neighbors
         self.match_type = match_type
-        self.inlier_threshold = inlier_threshold
+        self.max_epsilon = max_epsilon
         self.min_inlier_ratio = min_inlier_ratio
         self.num_iterations = num_iterations
         self.model_min_matches = model_min_matches
@@ -59,14 +59,14 @@ class RansacMatching:
             temp = copy.deepcopy(inliers)
             num_inliers = len(inliers)
     
-            point_pairs = [(m[1], m[5]) for m in inliers]
+            point_pairs = [(m[1], m[4]) for m in inliers]
             model_copy = self.model_regularization(point_pairs)
             
             # Apply model and collect errors
             errors = []
             for match in temp:
                 p1 = np.array(match[1])
-                p2 = np.array(match[5])
+                p2 = np.array(match[4])
                 p1_h = np.append(p1, 1.0)
                 p1_trans = model_copy @ p1_h
                 error = np.linalg.norm(p1_trans[:3] - p2)
@@ -137,56 +137,61 @@ class RansacMatching:
         rigid_matrix[:3, 3] = t
 
         return rigid_matrix
-    
+
     def fit_affine_model(self, matches):
-        """
-        Fit a 3x4 affine transform such that:
-            Q ≈ M @ P + t
-        where P, Q are 3D column vectors (but stored here as row vectors).
-        """
-        matches = np.asarray(matches)          # shape (N, 2, 3)
-        P = matches[:, 0]                      # source points, shape (N, 3)
-        Q = matches[:, 1]                      # target points, shape (N, 3)
+        matches = np.array(matches)    # shape (N, 2, 3)
+        P = matches[:, 0]              # source points
+        Q = matches[:, 1]              # target points
+        weights = np.ones(P.shape[0])  # uniform weights
 
-        # Uniform weights for now (kept in case you add non-uniform later)
-        weights = np.ones(P.shape[0], dtype=float)
+        ws = np.sum(weights)
 
-        # Weighted centroids
         pc = np.average(P, axis=0, weights=weights)
         qc = np.average(Q, axis=0, weights=weights)
 
-        # Centered coordinates
         P_centered = P - pc
         Q_centered = Q - qc
 
-        # Weighted least squares: scale rows by sqrt(weight)
-        sqrt_w = np.sqrt(weights)[:, None]           # (N, 1)
-        P_w = P_centered * sqrt_w                    # (N, 3)
-        Q_w = Q_centered * sqrt_w                    # (N, 3)
+        A = np.zeros((3, 3))
+        B = np.zeros((3, 3))
+        
+        for i in range(P.shape[0]):
+            w = weights[i]
+            p = P_centered[i]
+            q = Q_centered[i]
 
-        # Solve P_w @ M^T ≈ Q_w  → M_T is 3x3, then transpose
-        M_T, *_ = np.linalg.lstsq(P_w, Q_w, rcond=None)
-        M = M_T.T
+            A += w * np.outer(p, p)
+            B += w * np.outer(p, q)
 
-        # Translation so that M @ pc ≈ qc
-        t = qc - M @ pc
+        det = np.linalg.det(A)
+        if det == 0:
+            raise ValueError("Ill-defined data points (det=0)")
 
-        # Pack into 4x4 affine matrix
-        affine_matrix = np.eye(4, dtype=float)
+        try:
+            A_inv = np.linalg.inv(A)
+        except np.linalg.LinAlgError:
+            # If A is not invertible, use the pseudo-inverse
+            A_inv = np.linalg.pinv(A)
+
+        M = A_inv @ B  # 3x3 transformation matrix
+
+        t = qc - M @ pc  # translation
+
+        affine_matrix = np.eye(4)
         affine_matrix[:3, :3] = M
         affine_matrix[:3, 3] = t
 
         return affine_matrix
     
-    def test(self, candidates, model, inlier_threshold, min_inlier_ratio, min_num_inliers):
+    def test(self, candidates, model, max_epsilon, min_inlier_ratio, min_num_inliers):
         inliers = []
-        for idxA, pointA, view_a, label_a, idxB, pointB, view_b, label_b in candidates:
+        for idxA, pointA, view_a, idxB, pointB, view_b in candidates:
             p1_hom = np.append(pointA, 1.0)            
             transformed = model @ p1_hom                       
             distance = np.linalg.norm(transformed[:3] - pointB)
 
-            if distance < inlier_threshold:
-                inliers.append((idxA, pointA, view_a, label_a, idxB, pointB, view_b, label_b))
+            if distance < max_epsilon:
+                inliers.append((idxA, pointA, view_a, idxB, pointB, view_b))
         
         ir = len(inliers) / len(candidates)
         is_good = len(inliers) >= min_num_inliers and ir > min_inlier_ratio
@@ -242,20 +247,19 @@ class RansacMatching:
             min_matches = [candidates[i] for i in indices]
 
             try:
-                point_pairs = [(m[1], m[5]) for m in min_matches]
+                point_pairs = [(m[1], m[4]) for m in min_matches]
                 regularized_model = self.model_regularization(point_pairs)
             except Exception as e:
                 print(e)
-                continue
 
             num_inliers = 0
-            is_good, tmp_inliers = self.test(candidates, regularized_model, self.inlier_threshold, self.min_inlier_ratio, self.model_min_matches)
+            is_good, tmp_inliers = self.test(candidates, regularized_model, self.max_epsilon, self.min_inlier_ratio, self.model_min_matches)
 
             while is_good and num_inliers < len(tmp_inliers):
                 num_inliers = len(tmp_inliers)
-                point_pairs = [(i[1], i[5]) for i in tmp_inliers]
+                point_pairs = [(i[1], i[4]) for i in tmp_inliers]
                 regularized_model = self.model_regularization(point_pairs)
-                is_good, tmp_inliers = self.test(candidates, regularized_model, self.inlier_threshold, self.min_inlier_ratio, self.model_min_matches)
+                is_good, tmp_inliers = self.test(candidates, regularized_model, self.max_epsilon, self.min_inlier_ratio, self.model_min_matches)
 
             if len(tmp_inliers) > max_inliers:
                 best_inliers = tmp_inliers
@@ -339,7 +343,7 @@ class RansacMatching:
 
         return descriptors
 
-    def get_candidates(self, points_a, points_b, view_a, view_b, label):
+    def get_candidates(self, points_a, points_b, view_a, view_b):
         difference_threshold = 3.4028235e+38
         max_value = float("inf")
         
@@ -408,16 +412,18 @@ class RansacMatching:
                         second_if += 1
             
             # --- Lowe's Test ---
+            #print("Lowe's test values:", best_difference, second_best_difference, difference_threshold, self.significance)
+            #print("Lowe's test conditions:", best_difference < difference_threshold,
+            #      best_difference * self.significance < second_best_difference,
+            #      second_best_difference != max_value)
             if best_difference < difference_threshold and best_difference * self.significance < second_best_difference and second_best_difference != max_value:
                 correspondence_candidates.append((
                     desc_a['point_index'],        
                     desc_a['point'],               
                     view_a,
-                    label,
                     best_match['point_index'],    
                     best_match['point'],            
-                    view_b,
-                    label
+                    view_b
                 ))
                 passed_lowes += 1
 
@@ -445,12 +451,19 @@ class RansacMatching:
                     shape = dask_array.shape
                 
                 elif self.input_type == "zarr":
-                    s3 = s3fs.S3FileSystem(anon=False)  
-                    full_path = f"{file_path}/0"
-                    store = s3fs.S3Map(root=full_path, s3=s3)
+                    #TODO SM
+                    if file_path.startswith("s3://"):
+                        file_path = file_path.replace("s3://", "")
+                        s3 = s3fs.S3FileSystem(anon=False)  
+                        full_path = f"{file_path}/0"
+                        store = s3fs.S3Map(root=full_path, s3=s3)
+                    else:
+                        full_path = f"{file_path}/0"
+                        store = zarr.DirectoryStore(full_path)
                     zarr_array = zarr.open(store, mode='r')
                     dask_array = da.from_zarr(zarr_array)[0, 0, :, :, :]
                     shape = dask_array.shape
+                    print("Zarr shape:", shape)
         
                 return shape[::-1]  
          

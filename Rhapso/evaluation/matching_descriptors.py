@@ -1,4 +1,5 @@
 import statistics
+import numpy as np
 
 """
 Number of matches 
@@ -11,8 +12,8 @@ Standard Deviation
 	-How dispersed the match points are along each axis. 
 
 Volume Covered (ΔX × ΔY × ΔZ) 
-    - Volume of the bounding box that encloses all match points. 
-"""
+    - Volume of the bounding box that encloses all match points. """
+
 
 class DescriptiveStatsMatching:
     def __init__(self, total_matches, total_match_length):

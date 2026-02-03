@@ -1,20 +1,20 @@
 import numpy as np
 import copy
 import math
+from Rhapso.evaluation.save_metrics import JSONFileHandler
 
 """
-GlobalOptimization iteratively refines per-tile transforms to achieve sub-pixel alignment using matched point correspondences. 
+This class creates alignment matrices to represent proper alignment of tiles
 """
 
 class GlobalOptimization:
-    def __init__(self, tiles, relative_threshold, absolute_threshold, min_matches, damp, regularization_weight, 
-                 max_iterations, max_allowed_error, max_plateauwidth, run_type, metrics_output_path):
+    def __init__(self, tiles, relative_threshold, absolute_threshold, min_matches, 
+                 damp, max_iterations, max_allowed_error, max_plateauwidth, run_type, metrics_output_path):
         self.tiles = tiles
         self.relative_threshold = relative_threshold
         self.absolute_threshold = absolute_threshold
         self.min_matches = min_matches
         self.damp = damp
-        self.regularization_weight = regularization_weight
         self.max_iterations = max_iterations
         self.max_allowed_error = max_allowed_error
         self.max_plateauwidth = max_plateauwidth
@@ -41,7 +41,7 @@ class GlobalOptimization:
             'var': 0,
             'var_0': 0,     
         }
-        # self.save_metrics = JSONFileHandler(self.metrics_output_path)
+        self.save_metrics = JSONFileHandler(self.metrics_output_path)
     
     def update_observer(self, new_value):
         obs = self.observer
@@ -114,16 +114,20 @@ class GlobalOptimization:
                 max_error = tile['distance']
             total_distance += tile['distance']
 
-        average_error = total_distance / len(self.tiles)  
+        average_error = total_distance / len(self.tiles)
 
-        # self.save_metrics.update(
-        #     "alignment errors",
-        #     {
-        #         "min_error": min_error,
-        #         "max_error": max_error,
-        #         "mean_error": average_error,
-        #     },
-        # )  
+        # print( f"({datetime.datetime.now()}): Min Error: {min_error}px")
+        # print( f"({datetime.datetime.now()}): Max Error: {max_error}px")
+        # print( f"({datetime.datetime.now()}): Mean Error: {average_error}px")  
+
+        self.save_metrics.update(
+            "alignment errors",
+            {
+                "min_error": min_error,
+                "max_error": max_error,
+                "mean_error": average_error,
+            },
+        )  
         
         return average_error 
 
@@ -308,7 +312,8 @@ class GlobalOptimization:
         return affine_model
     
     def regularize_models(self, affine, rigid):
-        l1 = 1.0 - self.regularization_weight
+        alpha=0.1
+        l1 = 1.0 - alpha
 
         def to_array(model):
             return [
@@ -320,7 +325,7 @@ class GlobalOptimization:
         afs = to_array(affine)
         bfs = to_array(rigid)
 
-        rfs = [l1 * a + self.regularization_weight * b for a, b in zip(afs, bfs)]
+        rfs = [l1 * a + alpha * b for a, b in zip(afs, bfs)]
 
         keys = [
             'm00', 'm01', 'm02', 'm03',
@@ -353,7 +358,7 @@ class GlobalOptimization:
     
     def apply(self):     
         for tile in self.tiles:
-            if self.run_type == 'affine' or self.run_type == 'split-affine':
+            if self.run_type == 'affine':
                 model = tile['model']['regularized']
             elif self.run_type == 'rigid':
                 model = tile['model']['b']
@@ -375,15 +380,21 @@ class GlobalOptimization:
         self.apply()
 
         while proceed:
+
             if not self.tiles:
                 return
             
-            for tile in self.tiles:         
+            for tile in self.tiles:
+                # if tile['view'] in self.fixed_views:
+                #     continue
+                
                 self.fit(tile)
                 self.apply_damp(tile)
 
             error = self.update_errors()
             self.update_observer(error)
+
+            # before appending, ensure the nested dict/list exist
             self.validation_stats.setdefault('solver_metrics_per_tile', {}).setdefault('stats', []).append({
                 'iteration': i,
                 'observer': copy.deepcopy(self.observer),
@@ -399,12 +410,38 @@ class GlobalOptimization:
             
             i += 1
             if i >= self.max_iterations:
-                proceed = False
+                proceed = False 
+    
+    def two_round_simple(self):
+        self.optimize_silently
+        # TODO - start second round
+    
+    def one_round_simple(self):
+        self.optimize_silently()
+        
+    def compute_tiles(self):
+        """
+        Interface the types of optimization set with user params
+        """
+        if(self.run_type == "affine" or self.run_type == "rigid"):
+            self.one_round_simple()
+        
+        if(self.run_type == "split-affine"):
+            self.two_round_simple()
 
     def run(self):
         """
         Executes the entry point of the script.
         """
-        self.optimize_silently()
 
+        # DEBUG tool to align tile order with Big Stitcher for debugging
+        # Set new tile order
+        # target_match_order = [
+        #     759, 962, 1125, 60, 1055, 264, 2073, 66, 602,
+        #     926, 612, 1226, 483, 911, 582, 720, 2205, 294, 1219, 34
+        # ]
+        # match_length_to_tile = {len(tile['matches']): tile for tile in self.tiles}
+        # self.tiles = [match_length_to_tile[match_len] for match_len in target_match_order]
+
+        self.compute_tiles()
         return self.tiles, self.validation_stats

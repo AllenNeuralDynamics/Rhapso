@@ -40,4 +40,4 @@ class JSONFileHandler:
             with open(self.file_path, "w") as f:
                 json.dump(self.metrics, f, indent=4)
 
-        print(f"Data updated in {self.file_path}")
+        # print(f"Data updated in {self.file_path}")

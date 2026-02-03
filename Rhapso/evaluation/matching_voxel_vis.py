@@ -1,6 +1,7 @@
 from matplotlib import pyplot as plt
 import numpy as np
 
+
 class VoxelVis:
     def __init__(self, view_id, matches):
         self.view_id = view_id
