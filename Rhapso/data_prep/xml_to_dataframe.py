@@ -18,8 +18,11 @@ class XMLToDataFrame:
         for il in root.findall(".//ImageLoader/zgroups/zgroup"):
             view_setup = il.get("setup")
             timepoint = il.get("timepoint")
-            file_path = il.find("path").text if il.find("path") is not None else None
-            channel = file_path.split("_ch_", 1)[1].split(".ome.zarr", 1)[0]
+            file_path = il.get("path", il.find('path').text)
+            print("@@@ file_path:", file_path)
+            print(il)
+            # channel = file_path.split("_ch_", 1)[1].split(".ome.zarr", 1)[0]
+            channel = 0
 
             image_loader_data.append(
                 {

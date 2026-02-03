@@ -23,11 +23,10 @@ class ComputeGridRules:
         
         return int(a + b - (a % b))
     
-    def find_min_step_size(self):
+    def find_min_step_size(self, lowest_resolution=(1.0, 1.0, 1.0)):
         """
         Compute the minimal integer step size per axis (X,Y,Z) that is compatible with the chosen lowest resolution
         """
-        lowest_resolution=(64.0, 64.0, 64.0)
         min_step_size = [1, 1, 1]
         
         for d, r in enumerate(lowest_resolution):
