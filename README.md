@@ -2,6 +2,8 @@
 
 This is the official code base for **Rhapso**, a modular Python toolkit for the alignment and stitching of large-scale microscopy datasets. 
 
+Available on [PyPI](https://pypi.org/project/Rhapso/)
+
 [![License](https://img.shields.io/badge/license-MIT-brightgreen)](LICENSE)
 [![Python Version](https://img.shields.io/badge/python-3.10-blue.svg)](https://www.python.org/downloads/release/python-3100/)
 [![Documentation](https://img.shields.io/badge/docs-wiki-blue)](https://github.com/AllenNeuralDynamics/Rhapso/wiki)
@@ -42,11 +44,7 @@ Rhapso is still loading... and while we wrap up development, a couple things to 
 <br>
 
 ## Summary
-Rhapso is a set of Python components used to register, align, and stitch large-scale, overlapping, tile-based, multiscale microscopy datasets. Its stateless components can run on a single machine or scale out across cloud-based clusters. 
-
-Rhapso is published on PyPI.
-
-Rhapso was developed by the Allen Institute for Neural Dynamics.
+Rhapso is a set of Python components used to register, align, and stitch large-scale, overlapping, tile-based, multiscale microscopy datasets. Its stateless components can run on a single machine or scale out across cloud-based clusters. Rhapso was developed by the Allen Institute for Neural Dynamics.
 
 <br>
 
