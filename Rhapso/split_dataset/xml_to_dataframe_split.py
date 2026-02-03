@@ -20,7 +20,8 @@ class XMLToDataFrameSplit:
             timepoint = il.get("timepoint")
             file_path = il.find("path").text if il.find("path") is not None else None
 
-            channel = file_path.split("_ch_", 1)[1].split(".ome.zarr", 1)[0]
+            #channel = file_path.split("_ch_", 1)[1].split(".ome.zarr", 1)[0]
+            channel = 0
 
             image_loader_data.append(
                 {

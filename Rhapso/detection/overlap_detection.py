@@ -5,6 +5,7 @@ import zarr
 import s3fs
 import dask.array as da
 import math
+import os
 
 """
 Overlap Detection figures out where image tile overlap. 
@@ -246,7 +247,8 @@ class OverlapDetection():
             all_intervals = []        
             if self.file_type == 'zarr':
                 level, leftovers = self.choose_zarr_level()
-                dim_base = self.load_image_metadata(self.prefix + row_i['file_path'] + f'/{0}')
+
+                dim_base = self.load_image_metadata(os.path.join(self.prefix, row_i['file_path']))
 
                 # isotropic pyramid
                 s = float(2 ** level)  
@@ -256,7 +258,7 @@ class OverlapDetection():
                 _, dsxy, dsz = leftovers
                 
             elif self.file_type == 'tiff':
-                dim_base = self.load_image_metadata(self.prefix + row_i['file_path'])
+                dim_base = self.load_image_metadata(os.path.join(self.prefix, row_i['file_path']))
                 mipmap_of_downsample = self.create_mipmap_transform()
                 dsxy, dsz = self.dsxy, self.dsz
                 level = None
