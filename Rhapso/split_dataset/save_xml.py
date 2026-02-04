@@ -601,6 +601,19 @@ class SaveXML:
         return ET.tostring(root, encoding='unicode')
     
     def save_setup_id_definition_to_xml(self, xml):
+        """
+        Create/overwrite <SetupIds> for the split views.
+
+        In the desired final layout, SetupIds lives inside:
+          <SequenceDescription>
+            <ImageLoader format="split.viewerimgloader">
+              ...
+              <SequenceDescription> ... </SequenceDescription>
+              <SetupIds> ... </SetupIds>   <-- here
+            </ImageLoader>
+            ...
+          </SequenceDescription>
+        """
         root = ET.fromstring(xml)
 
         def tn(el):

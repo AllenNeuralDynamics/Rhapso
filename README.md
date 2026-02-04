@@ -2,6 +2,8 @@
 
 This is the official code base for **Rhapso**, a modular Python toolkit for the alignment and stitching of large-scale microscopy datasets. 
 
+Available on [PyPI](https://pypi.org/project/Rhapso/)
+
 [![License](https://img.shields.io/badge/license-MIT-brightgreen)](LICENSE)
 [![Python Version](https://img.shields.io/badge/python-3.10-blue.svg)](https://www.python.org/downloads/release/python-3100/)
 [![Documentation](https://img.shields.io/badge/docs-wiki-blue)](https://github.com/AllenNeuralDynamics/Rhapso/wiki)
@@ -42,11 +44,7 @@ Rhapso is still loading... and while we wrap up development, a couple things to 
 <br>
 
 ## Summary
-Rhapso is a set of Python components used to register, align, and stitch large-scale, overlapping, tile-based, multiscale microscopy datasets. Its stateless components can run on a single machine or scale out across cloud-based clusters. 
-
-Rhapso is published on PyPI.
-
-Rhapso was developed by the Allen Institute for Neural Dynamics.
+Rhapso is a set of Python components used to register, align, and stitch large-scale, overlapping, tile-based, multiscale microscopy datasets. Its stateless components can run on a single machine or scale out across cloud-based clusters. Rhapso was developed by the Allen Institute for Neural Dynamics.
 
 <br>
 
@@ -368,25 +366,26 @@ python Rhapso/pipelines/ray/aws/alignment_pipeline.py
 | Parameter                     | Feature / step       | What it does                                                      | Typical range  |
 | :---------------------------- | :------------------- | :---------------------------------------------------------------- | :------------- |
 | `model_min_matches`           | RANSAC               | Minimum correspondences to estimate a rigid transform             | 18 – 32        |
-| `inlier_factor`               | RANSAC               | Inlier tolerance scaling; larger = looser inlier threshold        | 30 – 100       |
-| `lambda_value`                | RANSAC               | Regularization strength during model fitting                      | 0.1 – 0.05     |
+| `inlier_threshold`            | RANSAC               | Inlier tolerance scaling; larger = looser inlier threshold        | 50 – 100       |
+| `min_inlier_ratio`            | RANSAC               | Regularization strength during model fitting                      | 0.1 – 0.05     |
 | `num_iterations`              | RANSAC               | Number of RANSAC trials; higher = more robust, slower             | 10,0000        |
-| `regularization_weight`       | RANSAC               | Weight applied to the regularization term                         | 1.0            |
+| `regularization_weight`       | RANSAC               | Weight applied to the regularization term                         | 0.05 - 1.0     |
 
 ```
 <br>
 
 ### Solver
 ```
-| Parameter            | Feature / step | What it does                                                       | Typical range       |
-| :------------------- | :------------- | :----------------------------------------------------------------- | :------------------ |
-| `relative_threshold` | Graph pruning  | Reject edges with residuals above dataset-relative cutoff          | 3.5                 |
-| `absolute_threshold` | Graph pruning  | Reject edges above an absolute error bound (detection-space units) | 7.0                 |
-| `min_matches`        | Graph pruning  | Minimum matches required to retain an edge between tiles           | 3                   |
-| `damp`               | Optimization   | Damping for iterative solver; higher can stabilize tough cases     | 1.0                 |
-| `max_iterations`     | Optimization   | Upper bound on solver iterations                                   | 10,0000             |
-| `max_allowed_error`  | Optimization   | Overall error cap; `inf` disables hard stop by error               | `inf`               |
-| `max_plateauwidth`   | Early stopping | Stagnation window before stopping on no improvement                | 200                 |
+| Parameter                | Feature / step | What it does                                                       | Typical range       |
+| :----------------------- | :------------- | :----------------------------------------------------------------- | :------------------ |
+| `relative_threshold`     | Graph pruning  | Reject edges with residuals above dataset-relative cutoff          | 3.5                 |
+| `absolute_threshold`     | Graph pruning  | Reject edges above an absolute error bound (detection-space units) | 7.0                 |
+| `min_matches`            | Graph pruning  | Minimum matches required to retain an edge between tiles           | 3                   |
+| `damp`                   | Optimization   | Damping for iterative solver; higher can stabilize tough cases     | 1.0                 |
+| `max_iterations`         | Optimization   | Upper bound on solver iterations                                   | 10,0000             |
+| `max_allowed_error`      | Optimization   | Overall error cap; `inf` disables hard stop by error               | `inf`               |
+| `max_plateauwidth`       | Early stopping | Stagnation window before stopping on no improvement                | 200                 |
+| `regularization_weight`  | RANSAC         | Weight applied to the regularization term                          | 0.05 - 1.0          |
 
 ```
 
