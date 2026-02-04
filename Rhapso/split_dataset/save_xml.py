@@ -13,13 +13,6 @@ class SaveXML:
         self.xml_output_path = xml_output_path
     
     def save_tile_attributes_to_xml(self, xml):
-        """
-        Ensure the *last* <ViewSetups> (the outer split one) has:
-        - <Attributes name="illumination"> old_tile_0..N </Attributes>
-        - <Attributes name="channel"> ... </Attributes>
-        - <Attributes name="tile"> with locations from Image Splitting </Attributes>
-        - <Attributes name="angle"><Angle id=0 name=0/></Attributes>
-        """
         root = ET.fromstring(xml)
 
         def tagname(el):
@@ -249,26 +242,6 @@ class SaveXML:
         """
         Wrap the top-level ImageLoader in <ImageLoader format="split.viewerimgloader">
         and move the ORIGINAL ViewSetups/Timepoints/MissingViews into an inner
-        <SequenceDescription> inside that wrapper.
-
-        Resulting structure:
-
-        <SpimData>
-          <BasePath/>
-          <SequenceDescription>
-            <ImageLoader format="split.viewerimgloader">
-              <ImageLoader format="bdv.multimg.zarr"> ... </ImageLoader>
-              <SequenceDescription>
-                <ViewSetups>  (ORIGINAL)  </ViewSetups>
-                <Timepoints>  (ORIGINAL)  </Timepoints>
-                <MissingViews/>
-              </SequenceDescription>
-              <!-- SetupIds (for split tiles) will be added later -->
-            </ImageLoader>
-            <!-- NEW ViewSetups/Timepoints/MissingViews for split views are added later -->
-          </SequenceDescription>
-          <ViewRegistrations> ... </ViewRegistrations>
-        </SpimData>
         """
         root = ET.fromstring(xml)
 
@@ -309,8 +282,6 @@ class SaveXML:
         if fmt == 'split.viewerimgloader':
             return xml
 
-        # Collect any other ImageLoader siblings (other sources)
-        other_imageloaders = []
         # Collect ORIGINAL ViewSetups / Timepoints / MissingViews that are siblings
         orig_viewsetups = None
         orig_timepoints = None
@@ -318,18 +289,15 @@ class SaveXML:
 
         for ch in children[base_loader_idx + 1:]:
             name = tn(ch)
-            if name == 'ImageLoader':
-                other_imageloaders.append(ch)
-            elif name == 'ViewSetups':
+            if name == 'ViewSetups':
                 orig_viewsetups = ch
             elif name == 'Timepoints':
                 orig_timepoints = ch
             elif name == 'MissingViews':
                 orig_missingviews = ch
-            
 
         # Remove them from the outer SequenceDescription
-        for node in (orig_viewsetups, orig_timepoints, orig_missingviews, *other_imageloaders):
+        for node in (orig_viewsetups, orig_timepoints, orig_missingviews):
             if node is not None and node in seq:
                 seq.remove(node)
 
@@ -340,12 +308,9 @@ class SaveXML:
         wrapper = ET.Element('ImageLoader', {'format': 'split.viewerimgloader'})
         # First child: original loader
         wrapper.append(base_loader)
-        for other_loader in other_imageloaders:
-            wrapper.append(other_loader)
 
         # Inner <SequenceDescription> that holds the original ViewSetups/Timepoints/MissingViews
         inner_seq = ET.Element('SequenceDescription')
-
         if orig_viewsetups is not None:
             inner_seq.append(orig_viewsetups)
         if orig_timepoints is not None:
@@ -516,33 +481,6 @@ class SaveXML:
         return ET.tostring(root, encoding='unicode')
 
     def save_setup_id_to_xml(self, xml):
-        """
-        Create/overwrite the OUTER <ViewSetups> (split tiles) and ensure outer
-        <Timepoints> and <MissingViews> exist under the top-level SequenceDescription.
-
-        Outer layout target:
-
-        <SpimData>
-          <BasePath/>
-          <SequenceDescription>
-            <ImageLoader format="split.viewerimgloader">
-              ...
-              <SequenceDescription>  (original)  </SequenceDescription>
-              <SetupIds> ... </SetupIds>        (from save_setup_id_definition_to_xml)
-            </ImageLoader>
-            <ViewSetups>            <-- created here (ids 0..499)
-              <ViewSetup>...</ViewSetup>
-              ...
-              <Attributes ...>...</Attributes>
-            </ViewSetups>
-            <Timepoints type="pattern">
-              <integerpattern>0</integerpattern>
-            </Timepoints>
-            <MissingViews/>
-          </SequenceDescription>
-          <ViewRegistrations>...</ViewRegistrations>
-        </SpimData>
-        """
         root = ET.fromstring(xml)
 
         def tn(el):
