@@ -51,7 +51,7 @@ class OverlapDetection():
             return self.image_shape_cache[file_path]
         
         if self.file_type == 'zarr':
-            s3 = s3fs.S3FileSystem(anon=False)
+            s3 = s3fs.S3FileSystem(anon=True)
             store = s3fs.S3Map(root=file_path, s3=s3)
             zarr_array = zarr.open(store, mode='r')
             dask_array = da.from_zarr(zarr_array)

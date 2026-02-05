@@ -59,7 +59,16 @@ class InterestPointDetection:
         # Use view transform matrices to find areas of overlap
         overlap_detection = OverlapDetection(view_transform_matrices, dataframes, self.dsxy, self.dsz, self.image_file_prefix, self.file_type)
         overlapping_area, new_dsxy, new_dsz, level, max_interval_size, mip_map_downsample = overlap_detection.run()
+
+        print(f"return types from overlap detection: {type(overlapping_area)}, {type(new_dsxy)}, {type(new_dsz)}, {type(level)}, {type(max_interval_size)}, {type(mip_map_downsample)}")
         print("Overlap detection is done")
+        print("overlapping area:", overlapping_area)
+        print("new dsxy:", new_dsxy)
+        print("new dsz:", new_dsz)
+        print("level:", level)
+        print("max interval size:", max_interval_size)
+        print("mip map downsample:", mip_map_downsample)
+        print("Finished printing overlap detection variables", flush=True)
 
         # Implement image chunking strategy as list of metadata 
         metadata_loader = MetadataBuilder(dataframes, overlapping_area, self.image_file_prefix, self.file_type, new_dsxy, new_dsz, 
@@ -67,35 +76,53 @@ class InterestPointDetection:
         image_chunk_metadata = metadata_loader.run()
         print("Metadata has loaded")
 
-        # Use Ray to distribute peak detection to image chunking metadata 
-        @ray.remote
-        def process_peak_detection_task(chunk_metadata, new_dsxy, new_dsz, min_intensity, max_intensity, sigma, threshold,
-                                        median_filter, mip_map_downsample):
-            try:
-                difference_of_gaussian = DifferenceOfGaussian(min_intensity, max_intensity, sigma, threshold, median_filter, mip_map_downsample)
-                image_fetcher = ImageReader(self.file_type)
-                view_id, interval, image_chunk, offset, lb = image_fetcher.run(chunk_metadata, new_dsxy, new_dsz)
-                interest_points = difference_of_gaussian.run(image_chunk, offset, lb)
+        # # Use Ray to distribute peak detection to image chunking metadata 
+        # @ray.remote
+        # def process_peak_detection_task(chunk_metadata, new_dsxy, new_dsz, min_intensity, max_intensity, sigma, threshold,
+        #                                 median_filter, mip_map_downsample):
+        #     try:
+        #         difference_of_gaussian = DifferenceOfGaussian(min_intensity, max_intensity, sigma, threshold, median_filter, mip_map_downsample)
+        #         image_fetcher = ImageReader(self.file_type)
+        #         view_id, interval, image_chunk, offset, lb = image_fetcher.run(chunk_metadata, new_dsxy, new_dsz)
+        #         interest_points = difference_of_gaussian.run(image_chunk, offset, lb)
 
-                return {
-                    'view_id': view_id,
-                    'interval_key': interval,
-                    'interest_points': interest_points['interest_points'],
-                    'intensities': interest_points['intensities']
-                }
-            except Exception as e:
-                return {'error': str(e), 'view_id': chunk_metadata.get('view_id', 'unknown')}
+        #         return {
+        #             'view_id': view_id,
+        #             'interval_key': interval,
+        #             'interest_points': interest_points['interest_points'],
+        #             'intensities': interest_points['intensities']
+        #         }
+        #     except Exception as e:
+        #         return {'error': str(e), 'view_id': chunk_metadata.get('view_id', 'unknown')}
 
-        # Submit tasks to Ray
-        futures = [process_peak_detection_task.remote(chunk_metadata, new_dsxy, new_dsz, self.min_intensity, self.max_intensity, 
-                                                      self.sigma, self.threshold, self.median_filter, mip_map_downsample)
-            for chunk_metadata in image_chunk_metadata
-        ]
+        # # Submit tasks to Ray
+        # futures = [process_peak_detection_task.remote(chunk_metadata, new_dsxy, new_dsz, self.min_intensity, self.max_intensity, 
+        #                                               self.sigma, self.threshold, self.median_filter, mip_map_downsample)
+        #     for chunk_metadata in image_chunk_metadata
+        # ]
 
-        # Gather and process results
-        results = ray.get(futures)
-        final_peaks = [r for r in results if 'error' not in r]
-        print("Peak detection is done")
+        # # Gather and process results
+        # results = ray.get(futures)
+        # final_peaks = [r for r in results if 'error' not in r]
+        # print("Peak detection is done")
+
+        final_peaks = []
+        for chunk_metadata in image_chunk_metadata:
+            difference_of_gaussian = DifferenceOfGaussian(
+                self.min_intensity, self.max_intensity, self.sigma, self.threshold, self.median_filter, mip_map_downsample
+            )
+            image_fetcher = ImageReader(self.file_type)
+
+            view_id, interval, image_chunk, offset, lb = image_fetcher.run(chunk_metadata, new_dsxy, new_dsz)
+            interest_points = difference_of_gaussian.run(image_chunk, offset, lb)
+
+            final_peaks.append({
+                'view_id': view_id,
+                'interval_key': interval,
+                'interest_points': interest_points['interest_points'],
+                'intensities': interest_points['intensities'],
+            })
+
 
         # Consolidate points and filter overlap duplicates using kd tree
         advanced_refinement = AdvancedRefinement(final_peaks, self.combine_distance, dataframes, overlapping_area, max_interval_size, self.max_spots)

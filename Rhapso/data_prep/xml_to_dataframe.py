@@ -18,9 +18,8 @@ class XMLToDataFrame:
         for il in root.findall(".//ImageLoader/zgroups/zgroup"):
             view_setup = il.get("setup")
             timepoint = il.get("timepoint")
-            file_path = il.get("path", il.find('path').text)
-            print("@@@ file_path:", file_path)
-            print(il)
+            file_path = il.get("path", "COULD_NOT_FIND_PATH_IN_XML")
+
             # channel = file_path.split("_ch_", 1)[1].split(".ome.zarr", 1)[0]
             channel = 0
 
