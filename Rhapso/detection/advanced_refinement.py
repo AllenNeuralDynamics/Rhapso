@@ -164,14 +164,10 @@ class AdvancedRefinement:
                 ub = row['upper_bound']
                 if vid == view_id:
 
-                    # TODO SM
                     ub_inclusive = (ub[0]+1, ub[1]+1, ub[2]+1)
                     to_process_interval = (lb, ub_inclusive)
-                    # to_process_interval = (lb, ub)
                     ips_block = []
                     intensities_block = []
-
-                    
 
                     for i in range(len(ips_list)): 
                         block_interval = interval_list[i]

@@ -18,10 +18,16 @@ class XMLToDataFrame:
         for il in root.findall(".//ImageLoader/zgroups/zgroup"):
             view_setup = il.get("setup")
             timepoint = il.get("timepoint")
-            file_path = il.get("path", "COULD_NOT_FIND_PATH_IN_XML")
+            file_path = il.get("path")
+            if file_path is None:
+                element_string = ET.tostring(il, encoding='unicode')
+                raise ValueError(f"zgroup element missing 'path' attribute: {element_string}")
 
-            # channel = file_path.split("_ch_", 1)[1].split(".ome.zarr", 1)[0]
-            channel = 0
+            # default to channel 0 if not parseable from the path name
+            try:
+                channel = file_path.split("_ch_", 1)[1].split(".ome.zarr", 1)[0]
+            except (IndexError, AttributeError):
+                channel = 0
 
             image_loader_data.append(
                 {
