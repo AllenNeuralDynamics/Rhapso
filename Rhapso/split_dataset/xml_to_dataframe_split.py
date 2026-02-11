@@ -17,7 +17,7 @@ class XMLToDataFrameSplit:
 
         for il in root.findall(".//ImageLoader/zgroups/zgroup"):
             view_setup = il.get("setup")
-            timepoint = il.get("timepoint")
+            timepoint = il.get("tp") or il.get("timepoint")
             file_path = il.find("path").text if il.find("path") is not None else None
 
             #channel = file_path.split("_ch_", 1)[1].split(".ome.zarr", 1)[0]
