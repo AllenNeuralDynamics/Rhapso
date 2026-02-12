@@ -9,7 +9,7 @@ import ray
 ray.init()
 
 # Point to param file
-with open("Rhapso/pipelines/ray/param/exaSPIM_802450.yml", "r") as file:
+with open("Rhapso/pipelines/ray/param/exaSPIM_794495.yml", "r") as file:
     config = yaml.safe_load(file)
 
 # -- INITIALIZE EACH COMPONENT --

@@ -271,7 +271,7 @@ class RansacMatching:
             for b in range(1):
 
                 matches = []
-                for i in range(3):
+                for i in range(self.num_required_neighbors):
                     point_match = (desc_a['relative_descriptors'][i], desc_b['relative_descriptors'][i])
                     matches.append(point_match)
 

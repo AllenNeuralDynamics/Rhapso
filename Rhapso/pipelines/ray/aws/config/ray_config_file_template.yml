@@ -49,11 +49,11 @@ setup_commands:
   - sudo python3 -m pip install awscli
   - sudo python3 -m pip install "ray[default]==2.9.1"  
   - sudo python3 -m pip install protobuf==4.23.4 
-    # Update this line to point to your whl file (s3://rhapso-whl-v2/Rhapso-0.1.8-py3-none-any.whl)
-  - aws s3 cp s3://rhapso-whl-v2/Rhapso-0.1.8-py3-none-any.whl /tmp/Rhapso-0.1.8-py3-none-any.whl  
+    # Update this line to point to your whl file ->
+  - aws s3 cp s3://bucket-name/Rhapso-x.x.x-py3-none-any.whl /tmp/Rhapso-x.x.x-py3-none-any.whl  
   - echo 'export PATH=$HOME/.local/bin:$PATH' >> ~/.bashrc
   - source ~/.bashrc
-  - pip install /tmp/Rhapso-0.1.8-py3-none-any.whl   # ensure this whl version number matches the one above 
+  - pip install /tmp/Rhapso-x.x.x-py3-none-any.whl   # ensure this whl version number matches the one above 
 
 head_start_ray_commands:
   - ray stop
