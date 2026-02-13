@@ -122,7 +122,7 @@ class XMLToDataFrame:
             tp, zgroup_path = zgroup_lookup[old_id]
 
             try:
-                channel = zgroup_path.split("_ch_", 1)[1].split(".zarr", 1)[0]
+                channel = zgroup_path.split("_ch_", 1)[1].split(".ome.zarr", 1)[0]
             except (IndexError, AttributeError):
                 channel = 0
 
