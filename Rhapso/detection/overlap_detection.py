@@ -66,7 +66,28 @@ class OverlapDetection():
             self.image_shape_cache[file_path] = shape
         
         return shape
-    
+
+    def _split_tile_shape(self, row):
+        """Derive 6D shape tuple from split tile crop bounds.
+
+        Parameters
+        ----------
+        row : pd.Series
+            Row from image_loader_df with 'crop_min' and 'crop_max' columns.
+            Values are space-separated "X Y Z" strings.
+
+        Returns
+        -------
+        tuple
+            6D shape tuple (1, 1, 1, Z, Y, X) matching load_image_metadata format.
+        """
+        cmin = list(map(int, row['crop_min'].split()))
+        cmax = list(map(int, row['crop_max'].split()))
+        x_size = cmax[0] - cmin[0] + 1
+        y_size = cmax[1] - cmin[1] + 1
+        z_size = cmax[2] - cmin[2] + 1
+        return (1, 1, 1, z_size, y_size, x_size)
+
     # def open_and_downsample(self, shape):
     #     X = int(shape[5])
     #     Y = int(shape[4])
@@ -240,15 +261,20 @@ class OverlapDetection():
         """
         Compute XY Z overlap intervals against every other view, accounting for mipmap/downsampling and per-view affine transforms
         """
+        is_split = 'crop_min' in self.image_loader_df.columns
+
         for i, row_i in self.image_loader_df.iterrows():
             view_id = f"timepoint: {row_i['timepoint']}, setup: {row_i['view_setup']}"
             
             # get inverted matrice of downsampling
-            all_intervals = []        
+            all_intervals = []
             if self.file_type == 'zarr':
                 level, leftovers = self.choose_zarr_level()
 
-                dim_base = self.load_image_metadata(os.path.join(self.prefix, row_i['file_path']))
+                if is_split:
+                    dim_base = self._split_tile_shape(row_i)
+                else:
+                    dim_base = self.load_image_metadata(os.path.join(self.prefix, row_i['file_path']))
 
                 # isotropic pyramid
                 s = float(2 ** level)  
@@ -273,7 +299,10 @@ class OverlapDetection():
                 view_id_other = f"timepoint: {row_j['timepoint']}, setup: {row_j['view_setup']}"
 
                 if self.file_type == 'zarr':
-                    dim_other = self.load_image_metadata(self.prefix + row_j['file_path'] + f'/{0}')
+                    if is_split:
+                        dim_other = self._split_tile_shape(row_j)
+                    else:
+                        dim_other = self.load_image_metadata(self.prefix + row_j['file_path'] + f'/{0}')
                 elif self.file_type == 'tiff':
                     dim_other = self.load_image_metadata(self.prefix + row_j['file_path'])
                 

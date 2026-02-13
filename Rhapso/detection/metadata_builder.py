@@ -21,7 +21,7 @@ class MetadataBuilder:
         self.sub_region_chunking = not chunks_per_bound == 0
         self.metadata = []
     
-    def build_image_metadata(self, process_intervals, file_path, view_id):
+    def build_image_metadata(self, process_intervals, file_path, view_id, crop_min=None, crop_max=None):
         """
         Builds list of metadata with optional sub-chunking
         """
@@ -41,7 +41,9 @@ class MetadataBuilder:
                     'file_path': file_path,
                     'interval_key': interval_key,
                     'offset': 0,
-                    'lb': lb_fixed
+                    'lb': lb_fixed,
+                    'crop_min': crop_min,
+                    'crop_max': crop_max
                 }) 
 
             # Apply sub-region chunking
@@ -73,8 +75,10 @@ class MetadataBuilder:
                             'file_path': file_path,
                             'interval_key': interval_key,
                             'offset': z,
-                            'lb' : lb
-                        })  
+                            'lb' : lb,
+                            'crop_min': crop_min,
+                            'crop_max': crop_max
+                        })
 
                 elif self.file_type == "zarr":
 
@@ -102,26 +106,43 @@ class MetadataBuilder:
                             'file_path': file_path,
                             'interval_key': interval_key,
                             'offset': z,
-                            'lb' : lb
-                        })  
-    
+                            'lb' : lb,
+                            'crop_min': crop_min,
+                            'crop_max': crop_max
+                        })
+
     def build_paths(self):
         """
         Iterates through views to interface metadata building
         """
+        is_split = 'crop_min' in self.image_loader_df.columns
+
         for _, row in self.image_loader_df.iterrows():
             view_id = f"timepoint: {row['timepoint']}, setup: {row['view_setup']}"
             process_intervals = self.overlapping_area[view_id]
-            
+
             if self.file_type == 'zarr':
-                file_path = self.image_file_prefix + row['file_path'] + f'/{self.level}'
+                if is_split:
+                    file_path = row['zarr_base_path'] + row['file_path'] + f'/{self.level}'
+                else:
+                    file_path = self.image_file_prefix + row['file_path'] + f'/{self.level}'
             elif self.file_type == 'tiff':
-                file_path = self.image_file_prefix + row['file_path'] 
+                file_path = self.image_file_prefix + row['file_path']
             else:
                 raise ValueError(f"Unsupported file_type: {self.file_type!r}")
-            
+
+            # Extract and scale crop bounds for split tiles
+            crop_min = None
+            crop_max = None
+            if is_split:
+                scale = 2 ** self.level if self.level is not None else 1
+                cmin = [int(v) // scale for v in row['crop_min'].split()]
+                cmax = [int(v) // scale for v in row['crop_max'].split()]
+                crop_min = cmin
+                crop_max = cmax
+
             if self.run_type == 'ray':
-                self.build_image_metadata(process_intervals, file_path, view_id)
+                self.build_image_metadata(process_intervals, file_path, view_id, crop_min, crop_max)
             else:
                 raise ValueError(f"Unsupported run type: {self.run_type!r}")
 

@@ -83,8 +83,61 @@ class XMLToDataFrame:
         # Convert the list to a DataFrame and return
         return pd.DataFrame(image_loader_data)
     
-    def parse_image_loader_split_zarr(self):
-        pass
+    def parse_image_loader_split_zarr(self, root):
+        """
+        Parses a split.viewerimgloader XML structure where a single source image is virtually
+        subdivided into overlapping tiles via SetupIdDefinitions.
+
+        Parameters
+        ----------
+        root : xml.etree.ElementTree.Element
+            Root element of the parsed XML.
+
+        Returns
+        -------
+        pd.DataFrame
+            One row per split tile with columns: view_setup, timepoint, series, channel,
+            file_path, crop_min, crop_max, zarr_base_path.
+        """
+        outer_loader = root.find(".//ImageLoader[@format='split.viewerimgloader']")
+        inner_loader = outer_loader.find("ImageLoader")
+
+        zarr_base_path = inner_loader.find("zarr").text.strip()
+
+        # Build lookup from source setup id to (timepoint, zgroup_path)
+        zgroup_lookup = {}
+        for zg in inner_loader.findall(".//zgroups/zgroup"):
+            setup = zg.get("setup")
+            tp = zg.get("tp") or zg.get("timepoint")
+            path = zg.get("path")
+            zgroup_lookup[setup] = (tp, path)
+
+        image_loader_data = []
+        for sid in outer_loader.findall(".//SetupIds/SetupIdDefinition"):
+            new_id = sid.find("NewId").text.strip()
+            old_id = sid.find("OldId").text.strip()
+            crop_min = sid.find("min").text.strip()
+            crop_max = sid.find("max").text.strip()
+
+            tp, zgroup_path = zgroup_lookup[old_id]
+
+            try:
+                channel = zgroup_path.split("_ch_", 1)[1].split(".zarr", 1)[0]
+            except (IndexError, AttributeError):
+                channel = 0
+
+            image_loader_data.append({
+                "view_setup": new_id,
+                "timepoint": tp,
+                "series": 1,
+                "channel": channel,
+                "file_path": zgroup_path,
+                "crop_min": crop_min,
+                "crop_max": crop_max,
+                "zarr_base_path": zarr_base_path,
+            })
+
+        return pd.DataFrame(image_loader_data)
 
     def route_image_loader(self, root):
         """
@@ -93,7 +146,9 @@ class XMLToDataFrame:
         format_node = root.find(".//ImageLoader")
         format_type = format_node.get("format")
 
-        if "filemap" in format_type:
+        if "split" in format_type:
+            return self.parse_image_loader_split_zarr(root)
+        elif "filemap" in format_type:
             return self.parse_image_loader_tiff(root)
         else:
             return self.parse_image_loader_zarr(root)
@@ -104,7 +159,7 @@ class XMLToDataFrame:
         """
         viewsetups_data = []
 
-        for vs in root.findall(".//ViewSetup"):
+        for vs in root.findall("./SequenceDescription/ViewSetups/ViewSetup"):
             id_ = vs.find("id").text
             # name = vs.find("name").text
             name = vs.findtext("name")
