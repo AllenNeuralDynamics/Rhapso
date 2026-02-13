@@ -100,10 +100,25 @@ class XMLToDataFrame:
             file_path, crop_min, crop_max, zarr_base_path.
         """
         outer_loader = root.find(".//ImageLoader[@format='split.viewerimgloader']")
+        if outer_loader is None:
+            raise ValueError(
+                "split.viewerimgloader ImageLoader node not found in XML; "
+                "ensure the XML contains an ImageLoader with format='split.viewerimgloader'."
+            )
+
         inner_loader = outer_loader.find("ImageLoader")
+        if inner_loader is None:
+            raise ValueError(
+                "Nested ImageLoader node not found inside split.viewerimgloader configuration."
+            )
 
-        zarr_base_path = inner_loader.find("zarr").text.strip()
+        zarr_elem = inner_loader.find("zarr")
+        if zarr_elem is None or zarr_elem.text is None:
+            raise ValueError(
+                "<zarr> node with base path is missing from split.viewerimgloader configuration."
+            )
 
+        zarr_base_path = zarr_elem.text.strip()
         # Build lookup from source setup id to (timepoint, zgroup_path)
         zgroup_lookup = {}
         for zg in inner_loader.findall(".//zgroups/zgroup"):
