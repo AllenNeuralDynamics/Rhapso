@@ -166,8 +166,10 @@ class XMLToDataFrame:
         Directs the XML parsing process based on the image loader format specified in the XML.
         """
         format_node = root.find(".//ImageLoader")
-        format_type = format_node.get("format")
+        if format_node is None:
+            raise ValueError("No <ImageLoader> element found in XML; cannot determine image loader format.")
 
+        format_type = (format_node.get("format") or "").lower()
         if "split" in format_type:
             return self.parse_image_loader_split_zarr(root)
         elif "filemap" in format_type:
