@@ -274,7 +274,7 @@ class OverlapDetection():
                 if is_split:
                     dim_base = self._split_tile_shape(row_i)
                 else:
-                    dim_base = self.load_image_metadata(os.path.join(self.prefix, row_i['file_path']))
+                    dim_base = self.load_image_metadata(os.path.join(self.prefix, row_i['file_path'], str(level)))
 
                 # isotropic pyramid
                 s = float(2 ** level)  
@@ -302,9 +302,9 @@ class OverlapDetection():
                     if is_split:
                         dim_other = self._split_tile_shape(row_j)
                     else:
-                        dim_other = self.load_image_metadata(self.prefix + row_j['file_path'] + f'/{0}')
+                        dim_other = self.load_image_metadata(os.path.join(self.prefix, row_j['file_path'], str(level)))
                 elif self.file_type == 'tiff':
-                    dim_other = self.load_image_metadata(self.prefix + row_j['file_path'])
+                    dim_other = self.load_image_metadata(os.path.join(self.prefix, row_j['file_path']))
                 
                 # get transforms matrix from both view_ids and downsampling matrices
                 matrix = self.transform_models.get(view_id)
