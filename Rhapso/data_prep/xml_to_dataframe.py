@@ -1,5 +1,6 @@
 import pandas as pd
 import xml.etree.ElementTree as ET
+import re
 
 # This component recieves an XML file containing Tiff or Zarr image metadata and converts
 # it into several Dataframes
@@ -144,7 +145,6 @@ class XMLToDataFrame:
             tp, zgroup_path = zgroup_lookup[old_id]
 
             # Extract channel using regex to handle both .zarr and .ome.zarr
-            import re
             channel_match = re.search(r'_ch_(\d+)', zgroup_path)
             if channel_match:
                 channel = channel_match.group(1)
