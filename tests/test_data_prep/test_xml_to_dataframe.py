@@ -130,6 +130,58 @@ class TestXMLToDataFrame(unittest.TestCase):
             self.parser.parse_image_loader_tiff(root)
         self.assertEqual(str(context.exception), "There are no files in this XML")
 
+    def test_parse_image_loader_split_zarr(self):
+        """Test split zarr parsing with 4 tiles"""
+        xml_path = "tests/XML_test_data/dataset_split.xml"
+        xml_content = fetch_local_xml(xml_path)
+        self.parser = XMLToDataFrame(xml_content)
+        result = self.parser.run()
+        df = result['image_loader']
+
+        # Should have 4 rows (one per split tile)
+        self.assertEqual(len(df), 4)
+
+        # Check required columns exist
+        expected_cols = {'view_setup', 'timepoint', 'crop_min', 'crop_max', 'zarr_base_path', 'file_path'}
+        self.assertTrue(expected_cols.issubset(set(df.columns)))
+
+        # Check values for each tile
+        self.assertEqual(df.iloc[0]['view_setup'], '0')
+        self.assertEqual(df.iloc[0]['crop_min'], '0 0 0')
+        self.assertEqual(df.iloc[0]['crop_max'], '499 499 99')
+        self.assertEqual(df.iloc[0]['zarr_base_path'], 's3://test-bucket/SPIM.ome.zarr/')
+
+        self.assertEqual(df.iloc[1]['view_setup'], '1')
+        self.assertEqual(df.iloc[1]['crop_min'], '300 0 0')
+        self.assertEqual(df.iloc[1]['crop_max'], '799 499 99')
+
+        self.assertEqual(df.iloc[2]['view_setup'], '2')
+        self.assertEqual(df.iloc[2]['crop_min'], '0 300 0')
+        self.assertEqual(df.iloc[2]['crop_max'], '499 799 99')
+
+        self.assertEqual(df.iloc[3]['view_setup'], '3')
+        self.assertEqual(df.iloc[3]['crop_min'], '300 300 0')
+        self.assertEqual(df.iloc[3]['crop_max'], '799 799 99')
+
+        # All rows should have same file_path and timepoint
+        self.assertEqual(df.iloc[0]['file_path'], df.iloc[3]['file_path'])
+        self.assertEqual(df.iloc[0]['timepoint'], df.iloc[3]['timepoint'])
+
+    def test_parse_view_setups_split(self):
+        """Test that outer ViewSetups are parsed correctly for split XML"""
+        xml_path = "tests/XML_test_data/dataset_split.xml"
+        xml_content = fetch_local_xml(xml_path)
+        self.parser = XMLToDataFrame(xml_content)
+        root = ET.fromstring(xml_content)
+        df = self.parser.parse_view_setups(root)
+
+        # Should have 4 rows (outer ViewSetups only, not the inner one)
+        self.assertEqual(len(df), 4)
+
+        # Check IDs
+        ids = sorted([df.iloc[i]['id'] for i in range(len(df))])
+        self.assertEqual(ids, ['0', '1', '2', '3'])
+
 
 if __name__ == "__main__":
     unittest.main()
