@@ -302,7 +302,7 @@ class OverlapDetection():
                     if is_split:
                         dim_other = self._split_tile_shape(row_j)
                     else:
-                        dim_other = self.load_image_metadata(self.prefix + row_j['file_path'] + f'/{0}')
+                        dim_other = self.load_image_metadata(self.prefix + row_j['file_path'])
                 elif self.file_type == 'tiff':
                     dim_other = self.load_image_metadata(self.prefix + row_j['file_path'])
                 
