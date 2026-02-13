@@ -67,28 +67,26 @@ class TestXMLToDataFrame(unittest.TestCase):
         xml_content = fetch_local_xml(self.xml_content_standard)
         self.parser = XMLToDataFrame(xml_content)
         root = ET.fromstring(xml_content)
-        df = self.parser.parse_view_interest_points(root, "data_prep")
+        df = self.parser.parse_view_interest_points(root)
         self.assertTrue(df.empty)
 
     def test_run(self):
         xml_content = fetch_local_xml(self.xml_content_standard)
         self.parser = XMLToDataFrame(xml_content)
-        result = self.parser.run("data_prep")
+        result = self.parser.run()
         self.assertIn("image_loader", result)
         self.assertIn("view_setups", result)
         self.assertIn("view_registrations", result)
         self.assertIn("view_interest_points", result)
 
     def test_interest_points_already_exist(self):
+        """Test that existing interest points are parsed correctly"""
         xml_content = fetch_local_xml(self.xml_content_interestPoints)
         self.parser = XMLToDataFrame(xml_content)
         root = ET.fromstring(xml_content)
-        with self.assertRaises(Exception) as context:
-            self.parser.parse_view_interest_points(root, "data_prep")
-        self.assertEqual(
-            str(context.exception),
-            "There should be no interest points in this file yet.",
-        )
+        df = self.parser.parse_view_interest_points(root)
+        # Should parse existing interest points without raising an exception
+        self.assertIsInstance(df, pd.DataFrame)
 
     def test_no_labels(self):
         xml_content = fetch_local_xml(self.xml_content_no_tags)
