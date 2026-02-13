@@ -13,9 +13,9 @@ import ray
 # This class implements the interest point detection pipeline
 
 class InterestPointDetection:
-    def __init__(self, dsxy, dsz, min_intensity, max_intensity, sigma, threshold, file_type, xml_file_path, 
-                 image_file_prefix, xml_output_file_path, n5_output_file_prefix, combine_distance, chunks_per_bound, run_type, 
-                 max_spots, median_filter):
+    def __init__(self, dsxy, dsz, min_intensity, max_intensity, sigma, threshold, file_type, xml_file_path,
+                 image_file_prefix, xml_output_file_path, n5_output_file_prefix, combine_distance, chunks_per_bound, run_type,
+                 max_spots, median_filter, overlapping_only=True):
         self.dsxy = dsxy
         self.dsz = dsz
         self.min_intensity = min_intensity
@@ -32,6 +32,7 @@ class InterestPointDetection:
         self.run_type = run_type
         self.max_spots = max_spots
         self.median_filter = median_filter
+        self.overlapping_only = overlapping_only
 
     def detection(self):
         # Get XML file
@@ -57,7 +58,7 @@ class InterestPointDetection:
         print("Transforms models have been created")
 
         # Use view transform matrices to find areas of overlap
-        overlap_detection = OverlapDetection(view_transform_matrices, dataframes, self.dsxy, self.dsz, self.image_file_prefix, self.file_type)
+        overlap_detection = OverlapDetection(view_transform_matrices, dataframes, self.dsxy, self.dsz, self.image_file_prefix, self.file_type, overlapping_only=self.overlapping_only)
         overlapping_area, new_dsxy, new_dsz, level, max_interval_size, mip_map_downsample = overlap_detection.run()
         print("Overlap detection is done")
 

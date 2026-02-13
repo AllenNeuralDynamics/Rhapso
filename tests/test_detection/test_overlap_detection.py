@@ -1,5 +1,4 @@
 import unittest
-<<<<<<< HEAD
 import numpy as np
 
 import pandas as pd
@@ -55,14 +54,6 @@ class TestOverlapDetection(unittest.TestCase):
         with self.assertRaises(ValueError) as context:
             self.od.find_overlapping_area()
         self.assertEqual(str(context.exception), "Image Loader dataframe is empty.")
-=======
-
-
-class TestOverlapDetecttion(unittest.TestCase):
-
-    def setUp(self):
-        pass
->>>>>>> main
 
 
 if __name__ == "__main__":
