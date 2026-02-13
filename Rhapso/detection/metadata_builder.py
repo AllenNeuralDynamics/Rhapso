@@ -137,7 +137,8 @@ class MetadataBuilder:
             if is_split:
                 scale = 2 ** self.level if self.level is not None else 1
                 cmin = [int(v) // scale for v in row['crop_min'].split()]
-                cmax = [int(v) // scale for v in row['crop_max'].split()]
+                # For inclusive bounds, use a ceil-style mapping for crop_max to avoid shrinking coverage
+                cmax = [int(np.ceil((int(v) + 1) / scale) - 1) for v in row['crop_max'].split()]
                 crop_min = cmin
                 crop_max = cmax
 
