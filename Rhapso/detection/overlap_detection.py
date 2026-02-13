@@ -344,8 +344,22 @@ class OverlapDetection():
                         self.max_interval_size = sz
 
                     # add max size
-                    all_intervals.append(intersect_dict)        
-    
+                    all_intervals.append(intersect_dict)
+
+            # Single-view dataset: no pairwise overlaps exist, so use the
+            # full downsampled volume as the processing region.
+            if not all_intervals and len(self.image_loader_df) == 1:
+                lb = np.array(downsampled_dim_base[0])
+                ub = np.array(downsampled_dim_base[1])
+                all_intervals.append({
+                    'lower_bound': lb,
+                    'upper_bound': ub,
+                    'span': self.calculate_new_dims(lb, ub),
+                })
+                sz = self.size_interval(lb, ub)
+                if sz > self.max_interval_size:
+                    self.max_interval_size = sz
+
             self.to_process[view_id] = all_intervals
         
         return dsxy, dsz, level, mipmap_of_downsample
