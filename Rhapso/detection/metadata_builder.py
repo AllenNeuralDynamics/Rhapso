@@ -1,3 +1,4 @@
+import os
 import numpy as np
 
 """
@@ -123,11 +124,11 @@ class MetadataBuilder:
 
             if self.file_type == 'zarr':
                 if is_split:
-                    file_path = row['zarr_base_path'] + row['file_path'] + f'/{self.level}'
+                    file_path = os.path.join(row['zarr_base_path'], row['file_path'], str(self.level))
                 else:
-                    file_path = self.image_file_prefix + row['file_path'] + f'/{self.level}'
+                    file_path = os.path.join(self.image_file_prefix, row['file_path'], str(self.level))
             elif self.file_type == 'tiff':
-                file_path = self.image_file_prefix + row['file_path']
+                file_path = os.path.join(self.image_file_prefix, row['file_path'])
             else:
                 raise ValueError(f"Unsupported file_type: {self.file_type!r}")
 
