@@ -100,6 +100,26 @@ class ImageReader:
                     f"crop_min and crop_max must both be length 3 for 3D cropping; "
                     f"got crop_min={crop_min}, crop_max={crop_max}"
                 )
+            
+            # Validate crop bounds are within array dimensions
+            array_shape = dask_array.shape
+            for i in range(3):
+                if crop_min[i] < 0:
+                    raise ValueError(
+                        f"crop_min[{i}]={crop_min[i]} is negative; "
+                        f"crop bounds must be non-negative"
+                    )
+                if crop_max[i] >= array_shape[i]:
+                    raise ValueError(
+                        f"crop_max[{i}]={crop_max[i]} exceeds array dimension {i} "
+                        f"(shape={array_shape[i]}); crop_max must be < array shape"
+                    )
+                if crop_min[i] > crop_max[i]:
+                    raise ValueError(
+                        f"crop_min[{i}]={crop_min[i]} > crop_max[{i}]={crop_max[i]}; "
+                        f"crop_min must be <= crop_max"
+                    )
+            
             dask_array = dask_array[
                 crop_min[0]:crop_max[0] + 1,
                 crop_min[1]:crop_max[1] + 1,

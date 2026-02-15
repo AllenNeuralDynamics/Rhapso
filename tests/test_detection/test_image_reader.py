@@ -97,6 +97,87 @@ class TestImageReader(unittest.TestCase):
 
             self.assertEqual(view_id, 'timepoint: 0, setup: 0')
 
+    def test_fetch_image_data_crop_bounds_validation(self):
+        """Test that crop bounds exceeding array dimensions raise clear error"""
+        reader = ImageReader(file_type='zarr')
+
+        # Record with crop_max exceeding array dimensions
+        record = {
+            'view_id': 'timepoint: 0, setup: 0',
+            'file_path': 's3://bucket/test.zarr/0',
+            'interval_key': ((0, 0, 0), (50, 50, 25), (51, 51, 26)),
+            'offset': 0,
+            'lb': (0, 0, 0),
+            'crop_min': [0, 0, 0],
+            'crop_max': [15, 5, 5]  # Exceeds dimension 0 (10x10x10 array)
+        }
+
+        # Mock the zarr opening to return a known dask array (10x10x10)
+        mock_array = da.ones((1, 1, 10, 10, 10), dtype=np.float32)
+
+        with patch('zarr.open') as mock_zarr, \
+             patch('s3fs.S3FileSystem'), \
+             patch('s3fs.S3Map'), \
+             patch('dask.array.from_zarr', return_value=mock_array):
+
+            # Should raise ValueError with clear message
+            with self.assertRaises(ValueError) as context:
+                reader.fetch_image_data(record, dsxy=1, dsz=1)
+            
+            self.assertIn('crop_max[0]=15 exceeds array dimension 0', str(context.exception))
+
+    def test_fetch_image_data_negative_crop_min(self):
+        """Test that negative crop_min values raise clear error"""
+        reader = ImageReader(file_type='zarr')
+
+        record = {
+            'view_id': 'timepoint: 0, setup: 0',
+            'file_path': 's3://bucket/test.zarr/0',
+            'interval_key': ((0, 0, 0), (50, 50, 25), (51, 51, 26)),
+            'offset': 0,
+            'lb': (0, 0, 0),
+            'crop_min': [-1, 0, 0],
+            'crop_max': [5, 5, 5]
+        }
+
+        mock_array = da.ones((1, 1, 10, 10, 10), dtype=np.float32)
+
+        with patch('zarr.open') as mock_zarr, \
+             patch('s3fs.S3FileSystem'), \
+             patch('s3fs.S3Map'), \
+             patch('dask.array.from_zarr', return_value=mock_array):
+
+            with self.assertRaises(ValueError) as context:
+                reader.fetch_image_data(record, dsxy=1, dsz=1)
+            
+            self.assertIn('crop_min[0]=-1 is negative', str(context.exception))
+
+    def test_fetch_image_data_crop_min_greater_than_crop_max(self):
+        """Test that crop_min > crop_max raises clear error"""
+        reader = ImageReader(file_type='zarr')
+
+        record = {
+            'view_id': 'timepoint: 0, setup: 0',
+            'file_path': 's3://bucket/test.zarr/0',
+            'interval_key': ((0, 0, 0), (50, 50, 25), (51, 51, 26)),
+            'offset': 0,
+            'lb': (0, 0, 0),
+            'crop_min': [5, 0, 0],
+            'crop_max': [3, 5, 5]  # crop_min[0] > crop_max[0]
+        }
+
+        mock_array = da.ones((1, 1, 10, 10, 10), dtype=np.float32)
+
+        with patch('zarr.open') as mock_zarr, \
+             patch('s3fs.S3FileSystem'), \
+             patch('s3fs.S3Map'), \
+             patch('dask.array.from_zarr', return_value=mock_array):
+
+            with self.assertRaises(ValueError) as context:
+                reader.fetch_image_data(record, dsxy=1, dsz=1)
+            
+            self.assertIn('crop_min[0]=5 > crop_max[0]=3', str(context.exception))
+
 
 if __name__ == "__main__":
     unittest.main()
