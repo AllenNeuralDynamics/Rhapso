@@ -124,7 +124,9 @@ class TestImageReader(unittest.TestCase):
             with self.assertRaises(ValueError) as context:
                 reader.fetch_image_data(record, dsxy=1, dsz=1)
             
-            self.assertIn('crop_max[0]=15 exceeds array dimension 0', str(context.exception))
+            error_msg = str(context.exception)
+            self.assertIn('crop_max[0]=15 exceeds array dimension 0', error_msg)
+            self.assertIn('(shape=10)', error_msg)
 
     def test_fetch_image_data_negative_crop_min(self):
         """Test that negative crop_min values raise clear error"""
