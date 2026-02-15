@@ -2,7 +2,7 @@ import pandas as pd
 import xml.etree.ElementTree as ET
 import re
 
-# This component recieves an XML file containing Tiff or Zarr image metadata and converts
+# This component receives an XML file containing Tiff or Zarr image metadata and converts
 # it into several Dataframes
 
 class XMLToDataFrame:
