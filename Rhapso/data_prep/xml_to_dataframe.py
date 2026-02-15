@@ -144,11 +144,14 @@ class XMLToDataFrame:
                 )
             tp, zgroup_path = zgroup_lookup[old_id]
 
-            # Extract channel using regex to handle both .zarr and .ome.zarr
+            # Attempt to extract the channel from the path, assuming filenames include '_ch_<number>'
+            # (e.g. both '.zarr' and '.ome.zarr' variants). If this pattern is not present or is
+            # formatted differently, we deliberately fall back to channel 0 as a default.
             channel_match = re.search(r'_ch_(\d+)', zgroup_path)
             if channel_match:
                 channel = channel_match.group(1)
             else:
+                # Default to channel 0 when channel information cannot be parsed from the path.
                 channel = 0
 
             image_loader_data.append({
