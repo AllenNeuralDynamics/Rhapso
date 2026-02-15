@@ -137,10 +137,8 @@ class XMLToDataFrame:
 
             if old_id not in zgroup_lookup:
                 raise ValueError(
-                    "SetupIdDefinition refers to OldId {!r} that is not present in the "
-                    "inner loader's zgroups. Available setup ids: {}".format(
-                        old_id, sorted(zgroup_lookup.keys())
-                    )
+                    f"SetupIdDefinition refers to OldId {old_id!r} that is not present in the "
+                    f"inner loader's zgroups. Available setup ids: {sorted(zgroup_lookup.keys())}"
                 )
             tp, zgroup_path = zgroup_lookup[old_id]
 
