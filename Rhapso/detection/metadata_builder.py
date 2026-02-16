@@ -133,7 +133,6 @@ class MetadataBuilder:
                 # Append multiscale level if not already present
                 if self.level is not None and not str(file_path).rstrip('/').endswith(str(self.level)):
                     file_path = os.path.join(file_path, str(self.level))
-                print(f"[MetadataBuilder] View {view_id}: level={self.level}, constructed_path={file_path}")
             elif self.file_type == 'tiff':
                 file_path = os.path.join(self.image_file_prefix, row['file_path'])
             else:

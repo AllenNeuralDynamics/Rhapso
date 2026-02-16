@@ -75,7 +75,6 @@ class ImageReader:
         interval_key = record['interval_key']
         offset = record['offset']
         lower_bound = record['lb']
-        print(f"[ImageReader.fetch_image_data] view={view_id}, file_path={file_path}")
         
         # Create image pathways using Dask
         if self.file_type == "tiff":
@@ -85,16 +84,10 @@ class ImageReader:
         elif self.file_type == "zarr":
             s3 = s3fs.S3FileSystem(anon=False)
             full_path = f"{file_path}"
-            print(f"[ImageReader] Opening zarr: {full_path}")
             try:
                 store = s3fs.S3Map(root=full_path, s3=s3)
                 zarr_array = zarr.open(store, mode='r')
-                # For OME-Zarr multiscale arrays, just show shape
-                shape_str = zarr_array.shape if hasattr(zarr_array, 'shape') else 'N/A'
-                keys_str = list(zarr_array.keys()) if hasattr(zarr_array, 'keys') else 'N/A (array)'
-                print(f"[ImageReader] Successfully opened zarr. Keys/type: {keys_str}, shape: {shape_str}")
                 dask_array = da.from_zarr(zarr_array)[0, 0, :, :, :]
-                print(f"[ImageReader] Extracted dask_array shape (before transpose): {dask_array.shape}")
             except Exception as e:
                 print(f"[ImageReader] ERROR opening zarr at {full_path}: {e}")
                 # Try to inspect root to show available multiscales
@@ -111,7 +104,6 @@ class ImageReader:
 
         dask_array = dask_array.astype(np.float32)
         dask_array = dask_array.transpose()
-        print(f"[ImageReader] After transpose: {dask_array.shape}")
 
         # Apply split tile crop if present
         crop_min = record.get('crop_min')
@@ -149,9 +141,7 @@ class ImageReader:
             ]
 
         # Downsample Dask array
-        print(f"[ImageReader] Before downsampling: shape={dask_array.shape}, dsxy={dsxy}, dsz={dsz}")
         downsampled_stack = self.interface_downsampling(dask_array, dsxy, dsz)
-        print(f"[ImageReader] After downsampling: shape={downsampled_stack.shape}")
 
         # Get lower and upper bounds
         lb = list(interval_key[0])
@@ -168,9 +158,8 @@ class ImageReader:
                 scale = 2 ** level
                 lb = [x // scale for x in lb]
                 ub = [x // scale for x in ub]
-                print(f"[ImageReader] Scaled bounds for level={level}: scale={scale}, lb={lb}, ub={ub}")
         except (ValueError, IndexError):
-            print(f"[ImageReader] Could not extract level from path {file_path}, using bounds as-is")
+            pass  # Level extraction failed; use bounds as-is
 
         # Load image chunk into mem
         downsampled_image_chunk = downsampled_stack[lb[0]:ub[0]+1, lb[1]:ub[1]+1, lb[2]:ub[2]+1].compute()
