@@ -61,6 +61,7 @@ class InterestPointDetection:
         overlap_detection = OverlapDetection(view_transform_matrices, dataframes, self.dsxy, self.dsz, self.image_file_prefix, self.file_type, overlapping_only=self.overlapping_only)
         overlapping_area, new_dsxy, new_dsz, level, max_interval_size, mip_map_downsample = overlap_detection.run()
         print("Overlap detection is done")
+        print(f"[InterestPointDetection] Determined level={level}, new_dsxy={new_dsxy}, new_dsz={new_dsz}, mip_map_downsample={mip_map_downsample}")
 
         # Implement image chunking strategy as list of metadata 
         metadata_loader = MetadataBuilder(dataframes, overlapping_area, self.image_file_prefix, self.file_type, new_dsxy, new_dsz, 

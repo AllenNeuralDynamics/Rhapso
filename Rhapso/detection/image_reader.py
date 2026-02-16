@@ -82,11 +82,17 @@ class ImageReader:
             dask_array = img.get_dask_stack()[0, 0, 0, :, :, :]
         
         elif self.file_type == "zarr":
-            s3 = s3fs.S3FileSystem(anon=False)  
+            s3 = s3fs.S3FileSystem(anon=False)
             full_path = f"{file_path}"
-            store = s3fs.S3Map(root=full_path, s3=s3)
-            zarr_array = zarr.open(store, mode='r')
-            dask_array = da.from_zarr(zarr_array)[0, 0, :, :, :]
+            print(f"[ImageReader] Opening zarr: {full_path}")
+            try:
+                store = s3fs.S3Map(root=full_path, s3=s3)
+                zarr_array = zarr.open(store, mode='r')
+                print(f"[ImageReader] Successfully opened zarr. Root keys: {list(zarr_array.keys())}, shape: {zarr_array.shape if hasattr(zarr_array, 'shape') else 'N/A'}")
+                dask_array = da.from_zarr(zarr_array)[0, 0, :, :, :]
+            except Exception as e:
+                print(f"[ImageReader] ERROR opening zarr at {full_path}: {e}")
+                raise
 
         dask_array = dask_array.astype(np.float32)
         dask_array = dask_array.transpose()

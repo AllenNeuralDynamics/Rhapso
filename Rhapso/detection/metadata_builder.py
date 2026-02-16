@@ -127,6 +127,7 @@ class MetadataBuilder:
                     file_path = os.path.join(row['zarr_base_path'], row['file_path'], str(self.level))
                 else:
                     file_path = os.path.join(self.image_file_prefix, row['file_path'], str(self.level))
+                print(f"[MetadataBuilder] View {view_id}: level={self.level}, constructed_path={file_path}")
             elif self.file_type == 'tiff':
                 file_path = os.path.join(self.image_file_prefix, row['file_path'])
             else:

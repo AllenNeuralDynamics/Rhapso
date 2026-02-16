@@ -53,15 +53,19 @@ class OverlapDetection():
         
         if self.file_type == 'zarr':
             s3 = s3fs.S3FileSystem(anon=True)
-            store = s3fs.S3Map(root=file_path, s3=s3)
-            zarr_array = zarr.open(store, mode='r')
-            dask_array = da.from_zarr(zarr_array)
-            dask_array = da.expand_dims(dask_array, axis=2)
-            shape = dask_array.shape
-            self.image_shape_cache[file_path] = shape
-
-            print(f"[OverlapDetection] Root zarr path: {file_path}")
-            print(f"[OverlapDetection] Root zarr has multiscales: {list(zarr_array.keys())}")
+            print(f"[OverlapDetection] Opening root zarr: {file_path}")
+            try:
+                store = s3fs.S3Map(root=file_path, s3=s3)
+                zarr_array = zarr.open(store, mode='r')
+                print(f"[OverlapDetection] Successfully opened. Available multiscales: {list(zarr_array.keys())}")
+                dask_array = da.from_zarr(zarr_array)
+                dask_array = da.expand_dims(dask_array, axis=2)
+                shape = dask_array.shape
+                self.image_shape_cache[file_path] = shape
+                print(f"[OverlapDetection] Root shape (after expand): {shape}")
+            except Exception as e:
+                print(f"[OverlapDetection] ERROR opening root zarr: {e}")
+                raise
 
         elif self.file_type == 'tiff':
             img = CustomBioImage(file_path, reader=bioio_tifffile.Reader)
