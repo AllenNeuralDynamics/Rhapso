@@ -73,11 +73,14 @@ class InterestPointDetection:
         @ray.remote
         def process_peak_detection_task(chunk_metadata, new_dsxy, new_dsz, min_intensity, max_intensity, sigma, threshold,
                                         median_filter, mip_map_downsample):
+            import sys
             try:
+                print(f"[Ray] Starting task for {chunk_metadata.get('view_id')}", flush=True)
                 difference_of_gaussian = DifferenceOfGaussian(min_intensity, max_intensity, sigma, threshold, median_filter, mip_map_downsample)
                 image_fetcher = ImageReader(self.file_type)
                 view_id, interval, image_chunk, offset, lb = image_fetcher.run(chunk_metadata, new_dsxy, new_dsz)
                 interest_points = difference_of_gaussian.run(image_chunk, offset, lb)
+                print(f"[Ray] Task complete for {view_id}, detected {len(interest_points['interest_points'])} points", flush=True)
 
                 return {
                     'view_id': view_id,
@@ -86,6 +89,9 @@ class InterestPointDetection:
                     'intensities': interest_points['intensities']
                 }
             except Exception as e:
+                import traceback
+                print(f"[Ray] ERROR in task: {e}", flush=True)
+                print(traceback.format_exc(), flush=True)
                 return {'error': str(e), 'view_id': chunk_metadata.get('view_id', 'unknown')}
 
         # Submit tasks to Ray
