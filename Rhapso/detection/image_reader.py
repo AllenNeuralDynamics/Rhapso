@@ -75,6 +75,7 @@ class ImageReader:
         interval_key = record['interval_key']
         offset = record['offset']
         lower_bound = record['lb']
+        print(f"[ImageReader.fetch_image_data] view={view_id}, file_path={file_path}")
         
         # Create image pathways using Dask
         if self.file_type == "tiff":
