@@ -305,8 +305,11 @@ class DifferenceOfGaussian:
         """
         Executes the entry point of the script.
         """
+        print(f"[DoG.run] Input image_chunk shape: {image_chunk.shape}, dtype: {image_chunk.dtype}, min: {image_chunk.min()}, max: {image_chunk.max()}, mean: {image_chunk.mean():.2f}")
         image_chunk = self.background_subtract_xy(image_chunk)
+        print(f"[DoG.run] After background subtraction: min: {image_chunk.min()}, max: {image_chunk.max()}, mean: {image_chunk.mean():.2f}")
         peaks = self.compute_difference_of_gaussian(image_chunk)
+        print(f"[DoG.run] Found {len(peaks)} peaks")
 
         if peaks.size == 0:
             intensities = np.empty((0,), dtype=image_chunk.dtype)

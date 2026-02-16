@@ -94,6 +94,7 @@ class ImageReader:
                 keys_str = list(zarr_array.keys()) if hasattr(zarr_array, 'keys') else 'N/A (array)'
                 print(f"[ImageReader] Successfully opened zarr. Keys/type: {keys_str}, shape: {shape_str}")
                 dask_array = da.from_zarr(zarr_array)[0, 0, :, :, :]
+                print(f"[ImageReader] Extracted dask_array shape (before transpose): {dask_array.shape}")
             except Exception as e:
                 print(f"[ImageReader] ERROR opening zarr at {full_path}: {e}")
                 # Try to inspect root to show available multiscales
@@ -110,6 +111,7 @@ class ImageReader:
 
         dask_array = dask_array.astype(np.float32)
         dask_array = dask_array.transpose()
+        print(f"[ImageReader] After transpose: {dask_array.shape}")
 
         # Apply split tile crop if present
         crop_min = record.get('crop_min')
@@ -147,7 +149,9 @@ class ImageReader:
             ]
 
         # Downsample Dask array
+        print(f"[ImageReader] Before downsampling: shape={dask_array.shape}, dsxy={dsxy}, dsz={dsz}")
         downsampled_stack = self.interface_downsampling(dask_array, dsxy, dsz)
+        print(f"[ImageReader] After downsampling: shape={downsampled_stack.shape}")
 
         # Get lower and upper bounds
         lb = list(interval_key[0])
