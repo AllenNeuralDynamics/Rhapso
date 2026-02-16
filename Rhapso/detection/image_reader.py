@@ -96,6 +96,16 @@ class ImageReader:
                 dask_array = da.from_zarr(zarr_array)[0, 0, :, :, :]
             except Exception as e:
                 print(f"[ImageReader] ERROR opening zarr at {full_path}: {e}")
+                # Try to inspect root to show available multiscales
+                try:
+                    root_path = full_path.rsplit('/', 1)[0]
+                    print(f"[ImageReader] Attempting to inspect root zarr at: {root_path}")
+                    root_store = s3fs.S3Map(root=root_path, s3=s3)
+                    root_zarr = zarr.open(root_store, mode='r')
+                    available_levels = list(root_zarr.keys()) if hasattr(root_zarr, 'keys') else 'unknown'
+                    print(f"[ImageReader] Available multiscale levels at root: {available_levels}")
+                except Exception as e2:
+                    print(f"[ImageReader] Could not inspect root zarr: {e2}")
                 raise
 
         dask_array = dask_array.astype(np.float32)
