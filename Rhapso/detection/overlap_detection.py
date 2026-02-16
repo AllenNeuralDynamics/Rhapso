@@ -60,6 +60,9 @@ class OverlapDetection():
             shape = dask_array.shape
             self.image_shape_cache[file_path] = shape
 
+            print(f"[OverlapDetection] Root zarr path: {file_path}")
+            print(f"[OverlapDetection] Root zarr has multiscales: {list(zarr_array.keys())}")
+
         elif self.file_type == 'tiff':
             img = CustomBioImage(file_path, reader=bioio_tifffile.Reader)
             data = img.get_dask_stack()
