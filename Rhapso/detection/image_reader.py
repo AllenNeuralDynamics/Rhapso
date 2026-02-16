@@ -89,7 +89,10 @@ class ImageReader:
             try:
                 store = s3fs.S3Map(root=full_path, s3=s3)
                 zarr_array = zarr.open(store, mode='r')
-                print(f"[ImageReader] Successfully opened zarr. Root keys: {list(zarr_array.keys())}, shape: {zarr_array.shape if hasattr(zarr_array, 'shape') else 'N/A'}")
+                # For OME-Zarr multiscale arrays, just show shape
+                shape_str = zarr_array.shape if hasattr(zarr_array, 'shape') else 'N/A'
+                keys_str = list(zarr_array.keys()) if hasattr(zarr_array, 'keys') else 'N/A (array)'
+                print(f"[ImageReader] Successfully opened zarr. Keys/type: {keys_str}, shape: {shape_str}")
                 dask_array = da.from_zarr(zarr_array)[0, 0, :, :, :]
             except Exception as e:
                 print(f"[ImageReader] ERROR opening zarr at {full_path}: {e}")
