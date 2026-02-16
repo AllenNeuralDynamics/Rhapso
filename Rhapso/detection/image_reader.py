@@ -117,6 +117,7 @@ class ImageReader:
             
             # Validate crop bounds are within array dimensions
             # Note: We slice as data[crop_min:crop_max+1], so crop_max can be at most shape-1
+            # Clamp crop_max to valid bounds (formula in metadata_builder may produce out-of-bounds values)
             array_shape = dask_array.shape
             for i in range(3):
                 if crop_min[i] < 0:
@@ -124,12 +125,8 @@ class ImageReader:
                         f"crop_min[{i}]={crop_min[i]} is negative; "
                         f"crop bounds must be non-negative"
                     )
-                if crop_max[i] > array_shape[i] - 1:
-                    raise ValueError(
-                        f"crop_max[{i}]={crop_max[i]} exceeds array dimension {i} "
-                        f"(shape={array_shape[i]}, max valid index={array_shape[i]-1}); "
-                        f"crop_max must be < array shape"
-                    )
+                # Clamp crop_max to valid range to handle rounding in scale formula
+                crop_max[i] = min(crop_max[i], array_shape[i] - 1)
                 if crop_min[i] > crop_max[i]:
                     raise ValueError(
                         f"crop_min[{i}]={crop_min[i]} > crop_max[{i}]={crop_max[i]}; "
