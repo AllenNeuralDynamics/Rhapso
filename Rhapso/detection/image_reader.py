@@ -105,39 +105,9 @@ class ImageReader:
         dask_array = dask_array.astype(np.float32)
         dask_array = dask_array.transpose()
 
-        # Apply split tile crop if present
+        # Store original crop bounds (in level-0 coordinates) for later application
         crop_min = record.get('crop_min')
         crop_max = record.get('crop_max')
-        if crop_min is not None and crop_max is not None:
-            if len(crop_min) != 3 or len(crop_max) != 3:
-                raise ValueError(
-                    f"crop_min and crop_max must both be length 3 for 3D cropping; "
-                    f"got crop_min={crop_min}, crop_max={crop_max}"
-                )
-            
-            # Validate crop bounds are within array dimensions
-            # Note: We slice as data[crop_min:crop_max+1], so crop_max can be at most shape-1
-            # Clamp crop_max to valid bounds (formula in metadata_builder may produce out-of-bounds values)
-            array_shape = dask_array.shape
-            for i in range(3):
-                if crop_min[i] < 0:
-                    raise ValueError(
-                        f"crop_min[{i}]={crop_min[i]} is negative; "
-                        f"crop bounds must be non-negative"
-                    )
-                # Clamp crop_max to valid range to handle rounding in scale formula
-                crop_max[i] = min(crop_max[i], array_shape[i] - 1)
-                if crop_min[i] > crop_max[i]:
-                    raise ValueError(
-                        f"crop_min[{i}]={crop_min[i]} > crop_max[{i}]={crop_max[i]}; "
-                        f"crop_min must be <= crop_max"
-                    )
-            
-            dask_array = dask_array[
-                crop_min[0]:crop_max[0] + 1,
-                crop_min[1]:crop_max[1] + 1,
-                crop_min[2]:crop_max[2] + 1
-            ]
 
         # Downsample Dask array
         downsampled_stack = self.interface_downsampling(dask_array, dsxy, dsz)
@@ -154,7 +124,7 @@ class ImageReader:
             level_str = file_path.rstrip('/').split('/')[-1]
             level = int(level_str)
             print(f"[ImageReader] file_path={file_path}, extracted level={level}")
-            print(f"[ImageReader] Before scaling: lb={lb}, ub={ub}, dask_array.shape={dask_array.shape}")
+            print(f"[ImageReader] Before scaling: lb={lb}, ub={ub}, downsampled_stack.shape={downsampled_stack.shape}")
             if level > 0:
                 scale = 2 ** level
                 lb = [x // scale for x in lb]
@@ -163,6 +133,51 @@ class ImageReader:
         except (ValueError, IndexError) as e:
             print(f"[ImageReader] Level extraction failed ({e}); using bounds as-is")
             pass  # Level extraction failed; use bounds as-is
+
+        # Now apply split tile crop if present (using scaled crop bounds)
+        if crop_min is not None and crop_max is not None:
+            if len(crop_min) != 3 or len(crop_max) != 3:
+                raise ValueError(
+                    f"crop_min and crop_max must both be length 3 for 3D cropping; "
+                    f"got crop_min={crop_min}, crop_max={crop_max}"
+                )
+
+            # Scale crop bounds to match downsampled array coordinates
+            # crop_min/max are in level-0 coordinates, need to scale them
+            try:
+                level_str = file_path.rstrip('/').split('/')[-1]
+                level = int(level_str)
+                if level > 0:
+                    scale = 2 ** level
+                    crop_min_scaled = [x // scale for x in crop_min]
+                    crop_max_scaled = [int(np.ceil((x + 1) / scale) - 1) for x in crop_max]
+                else:
+                    crop_min_scaled = crop_min
+                    crop_max_scaled = crop_max
+            except (ValueError, IndexError):
+                crop_min_scaled = crop_min
+                crop_max_scaled = crop_max
+
+            # Validate and clamp crop bounds to downsampled array dimensions
+            array_shape = downsampled_stack.shape
+            for i in range(3):
+                if crop_min_scaled[i] < 0:
+                    raise ValueError(
+                        f"crop_min_scaled[{i}]={crop_min_scaled[i]} is negative"
+                    )
+                # Clamp crop_max to valid range
+                crop_max_scaled[i] = min(crop_max_scaled[i], array_shape[i] - 1)
+                if crop_min_scaled[i] > crop_max_scaled[i]:
+                    raise ValueError(
+                        f"crop_min_scaled[{i}]={crop_min_scaled[i]} > crop_max_scaled[{i}]={crop_max_scaled[i]}"
+                    )
+
+            print(f"[ImageReader] Applying crop: crop_min_scaled={crop_min_scaled}, crop_max_scaled={crop_max_scaled}")
+            downsampled_stack = downsampled_stack[
+                crop_min_scaled[0]:crop_max_scaled[0] + 1,
+                crop_min_scaled[1]:crop_max_scaled[1] + 1,
+                crop_min_scaled[2]:crop_max_scaled[2] + 1
+            ]
 
         # Load image chunk into mem
         downsampled_image_chunk = downsampled_stack[lb[0]:ub[0]+1, lb[1]:ub[1]+1, lb[2]:ub[2]+1].compute()
