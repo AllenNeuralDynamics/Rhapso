@@ -278,6 +278,7 @@ class OverlapDetection():
             all_intervals = []
             if self.file_type == 'zarr':
                 level, leftovers = self.choose_zarr_level()
+                print(f"[OverlapDetection] view={view_id}: chosen level={level}, leftovers={leftovers}, dsxy={self.dsxy}, dsz={self.dsz}")
 
                 if is_split:
                     dim_base = self._split_tile_shape(row_i)

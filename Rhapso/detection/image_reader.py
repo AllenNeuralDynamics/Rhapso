@@ -154,11 +154,15 @@ class ImageReader:
         try:
             level_str = file_path.rstrip('/').split('/')[-1]
             level = int(level_str)
+            print(f"[ImageReader] file_path={file_path}, extracted level={level}")
+            print(f"[ImageReader] Before scaling: lb={lb}, ub={ub}, dask_array.shape={dask_array.shape}")
             if level > 0:
                 scale = 2 ** level
                 lb = [x // scale for x in lb]
                 ub = [x // scale for x in ub]
-        except (ValueError, IndexError):
+                print(f"[ImageReader] After scaling by 2^{level}={scale}: lb={lb}, ub={ub}")
+        except (ValueError, IndexError) as e:
+            print(f"[ImageReader] Level extraction failed ({e}); using bounds as-is")
             pass  # Level extraction failed; use bounds as-is
 
         # Load image chunk into mem

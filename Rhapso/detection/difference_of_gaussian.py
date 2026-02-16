@@ -307,6 +307,7 @@ class DifferenceOfGaussian:
         """
         image_chunk = self.background_subtract_xy(image_chunk)
         peaks = self.compute_difference_of_gaussian(image_chunk)
+        print(f"[DoG] image_chunk.shape={image_chunk.shape}, detected_peaks={len(peaks)}, offset={offset}, lb={lb}")
 
         if peaks.size == 0:
             intensities = np.empty((0,), dtype=image_chunk.dtype)
@@ -318,6 +319,7 @@ class DifferenceOfGaussian:
             final_peaks = self.apply_offset(final_peaks, offset)
             final_peaks = self.upsample_coordinates(final_peaks)
 
+        print(f"[DoG] final_peaks after transforms={len(final_peaks)}")
         return {
             'interest_points': final_peaks,
             'intensities': intensities

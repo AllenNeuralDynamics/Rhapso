@@ -128,11 +128,14 @@ class MetadataBuilder:
                     # file_path has the per-tile name (e.g., Tile_X_..._ch_405.zarr).
                     # Multiscale levels live inside each tile zarr.
                     file_path = os.path.join(row['zarr_base_path'], row['file_path'])
+                    print(f"[MetadataBuilder] split=True, zarr_base_path={row['zarr_base_path']}, per_tile={row['file_path']}, joined={file_path}")
                 else:
                     file_path = self.image_file_prefix
+                    print(f"[MetadataBuilder] split=False, using image_file_prefix={file_path}")
                 # Append multiscale level if not already present
                 if self.level is not None and not str(file_path).rstrip('/').endswith(str(self.level)):
                     file_path = os.path.join(file_path, str(self.level))
+                    print(f"[MetadataBuilder] Appended level={self.level}, final path={file_path}")
             elif self.file_type == 'tiff':
                 file_path = os.path.join(self.image_file_prefix, row['file_path'])
             else:
