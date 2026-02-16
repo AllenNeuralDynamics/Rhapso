@@ -157,6 +157,21 @@ class ImageReader:
         lb = list(interval_key[0])
         ub = list(interval_key[1])
 
+        # Bounds are in full-resolution (level 0) coordinates.
+        # We loaded from a potentially downsampled multiscale level,
+        # so we need to scale the bounds down by 2^level.
+        # Extract level from file_path (last component after final /)
+        try:
+            level_str = file_path.rstrip('/').split('/')[-1]
+            level = int(level_str)
+            if level > 0:
+                scale = 2 ** level
+                lb = [x // scale for x in lb]
+                ub = [x // scale for x in ub]
+                print(f"[ImageReader] Scaled bounds for level={level}: scale={scale}, lb={lb}, ub={ub}")
+        except (ValueError, IndexError):
+            print(f"[ImageReader] Could not extract level from path {file_path}, using bounds as-is")
+
         # Load image chunk into mem
         downsampled_image_chunk = downsampled_stack[lb[0]:ub[0]+1, lb[1]:ub[1]+1, lb[2]:ub[2]+1].compute()
     
