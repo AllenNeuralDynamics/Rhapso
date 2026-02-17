@@ -9,6 +9,7 @@ from Rhapso.detection.points_validation import PointsValidation
 from Rhapso.detection.save_interest_points import SaveInterestPoints
 import boto3
 import ray
+import os
 
 # This class implements the interest point detection pipeline
 
@@ -69,7 +70,13 @@ class InterestPointDetection:
         image_chunk_metadata = metadata_loader.run()
         print("Metadata has loaded")
 
-        # Use Ray to distribute peak detection to image chunking metadata 
+        # Initialize Ray if not already running, using all available CPUs
+        if not ray.is_initialized():
+            num_cpus = os.cpu_count()
+            ray.init(num_cpus=num_cpus)
+            print(f"[InterestPointDetection] Initialized Ray with {num_cpus} CPUs")
+
+        # Use Ray to distribute peak detection to image chunking metadata
         @ray.remote
         def process_peak_detection_task(chunk_metadata, new_dsxy, new_dsz, min_intensity, max_intensity, sigma, threshold,
                                         median_filter, mip_map_downsample):
@@ -120,7 +127,12 @@ class InterestPointDetection:
                                                   self.dsxy, self.dsz, self.min_intensity, self.max_intensity, self.sigma, self.threshold)
         save_interest_points.run()
         print("Interest points saved")
-    
+
+        # Shutdown Ray to release resources for other frameworks (e.g. Dask)
+        if ray.is_initialized():
+            ray.shutdown()
+            print("[InterestPointDetection] Ray shutdown complete")
+
     def run(self):
         self.detection()
 
