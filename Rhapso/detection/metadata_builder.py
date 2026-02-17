@@ -141,17 +141,13 @@ class MetadataBuilder:
             else:
                 raise ValueError(f"Unsupported file_type: {self.file_type!r}")
 
-            # Extract and scale crop bounds for split tiles
+            # Extract crop bounds for split tiles (keep in level-0 coordinates;
+            # ImageReader will scale them by the total downsampling factor).
             crop_min = None
             crop_max = None
             if is_split:
-                scale = 2 ** self.level if self.level is not None else 1
-                cmin = [int(v) // scale for v in row['crop_min'].split()]
-                # For inclusive bounds, use a ceil-style mapping for crop_max to avoid shrinking coverage
-                # But we don't know array shape here, so just clip to prevent obvious overflow
-                cmax = [int(np.ceil((int(v) + 1) / scale) - 1) for v in row['crop_max'].split()]
-                crop_min = cmin
-                crop_max = cmax
+                crop_min = [int(v) for v in row['crop_min'].split()]
+                crop_max = [int(v) for v in row['crop_max'].split()]
 
             if self.run_type == 'ray':
                 self.build_image_metadata(process_intervals, file_path, view_id, crop_min, crop_max)

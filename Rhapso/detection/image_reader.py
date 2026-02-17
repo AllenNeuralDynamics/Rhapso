@@ -142,21 +142,23 @@ class ImageReader:
                     f"got crop_min={crop_min}, crop_max={crop_max}"
                 )
 
-            # Scale crop bounds to match downsampled array coordinates
-            # crop_min/max are in level-0 coordinates, need to scale them
+            # Scale crop bounds from level-0 coordinates to downsampled array
+            # coordinates.  The array has been downsampled by 2^level (zarr
+            # pyramid) AND by dsxy/dsz (interface_downsampling), so crop
+            # bounds must be divided by the total factor.
             try:
                 level_str = file_path.rstrip('/').split('/')[-1]
                 level = int(level_str)
-                if level > 0:
-                    scale = 2 ** level
-                    crop_min_scaled = [x // scale for x in crop_min]
-                    crop_max_scaled = [int(np.ceil((x + 1) / scale) - 1) for x in crop_max]
-                else:
-                    crop_min_scaled = crop_min
-                    crop_max_scaled = crop_max
+                total_scale_xy = (2 ** level) * dsxy
+                total_scale_z = (2 ** level) * dsz
             except (ValueError, IndexError):
-                crop_min_scaled = crop_min
-                crop_max_scaled = crop_max
+                total_scale_xy = dsxy
+                total_scale_z = dsz
+
+            # crop bounds are in XYZ order: [0]=X, [1]=Y use xy scale; [2]=Z
+            scales = [total_scale_xy, total_scale_xy, total_scale_z]
+            crop_min_scaled = [int(x // s) for x, s in zip(crop_min, scales)]
+            crop_max_scaled = [int(np.ceil((x + 1) / s) - 1) for x, s in zip(crop_max, scales)]
 
             # Validate and clamp crop bounds to downsampled array dimensions
             array_shape = downsampled_stack.shape
