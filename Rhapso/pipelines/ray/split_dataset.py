@@ -5,6 +5,7 @@ from Rhapso.split_dataset.save_xml import SaveXML
 from Rhapso.split_dataset.save_points import SavePoints
 import boto3
 import ray
+import os
 
 class SplitDataset:
     def __init__(self, xml_file_path, xml_output_file_path, n5_path, point_density, min_points, max_points, error, exclude_radius, 
@@ -47,6 +48,14 @@ class SplitDataset:
         save_xml = SaveXML(data_global, new_split_interest_points, self_definition, xml_file, self.xml_output_file_path)
         save_xml.run()
         print("XML saved")
+
+        # Initialize Ray if not already running
+        if not ray.is_initialized():
+            num_cpus = os.cpu_count()
+            ray_temp_dir = "/scratch/ray"
+            os.makedirs(ray_temp_dir, exist_ok=True)
+            ray.init(num_cpus=num_cpus, _temp_dir=ray_temp_dir)
+            print(f"[SplitDataset] Initialized Ray with {num_cpus} CPUs, temp_dir={ray_temp_dir}")
 
         @ray.remote
         def distribute_points_saving(label_entries, n5_path):

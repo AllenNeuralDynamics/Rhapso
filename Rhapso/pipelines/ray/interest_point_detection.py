@@ -73,8 +73,10 @@ class InterestPointDetection:
         # Initialize Ray if not already running, using all available CPUs
         if not ray.is_initialized():
             num_cpus = os.cpu_count()
-            ray.init(num_cpus=num_cpus)
-            print(f"[InterestPointDetection] Initialized Ray with {num_cpus} CPUs")
+            ray_temp_dir = "/scratch/ray"
+            os.makedirs(ray_temp_dir, exist_ok=True)
+            ray.init(num_cpus=num_cpus, _temp_dir=ray_temp_dir)
+            print(f"[InterestPointDetection] Initialized Ray with {num_cpus} CPUs, temp_dir={ray_temp_dir}")
 
         # Use Ray to distribute peak detection to image chunking metadata
         @ray.remote
