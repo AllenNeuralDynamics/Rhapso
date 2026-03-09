@@ -1,3 +1,0 @@
-"""
-CZI compression
-"""
