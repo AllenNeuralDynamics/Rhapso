@@ -151,8 +151,8 @@ def plot_matches_3d(matches, tp_id, setup_id):
 # base_path = Path("/Users/seanfite/Desktop/IP_TIFF_XML-Rhapso-Affine/interestpoints.n5")
 # base_path = "s3://aind-open-data/exaSPIM_686951_2025-02-25_09-45-02_alignment_2025-06-12_19-58-52/interest_point_detection"
 # cords_prefix = "/Users/seanfite/Desktop/interest_point_detection/interestpoints.n5"
-corr_prefix = "s3://rhapso-matching-test/output/interestpoints.n5"
-corr_prefix = "s3://rhapso-matching-test/output/interestpoints.n"
+corr_prefix = "s3://aind-scratch-data/sean.fite/exaSPIM_794495/interestpoints.n5"
+# corr_prefix = "s3://aind-scratch-data/sean.fite/exaSPIM_794495/interestpoints.n"
 for tp_id in [0]:
     for setup_id in range(20):
         if setup_id == 0:

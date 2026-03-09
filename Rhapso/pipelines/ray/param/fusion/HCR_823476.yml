@@ -1,0 +1,18 @@
+# AFFINE FUSION
+# -----------------------------------
+xml_path_affine_fusion: "s3://aind-scratch-data/sean.fite/HCR_823476_s5_12-24/channel_488.zarr/ph_corr_solver.xml"
+input_path_affine_fusion: "s3://aind-open-data/HCR_823476-s5-ls2_2025-12-24_00-00-00_processed_2026-01-03_01-30-29/image_radial_correction/"
+output_s3_path_affine_fusion: "s3://aind-scratch-data/sean.fite/HCR_823476_s5_12-24-test/fusion/fused.zarr"
+channel: 488
+default_chunk_size: [1, 1, 128, 128, 128]
+cpu_cell_size: [640, 256, 256]
+
+# MULTISCALE
+# -----------------------------------
+multiscale_zarr_path: "s3://aind-scratch-data/sean.fite/HCR_823476_s5_12-24/channel_488.zarr/multiscale_fused"
+multiscale_chunk_size: [128, 128, 128]
+voxel_size: [0.459, 0.0920179382864407, 0.0920179382864407]            # ZYX
+n_lvls: 6                                                              # Including base level
+scale_factor: [[1, 2, 2], [1, 2, 2], [2, 2, 2], [2, 2, 2], [2, 2, 2]]  # ZYX
+target_block_size_mb: 256
+base_level: 0
