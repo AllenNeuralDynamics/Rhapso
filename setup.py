@@ -35,6 +35,12 @@ setup(
         's3fs==2024.12.0',
         'scikit-learn',
         'click==8.2.1',
+
+        'ray[default]==2.9.1',
+        'tensorstore',
+        'xmltodict',
+        'nptyping',
+        "setuptools==68.2.2"
     ],
     python_requires='>=3.10',
     classifiers=[

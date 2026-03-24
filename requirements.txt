@@ -12,23 +12,12 @@ numcodecs==0.13.1
 matplotlib==3.10.0
 memory-profiler==0.61.0
 s3fs==2024.12.0
-ray
-click==8.2.1
 scikit-learn
+click==8.2.1
 
-# Fusion
---index-url https://download.pytorch.org/whl/cpu
-torch
+ray[default]==2.9.1
+setuptools==68.2.2
+
+tensorstore
 xmltodict
 nptyping
-tensorstore
-
-# multiscale 
-czifile
-xarray_multiscale
-natsort
-aind_data_transformation
-
-# aind-ng-link
-neuroglancer
-pint

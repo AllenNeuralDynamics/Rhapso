@@ -1,13 +1,12 @@
-"""
-Utilities for scripts.
-"""
-
 import re
 from pathlib import Path
 import boto3
 import yaml
 from io import BytesIO
 
+"""
+Utilities for scripts.
+"""
 
 def read_config_yaml(yaml_path: str) -> dict:
     if yaml_path.startswith('s3://'):
