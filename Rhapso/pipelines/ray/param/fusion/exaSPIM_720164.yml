@@ -1,8 +1,8 @@
 # AFFINE FUSION
 # -----------------------------------
-xml_path_affine_fusion: "s3://aind-scratch-data/sean.fite/dataset_720164.xml"
-input_path_affine_fusion: "s3://exaSPIM_720164_2025-07-07_17-55-45_processed_2025-07-15_16-22-02/flatfield_correction/SPIM.ome.zarr/"
-output_s3_path_affine_fusion: "s3://aind-scratch-data/sean.fite/exaSPIM_720164/fusion/fused.zarr"
+xml_path_translation_fusion: "s3://aind-scratch-data/sean.fite/dataset_720164.xml"
+input_path_translation_fusion: "s3://exaSPIM_720164_2025-07-07_17-55-45_processed_2025-07-15_16-22-02/flatfield_correction/SPIM.ome.zarr/"
+output_s3_path_translation_fusion: "s3://aind-scratch-data/sean.fite/exaSPIM_720164/fusion/fused.zarr"
 channel: 488
 default_chunk_size: [1, 1, 128, 128, 128]
 cpu_cell_size: [640, 256, 256]
@@ -11,7 +11,6 @@ cpu_cell_size: [640, 256, 256]
 # -----------------------------------
 multiscale_zarr_path: "s3://aind-scratch-data/sean.fite/fusion-test/exaSPIM_720164/fusion/fused.zarr"
 multiscale_chunk_size: [128, 128, 128]
-voxel_size: [1.0, 0.7480000148631624, 0.747999882518797]               # ZYX
 n_lvls: 6                                                              # Including base level
 scale_factor: [[2, 2, 2], [2, 2, 2], [2, 2, 2], [2, 2, 2], [2, 2, 2]]  # ZYX
 target_block_size_mb: 256

@@ -13,12 +13,12 @@ fusion_cmd = (
     "bash -lc \""
     "python3 - <<\\\"PY\\\"\n"
     "import json, base64\n"
-    "from Rhapso.pipelines.ray.fusion import AffineFusion\n"
+    "from Rhapso.pipelines.ray.translation_fusion import TranslationFusion\n"
     f"cfg = json.loads(base64.b64decode(\\\"{serialized_config}\\\").decode())\n"
-    "fusion = AffineFusion(\n"
-    "    xml_path=cfg[\\\"xml_path_affine_fusion\\\"],\n"
-    "    input_path=cfg[\\\"input_path_affine_fusion\\\"],\n"
-    "    output_s3_path=cfg[\\\"output_s3_path_affine_fusion\\\"],\n"
+    "fusion = TranslationFusion(\n"
+    "    xml_path=cfg[\\\"xml_path_translation_fusion\\\"],\n"
+    "    input_path=cfg[\\\"input_path_translation_fusion\\\"],\n"
+    "    output_s3_path=cfg[\\\"output_s3_path_translation_fusion\\\"],\n"
     "    channel=cfg[\\\"channel\\\"],\n"
     "    default_chunk_size=cfg[\\\"default_chunk_size\\\"],\n"
     "    cpu_cell_size=cfg[\\\"cpu_cell_size\\\"],\n"
@@ -37,7 +37,6 @@ multiscale_cmd = (
     "ms = MultiScale(\n"
     "    zarr_path=cfg[\\\"multiscale_zarr_path\\\"],\n"
     "    chunk_size=cfg[\\\"multiscale_chunk_size\\\"],\n"
-    "    voxel_size=cfg[\\\"voxel_size\\\"],\n"
     "    n_lvls=cfg[\\\"n_lvls\\\"],\n"
     "    scale_factor=cfg[\\\"scale_factor\\\"],\n"
     "    target_block_size_mb=cfg[\\\"target_block_size_mb\\\"],\n"
@@ -61,7 +60,7 @@ print("$", " ".join(["ray", "up", unified_yml, "-y"]))
 subprocess.run(["ray", "up", unified_yml, "-y"], check=True, cwd=prefix)
 
 try:
-    exec_on_cluster("Affine Fusion", unified_yml, fusion_cmd, prefix)
+    exec_on_cluster("Translation Fusion", unified_yml, fusion_cmd, prefix)
     exec_on_cluster("Multiscale", unified_yml, multiscale_cmd, prefix)
     print("\n✅ Fusion + Multiscale pipeline complete.")
 

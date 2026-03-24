@@ -10,11 +10,11 @@ Multiscle Pipeline
 """
 
 class MultiScale:
-    def __init__(self, zarr_path: str, chunk_size: List[int], voxel_size: List[float], n_lvls: int, scale_factor, 
+    def __init__(self, xml_path, zarr_path: str, chunk_size: List[int], n_lvls: int, scale_factor, 
                  target_block_size_mb: int, base_level: int):
+        self.xml_path = xml_path
         self.zarr_path = zarr_path
         self.chunk_size = chunk_size
-        self.voxel_size = voxel_size
         self.n_lvls = n_lvls
         self.scale_factor = scale_factor
         self.target_block_size_mb = target_block_size_mb
@@ -25,12 +25,12 @@ class MultiScale:
         print(f"[MultiScale] Loading base level from {self.zarr_path}/{self.base_level}")
 
         # Normalize to TCZYX + clamp chunks
-        prep = ArrayAndChunkPrep(self.chunk_size, dim=5)
-        array, dataset_shape, chunk_size = prep.run(array)
+        prep = ArrayAndChunkPrep(self.chunk_size, self.xml_path, dim=5)
+        array, dataset_shape, chunk_size, voxel_size = prep.run(array)
         print(f"[MultiScale] Prepared array shape={dataset_shape}, chunks={chunk_size}")
 
         # Open root + channel group and write OME metadata
-        ome = OMEMetadata(self.zarr_path, list(dataset_shape), self.scale_factor, self.voxel_size, self.n_lvls, list(chunk_size))
+        ome = OMEMetadata(self.zarr_path, list(dataset_shape), self.scale_factor, voxel_size, self.n_lvls, list(chunk_size))
         channel_group, stack_name, scale_factors = ome.run()
         print(f"[MultiScale] Using channel group '{stack_name}'")
 

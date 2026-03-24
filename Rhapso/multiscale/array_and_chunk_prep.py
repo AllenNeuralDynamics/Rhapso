@@ -1,15 +1,31 @@
 from typing import List, Tuple
 from numpy.typing import ArrayLike
 import numpy as np
+import xml.etree.ElementTree as ET
+import s3fs
 
 """
 Pads arrays to TCZYX and clamps chunks to data shape.
 """
 
 class ArrayAndChunkPrep:
-    def __init__(self, chunk_size: List[int], dim: int = 5) -> None:
+    def __init__(self, chunk_size: List[int], xml_path, dim: int = 5) -> None:
         self.chunk_size = chunk_size
+        self.xml_path = xml_path
         self.dim = dim
+
+    def voxel_size_zyx_from_xml(self) -> list[float]:
+        if self.xml_path.startswith("s3://"):
+            fs = s3fs.S3FileSystem(anon=True)
+            with fs.open(self.xml_path, "rb") as f:
+                xml_text = f.read()
+            root = ET.fromstring(xml_text)
+        else:
+            root = ET.parse(self.xml_path).getroot()
+
+        size_text = root.find(".//ViewSetup/voxelSize/size").text  # "X Y Z"
+        x, y, z = map(float, size_text.split())
+        return [z, y, x]
 
     def _pad_array_n_d(self, arr: ArrayLike) -> ArrayLike:
         if self.dim > 5:
@@ -34,7 +50,9 @@ class ArrayAndChunkPrep:
         """
         Entry point
         """
+        voxel_size = self.voxel_size_zyx_from_xml()
         arr = self._pad_array_n_d(data)
         dataset_shape = self._compute_dataset_shape(arr)
         full_chunks = self._clamp_chunks(dataset_shape)
-        return arr, dataset_shape, full_chunks
+        
+        return arr, dataset_shape, full_chunks, voxel_size

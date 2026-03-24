@@ -1,25 +1,89 @@
-"""Core fusion algorithm."""
-
 from __future__ import annotations
 import logging
 import ray
 import numpy as np
 import s3fs
-import tensorstore as ts
+import os
 from itertools import chain
-import torch
-from torch.utils.data import Dataset
+import time
 import zarr
-import Rhapso.fusion.aind_cloud_fusion.blend as blend
-import Rhapso.fusion.aind_cloud_fusion.cloud_queue as cq
-import Rhapso.fusion.aind_cloud_fusion.geometry as geometry
-import Rhapso.fusion.aind_cloud_fusion.input_output as input_output
-import Rhapso.fusion.aind_cloud_fusion.fusion_utils as utils
+from collections import OrderedDict
+import Rhapso.translation_fusion.blend as blend
+import Rhapso.translation_fusion.cloud_queue as cq
+import Rhapso.translation_fusion.geometry as geometry
+import Rhapso.translation_fusion.input_output as input_output
+import Rhapso.translation_fusion.fusion_utils as utils
 
+S3_READ = None
+S3_WRITE = None
+
+# Per-worker-process caches (Ray reuses worker processes for tasks)
+_OUT_ARR_CACHE: dict[tuple[str, str], zarr.core.Array] = {}
+_TILE_ARR_LRU: "OrderedDict[str, zarr.core.Array]" = OrderedDict()
+_TILE_LRU_MAX = 32  
+
+def get_s3_read(max_pool_connections: int = 25):
+    global S3_READ
+    if S3_READ is None:
+        S3_READ = s3fs.S3FileSystem(
+            anon=True,
+            config_kwargs={"max_pool_connections": max_pool_connections},
+        )
+    return S3_READ
+
+def get_s3_write(max_pool_connections: int = 25, retries_total: int = 10):
+    global S3_WRITE
+    if S3_WRITE is None:
+        S3_WRITE = s3fs.S3FileSystem(
+            anon=False,
+            config_kwargs={
+                "max_pool_connections": max_pool_connections,
+                "retries": {"total_max_attempts": retries_total, "mode": "adaptive"},
+            },
+        )
+    return S3_WRITE
+
+def get_out_arr(write_root: str, write_ds: str) -> zarr.core.Array:
+    """
+    Cache output zarr array handle per worker process.
+    Avoids S3Map + zarr.open per cell.
+    """
+    key = (write_root, write_ds)
+    arr = _OUT_ARR_CACHE.get(key)
+    if arr is not None:
+        return arr
+
+    out_store = s3fs.S3Map(root=write_root, s3=get_s3_write(), check=False)
+    arr = zarr.open(store=out_store, mode="a")[write_ds]
+    _OUT_ARR_CACHE[key] = arr
+    return arr
+
+def get_tile_arr(tile_path: str) -> zarr.core.Array:
+    """
+    Cache input tile zarr handle per worker process (bounded LRU).
+    Avoids S3Map + zarr.open per tile per cell.
+    """
+    arr = _TILE_ARR_LRU.get(tile_path)
+    if arr is not None:
+        _TILE_ARR_LRU.move_to_end(tile_path)
+        return arr
+
+    store = s3fs.S3Map(root=tile_path, s3=get_s3_read(), check=False)
+    arr = zarr.open(store=store, mode="r")
+
+    _TILE_ARR_LRU[tile_path] = arr
+    _TILE_ARR_LRU.move_to_end(tile_path)
+
+    while len(_TILE_ARR_LRU) > _TILE_LRU_MAX:
+        _TILE_ARR_LRU.popitem(last=False)
+
+    return arr
+
+# WE GO IN THIS
 def initialize_fusion(
     dataset: input_output.Dataset,
     output_params: input_output.OutputParameters
-) -> tuple[dict, dict, dict, dict, tuple, tuple, torch.Tensor]:
+) -> tuple[dict, dict, dict, dict, dict, tuple, tuple]:
     """
     Creates all core fusion data structures and key algorithm inputs.
 
@@ -49,29 +113,28 @@ def initialize_fusion(
     for tile_id, tile_arr in tile_arrays.items():
         tile_sizes_zyx[tile_id] = zyx = tile_arr.shape[2:]
 
-        z_grid, y_grid, x_grid = torch.meshgrid(
-            torch.Tensor([0, zyx[0]]),
-            torch.Tensor([0, zyx[1]]),
-            torch.Tensor([0, zyx[2]]),
-            indexing='ij'
-        )
-        tile_boundary_pts = torch.stack([z_grid, y_grid, x_grid], dim=-1)
+        zs = np.array([0.0, float(zyx[0])], dtype=np.float32)
+        ys = np.array([0.0, float(zyx[1])], dtype=np.float32)
+        xs = np.array([0.0, float(zyx[2])], dtype=np.float32)
+
+        # 8 corners, shape (8,3) in zyx
+        tile_boundary_pts = np.array([[z, y, x] for z in zs for y in ys for x in xs], dtype=np.float32)
 
         tfm_list = tile_transforms[tile_id]
         for i, tfm in enumerate(tfm_list):
-            tile_boundary_pts = tfm.forward(
-                tile_boundary_pts, device=torch.device("cpu")
+            tile_boundary_pts = tfm.forward_np(
+                tile_boundary_pts
             )
 
-        tile_aabbs[tile_id] = geometry.aabb_3d(tile_boundary_pts)
+        tile_aabbs[tile_id] = geometry.aabb_3d_np(tile_boundary_pts)
         tile_boundary_point_cloud_zyx.append(tile_boundary_pts)
-    tile_boundary_point_cloud_zyx = torch.stack(
-        tile_boundary_point_cloud_zyx, dim=0
-    )
+
+    tile_boundary_point_cloud_zyx = np.stack(tile_boundary_point_cloud_zyx, axis=0)  # (n_tiles, 8, 3)
+
 
     # Output Data Structures-- OUTPUT_VOLUME_SIZE, OUTPUT_VOLUME_ORIGIN
     # Resolve Output Volume Dimensions and Absolute Position
-    global_tile_boundaries = geometry.aabb_3d(tile_boundary_point_cloud_zyx)
+    global_tile_boundaries = geometry.aabb_3d_np(tile_boundary_point_cloud_zyx)
     OUTPUT_VOLUME_SIZE = [
         int(global_tile_boundaries[1] - global_tile_boundaries[0]),
         int(global_tile_boundaries[3] - global_tile_boundaries[2]),
@@ -187,93 +250,14 @@ def initialize_output_volume_dask(
 
     return output_volume
 
-
-def initialize_output_volume_tensorstore(
-    output_params: input_output.OutputParameters,
-    output_volume_size: tuple[int, int, int],
-):
-    """
-    The output is an async Tensorstore obj that you need
-    to call .result() to perform a write.
-    """
-    parts = output_params.path.split("/")
-    bucket = parts[2]
-    path = "/".join(parts[3:])
-    chunksize = list(output_params.chunksize)
-    output_shape = [
-        1,
-        1,
-        output_volume_size[0],
-        output_volume_size[1],
-        output_volume_size[2],
-    ]
-
-    return ts.open(
-        {
-            "driver": "zarr",
-            "dtype": "uint16",
-            "kvstore": {
-                "driver": "s3",
-                "bucket": bucket,
-                "path": path,
-            },
-            "create": True,
-            "open": True,
-            "metadata": {
-                "chunks": chunksize,
-                "compressor": {
-                    "blocksize": 0,
-                    "clevel": 1,
-                    "cname": "zstd",
-                    "id": "blosc",
-                    "shuffle": 1,
-                },
-                "dimension_separator": "/",
-                "dtype": "<u2",
-                "fill_value": 0,
-                "filters": None,
-                "order": "C",
-                "shape": output_shape,
-                "zarr_format": 2,
-            },
-        }
-    ).result()
-
-
-def initialize_output_volume(
+def initialize_output_volume(   
     output_params: input_output.OutputParameters,
     output_volume_size: tuple[int, int, int],
 ) -> input_output.OutputArray:
-
-    output = None
-    assert output_params.datastore in [
-        0,
-        1,
-    ], "Only 0 = Dask and 1 = Tensorstore supported."
-    if output_params.datastore == 0:
-        output = initialize_output_volume_dask(
-            output_params, output_volume_size
-        )
-    elif output_params.datastore == 1:
-        output = initialize_output_volume_tensorstore(
-            output_params, output_volume_size
-        )
+    output = initialize_output_volume_dask(
+        output_params, output_volume_size
+    )
     return output
-
-
-def get_cell_count_zyx(
-    volume_size: tuple[int, int, int], cell_size: tuple[int, int, int]
-) -> tuple[int, int, int]:
-    """
-    Total amount of z,y, and x cells returned in that order.
-    Input sizes are in canonical zyx order.
-    """
-    z_cnt = int(np.ceil(volume_size[0] / cell_size[0]))
-    y_cnt = int(np.ceil(volume_size[1] / cell_size[1]))
-    x_cnt = int(np.ceil(volume_size[2] / cell_size[2]))
-
-    return z_cnt, y_cnt, x_cnt
-
 
 def run_fusion(
     input_s3_path: str,
@@ -299,20 +283,20 @@ def run_fusion(
     cpu/gpu cell_size: size of subvolume in output volume sent to each cpu/gpu worker.
     volume_sampler stride/start: options for partitioning work across capsules.
     """
+    ray.init() 
 
     logging.basicConfig(
         format="%(asctime)s %(message)s", datefmt="%Y-%m-%d %H:%M"
     )
-    LOGGER = logging.getLogger(__name__)
-    LOGGER.setLevel(logging.INFO)
 
     # Base Initalization
-    dataset = input_output.BigStitcherDatasetChannel(xml_path, 
-                                           input_s3_path, 
-                                           channel_num, 
-                                           datastore=datastore)
-    a, b, c, d, e, f, g = initialize_fusion(dataset, output_params)
-    tile_arrays = a
+    dataset = input_output.BigStitcherDatasetChannel(
+        xml_path,
+        input_s3_path,
+        channel_num,
+        datastore=datastore
+    )
+    _, b, c, d, e, f, g = initialize_fusion(dataset, output_params)
     tile_transforms = b
     tile_sizes_zyx = c
     tile_aabbs = d
@@ -322,14 +306,13 @@ def run_fusion(
     output_volume = initialize_output_volume(output_params, output_volume_size)
     tile_layout = utils.parse_yx_tile_layout(xml_path, channel_num)
 
-    LOGGER.info(f"Number of Tiles: {len(tile_arrays)}")
-    LOGGER.info(f"{output_volume_size=}")
-    print('Tile layout')
-    print(tile_layout)
+    print(f"Tile layout {tile_layout}")
 
     # Set Blending
-    blending_options = {'max_projection': blend.MaxProjection(),
-                        'weighted_linear_blending': blend.WeightedLinearBlending(tile_aabbs)}
+    blending_options = {
+        'max_projection': blend.MaxProjection(),
+        'weighted_linear_blending': blend.WeightedLinearBlending(tile_aabbs)
+    }
     if not (blend_option in blending_options):
         raise ValueError(f"Please choose from the following blending options: {blending_options.keys()}")
     blend_module = blending_options[blend_option]
@@ -343,57 +326,121 @@ def run_fusion(
         CPU_CELL_SIZE = cpu_cell_size
 
     # Start the CPU Runtime
-    overlap_volume_sampler_overlapping_only = FusionVolumeSampler(tile_transforms,
-                                                tile_sizes_zyx,
-                                                tile_aabbs,
-                                                output_volume_size,
-                                                output_volume_origin,
-                                                CPU_CELL_SIZE,
-                                                output_params.chunksize[2:],
-                                                tile_layout,
-                                                traverse_overlap = True,
-                                                stride=volume_sampler_stride,
-                                                start=volume_sampler_start)
-    
-    overlap_volume_sampler_non_overlapping_only = FusionVolumeSampler(tile_transforms,
-                                            tile_sizes_zyx,
-                                            tile_aabbs,
-                                            output_volume_size,
-                                            output_volume_origin,
-                                            CPU_CELL_SIZE,
-                                            output_params.chunksize[2:],
-                                            tile_layout,
-                                            traverse_overlap = False,
-                                            stride=volume_sampler_stride,
-                                            start=volume_sampler_start)
+    overlap_volume_sampler_overlapping_only = FusionVolumeSampler(
+        tile_transforms,
+        tile_sizes_zyx,
+        tile_aabbs,
+        output_volume_size,
+        output_volume_origin,
+        CPU_CELL_SIZE,
+        output_params.chunksize[2:],
+        tile_layout,
+        traverse_overlap=True,
+        stride=volume_sampler_stride,
+        start=volume_sampler_start
+    )
 
+    overlap_volume_sampler_non_overlapping_only = FusionVolumeSampler(
+        tile_transforms,
+        tile_sizes_zyx,
+        tile_aabbs,
+        output_volume_size,
+        output_volume_origin,
+        CPU_CELL_SIZE,
+        output_params.chunksize[2:],
+        tile_layout,
+        traverse_overlap=False,
+        stride=volume_sampler_stride,
+        start=volume_sampler_start
+    )
+
+    # recreate chain for submission 
     overlap_volume_sampler = chain(overlap_volume_sampler_non_overlapping_only, overlap_volume_sampler_overlapping_only)
 
-    print(f"Num jobs: {len(overlap_volume_sampler_non_overlapping_only) + len(overlap_volume_sampler_overlapping_only)}")
+    print(f"Num jobs non overlapping: {len(overlap_volume_sampler_non_overlapping_only)}") 
+    print(f"Num jobs, overlapping: {len(overlap_volume_sampler_overlapping_only)}")
 
     store = output_volume.store
     write_root = getattr(store, "root", None) or getattr(store, "path", None)
     write_ds = output_volume.path 
 
     @ray.remote
-    def process_color_cell(curr_cell, src_ids, tile_transforms, tile_sizes_zyx, output_volume_origin, blend_module, 
+    def process_color_cell(curr_cell, src_ids, tile_transforms, tile_sizes_zyx, output_volume_origin, blend_module,
                            tile_paths, write_root, write_ds):
-        
-        cpu_fusion(tile_transforms, tile_sizes_zyx, output_volume_origin, blend_module, curr_cell, src_ids, 
+
+        cpu_fusion(tile_transforms, tile_sizes_zyx, output_volume_origin, blend_module, curr_cell, src_ids,
                    tile_paths, write_root, write_ds)
-        
+
         return None
+  
+    futures = []
+    total_cells = len(overlap_volume_sampler_non_overlapping_only) + len(overlap_volume_sampler_overlapping_only)
+    completed = 0
+    failed = 0
 
-    # submit one task per overlap cell 
-    futures = [
-        process_color_cell.remote(curr_cell, src_ids, tile_transforms, tile_sizes_zyx, output_volume_origin, 
-                                  blend_module, tile_paths, write_root, write_ds)
+    t_run0 = time.perf_counter()
+    last_pct_printed = -1
 
-        for i, (curr_cell, src_ids) in enumerate(overlap_volume_sampler)
-    ]
+    for i, (curr_cell, src_ids) in enumerate(overlap_volume_sampler, start=1):
+        futures.append(
+            process_color_cell.remote(
+                curr_cell, src_ids, tile_transforms, tile_sizes_zyx, output_volume_origin,
+                blend_module, tile_paths, write_root, write_ds
+            )
+        )
 
-    ray.get(futures)
+        # drain completions while we are submitting so progress prints during the run
+        done, futures = ray.wait(futures, num_returns=1, timeout=0)
+        while done:
+            try:
+                ray.get(done)
+                completed += len(done)
+            except Exception as e:
+                failed += len(done)
+                print(f"[fusion][ERROR] {len(done)} task(s) failed: {type(e).__name__}: {e}", flush=True)
 
+            progress_pct = (completed / total_cells) * 100.0
+              
+            pct_int = int(progress_pct)
+            if pct_int > last_pct_printed:
+                last_pct_printed = pct_int
+                elapsed = time.perf_counter() - t_run0
+                rate = completed / max(elapsed, 1e-9)
+                eta_s = (total_cells - completed) / max(rate, 1e-9)
+                print(
+                    f"[fusion] Progress: ok={completed} failed={failed} total={total_cells} ({pct_int}%) "
+                    f"elapsed={elapsed/60:.1f}m rate={rate:.2f} cells/s eta={eta_s/60:.1f}m",
+                    flush=True,
+                )
+            
+            done, futures = ray.wait(futures, num_returns=1, timeout=0)
+
+    # finish remaining tasks and keep printing progress
+    while futures:
+        done, futures = ray.wait(futures, num_returns=1, timeout=1.0)
+        if done:
+            try:
+                ray.get(done)
+                completed += len(done)
+            except Exception as e:
+                failed += len(done)
+                print(f"[fusion][ERROR] {len(done)} task(s) failed: {type(e).__name__}: {e}", flush=True)
+
+            progress_pct = (completed / total_cells) * 100.0
+            
+            pct_int = int(progress_pct)
+            if pct_int > last_pct_printed:
+                last_pct_printed = pct_int
+                elapsed = time.perf_counter() - t_run0
+                rate = completed / max(elapsed, 1e-9)
+                eta_s = (total_cells - completed) / max(rate, 1e-9)
+                print(
+                    f"[fusion] Progress: ok={completed} failed={failed} total={total_cells} ({pct_int}%) "
+                    f"elapsed={elapsed/60:.1f}m rate={rate:.2f} cells/s eta={eta_s/60:.1f}m",
+                    flush=True,
+                )
+    
+    # DEBUG ONLY
     # for i, (curr_cell, src_ids) in enumerate(overlap_volume_sampler):
     #     cpu_fusion(
     #         tile_transforms,
@@ -416,56 +463,68 @@ def cpu_fusion(
     src_ids: list[int],
     tile_paths,
     write_root,
-    write_ds
+    write_ds,
 ):
-    overlap_contributions: list[torch.Tensor] = []
+
+    z = int(cell_aabb[1] - cell_aabb[0])
+    y = int(cell_aabb[3] - cell_aabb[2])
+    x = int(cell_aabb[5] - cell_aabb[4])
+    vox = z * y * x
+    n_src = len(src_ids)
+
+    # print(f"[cpu_fusion] pid={os.getpid()} START shape=({z},{y},{x}) vox={vox:,} n_src={n_src} ")
+
+    t_total0 = time.perf_counter()
+
+    arr = get_out_arr(write_root, write_ds)
+
+    overlap_contributions: list[np.ndarray] = []
     for t_id in src_ids:
-        # Retrieve source image
-        image_slice: tuple[slice, slice, slice, slice, slice] = \
-                utils.calculate_image_crop(cell_aabb,
-                                            output_volume_origin,
-                                            tile_transforms[t_id],
-                                            tile_sizes_zyx[t_id],
-                                            device='cpu')
-
-        s3_read = s3fs.S3FileSystem(anon=True)
-        src_path = tile_paths[t_id]
-        store = s3fs.S3Map(root=src_path, s3=s3_read)
-        zarr_arr = zarr.open(store=store, mode="r")
-        src_img = zarr_arr[image_slice]
-
-        # src_bytes = src_img.nbytes
-        # src_mb = src_bytes / (1024 ** 2)
-        # src_gb = src_bytes / (1024 ** 3)
-        # print(
-        #     f"[fusion] src_img slice shape={src_img.shape}, "
-        #     f"size={src_mb:.2f} MiB ({src_gb:.4f} GiB)"
-        # )
+        image_slice: tuple[slice, slice, slice, slice, slice] = utils.calculate_image_crop(
+            cell_aabb,
+            output_volume_origin,
+            tile_transforms[t_id],
+            tile_sizes_zyx[t_id],
+        )
         
-        src_tensor = torch.Tensor(src_img.astype(np.int16))
+        zarr_arr = get_tile_arr(tile_paths[t_id])
+
+        t_read0 = time.perf_counter()
+        src_img = zarr_arr[image_slice]
+        t_read = time.perf_counter() - t_read0
 
         # Calculate sample field
-        sample_field = \
-            utils.calculate_sample_field(cell_aabb,
-                                        output_volume_origin,
-                                        tile_transforms[t_id],
-                                        tile_sizes_zyx[t_id],
-                                        device='cpu')
+        t_field0 = time.perf_counter()
+        sample_field = utils.calculate_sample_field_np(
+            cell_aabb,
+            output_volume_origin,
+            tile_transforms[t_id],
+            tile_sizes_zyx[t_id],
+        )
+        t_field = time.perf_counter() - t_field0
 
         # Perform interpolation
-        contribution = utils.interpolate(src_tensor,
-                                         sample_field,
-                                         device="cpu")
+        t_interp0 = time.perf_counter()
+        contribution = utils.interpolate_np(
+            src_img,
+            sample_field,
+        )
+        t_interp = time.perf_counter() - t_interp0
+
+        # print(f"[cpu_fusion] pid={os.getpid()} t_id={t_id} read={t_read:.3f}s field={t_field:.3f}s interp={t_interp:.3f}s", flush=True)
 
         overlap_contributions.append(contribution)
 
     # Perform blending
-    blended_cell = blend_module.blend(overlap_contributions,
-                                    device='cpu',
-                                    kwargs={
-                                    "chunk_tile_ids": src_ids,
-                                    "cell_box": cell_aabb
-                                    })
+    t_blend0 = time.perf_counter()
+    blended_cell = blend_module.blend(
+        overlap_contributions,
+        kwargs={
+            "chunk_tile_ids": src_ids,
+            "cell_box": cell_aabb,
+        },
+    )
+    t_blend = time.perf_counter() - t_blend0
 
     # Write
     output_slice = (
@@ -481,84 +540,12 @@ def cpu_fusion(
     blended_cell = np.clip(blended_cell, 0, 65535)
     output_chunk = blended_cell.astype(np.uint16)
 
-    # chunk_bytes = output_chunk.nbytes
-    # chunk_mb = chunk_bytes / (1024 ** 2)
-    # chunk_gb = chunk_bytes / (1024 ** 3)
-    # print(f"[fusion] output_chunk shape={output_chunk.shape}, size={chunk_mb:.2f} MiB ({chunk_gb:.4f} GiB)")
-
-    s3_write = s3fs.S3FileSystem(anon=False)
-    out_store = s3fs.S3Map(root=write_root, s3=s3_write)
-    arr = zarr.open(store=out_store, mode="a")[write_ds]
-
+    t_write0 = time.perf_counter()
     arr[output_slice] = np.ascontiguousarray(output_chunk)
+    t_write = time.perf_counter() - t_write0
 
-class CloudDataset(Dataset):
-    def __init__(
-        self,
-        tile_arrays: dict[int, input_output.InputArray],
-        tile_transforms: dict[int, list[geometry.Transform]],
-        tile_sizes_zyx: dict[int, tuple[int, int, int]],
-        tile_aabbs: dict[int, geometry.AABB],
-        output_volume_size: tuple[int, int, int],
-        output_volume_origin: tuple[float, float, float],
-        cell_size: tuple[int, int, int],
-        pin_memory: bool=True
-        ) -> None:
-        """
-        Input fields are produced from
-        fusion.initalize_fusion(..)
-
-        Following codebase convention,
-        input 3-ples are expected in zyx order.
-        """
-
-        # Store input arguments
-        self.tile_arrays: dict[int, input_output.InputArray] = tile_arrays
-        self.tile_transforms: dict[int, list[geometry.Transform]] = tile_transforms
-        self.tile_sizes_zyx: dict[int, tuple[int, int, int]] = tile_sizes_zyx
-        self.tile_aabbs: dict[int, geometry.AABB] = tile_aabbs
-        self.output_volume_size: tuple[int, int, int] = output_volume_size
-        self.output_volume_origin: tuple[float, float, float] = output_volume_origin
-        self.cell_size: tuple[int, int, int] = cell_size
-        self.pin_memory: bool = pin_memory
-
-    def __getitem__(self, input_bundle):
-        """
-        Return src_tensor associated with the
-        input cell_aabb/t_id.
-        """
-
-        cell_aabb, src_ids = input_bundle
-
-        src_tensors: list[torch.Tensor] = []
-        for t_id in src_ids:
-            image_slice: tuple[slice, slice, slice, slice, slice] = \
-            utils.calculate_image_crop(cell_aabb,
-                                        self.output_volume_origin,
-                                        self.tile_transforms[t_id],
-                                        self.tile_sizes_zyx[t_id],
-                                        device='cpu')
-
-            result = self.tile_arrays[t_id][image_slice]
-
-            # uint16 -> int16 for pytorch compatibility.
-            # Max intensity values of original data are close to 1000,
-            # no where near 1/2 uint16 (32,767), so this is safe.
-            if self.pin_memory:
-                result = torch.Tensor(result.astype(np.int16)).pin_memory()
-            else:
-                result = torch.Tensor(result.astype(np.int16))
-
-            src_tensors.append(result)
-
-        return cell_aabb, src_ids, src_tensors
-
-    def __len__(self):
-        z_cnt, y_cnt, x_cnt = \
-            get_cell_count_zyx(self.output_volume_size, self.cell_size)
-        total_cells = z_cnt * y_cnt * x_cnt
-        return total_cells
-
+    total = time.perf_counter() - t_total0
+    # print(f"[cpu_fusion] pid={os.getpid()} DONE blend={t_blend:.3f}s write={t_write:.3f}s total={total:.3f}s", flush=True)
 
 class FusionVolumeSampler(cq.VolumeSampler):
     def __init__(
@@ -635,8 +622,8 @@ class FusionVolumeSampler(cq.VolumeSampler):
         for t_id, o_ids in tile_to_overlap_ids.items():
             # This is the base nullspace
             t_aabb = list(self.tile_aabbs[t_id])
-            t_aabb[0] = 0
-            t_aabb[1] = output_volume_size[0]
+            # t_aabb[0] = 0
+            # t_aabb[1] = output_volume_size[0]
 
             for o_id in o_ids:
                 o_aabb = modified_overlaps[o_id]
@@ -711,25 +698,32 @@ class FusionVolumeSampler(cq.VolumeSampler):
         self,
         cell_box: geometry.AABB,
         transform_list: list[geometry.Transform],
-        src_vol_shape_zyx: tuple[int, int, int]
+        src_vol_shape_zyx: tuple[int, int, int],
     ) -> bool:
-        # Build the box
+        # Build the 8 corners (zyx) with +/-0.5 offsets
         z_min, z_max, y_min, y_max, x_min, x_max = cell_box
-        z_grid, y_grid, x_grid = torch.meshgrid(
-            torch.Tensor([z_min + 0.5, z_max - 0.5]),
-            torch.Tensor([y_min + 0.5, y_max - 0.5]),
-            torch.Tensor([x_min + 0.5, x_max - 0.5]),
-            indexing='ij'
-        )
-        cell_box_pts = torch.stack([z_grid, y_grid, x_grid], dim=-1)
+        zs = np.array([z_min + 0.5, z_max - 0.5], dtype=np.float32)
+        ys = np.array([y_min + 0.5, y_max - 0.5], dtype=np.float32)
+        xs = np.array([x_min + 0.5, x_max - 0.5], dtype=np.float32)
 
-        # Apply inverse transform
-        cell_box_pts = cell_box_pts + torch.Tensor(self.output_volume_origin)
+        cell_box_pts = np.array(
+            [[z, y, x] for z in zs for y in ys for x in xs],
+            dtype=np.float32
+        )  # (8, 3)
+
+        # Apply origin
+        cell_box_pts += np.asarray(self.output_volume_origin, dtype=np.float32).reshape(1, 3)
+
+        # Apply inverse transforms (NumPy)
         for tfm in reversed(transform_list):
-            cell_box_pts = tfm.backward(cell_box_pts, device='cpu')
+            cell_box_pts = tfm.backward_np(cell_box_pts)
 
-        # Check collision
-        cell_box_src: geometry.AABB = geometry.aabb_3d(cell_box_pts)
+        # AABB of transformed points (zyx)
+        z0, z1 = float(cell_box_pts[:, 0].min()), float(cell_box_pts[:, 0].max())
+        y0, y1 = float(cell_box_pts[:, 1].min()), float(cell_box_pts[:, 1].max())
+        x0, x1 = float(cell_box_pts[:, 2].min()), float(cell_box_pts[:, 2].max())
+        cell_box_src: geometry.AABB = (z0, z1, y0, y1, x0, x1)
+
         sv_z, sv_y, sv_x = src_vol_shape_zyx
         aabb_src: geometry.AABB = (0, sv_z, 0, sv_y, 0, sv_x)
 

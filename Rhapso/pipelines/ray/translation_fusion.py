@@ -1,10 +1,10 @@
-import Rhapso.fusion.aind_cloud_fusion.fusion as fusion
-import Rhapso.fusion.aind_cloud_fusion.input_output as input_output
+import Rhapso.translation_fusion.fusion as fusion
+import Rhapso.translation_fusion.input_output as input_output
 import xml.etree.ElementTree as ET
 import boto3
 from io import BytesIO
 
-class AffineFusion:
+class TranslationFusion:
     def __init__(self, xml_path, input_path, output_s3_path, channel, default_chunk_size, cpu_cell_size):
         self.xml_path = xml_path
         self.input_path = input_path
