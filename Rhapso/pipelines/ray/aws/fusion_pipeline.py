@@ -35,6 +35,7 @@ multiscale_cmd = (
     "from Rhapso.pipelines.ray.multiscale import MultiScale\n"
     f"cfg = json.loads(base64.b64decode(\\\"{serialized_config}\\\").decode())\n"
     "ms = MultiScale(\n"
+    "    xml_path=cfg[\\\"xml_path_multiscale\\\"],\n"
     "    zarr_path=cfg[\\\"multiscale_zarr_path\\\"],\n"
     "    chunk_size=cfg[\\\"multiscale_chunk_size\\\"],\n"
     "    n_lvls=cfg[\\\"n_lvls\\\"],\n"

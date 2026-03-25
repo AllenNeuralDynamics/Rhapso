@@ -1,15 +1,16 @@
 # AFFINE FUSION
 # -----------------------------------
-xml_path_translation_fusion: "s3://aind-open-data/HCR_823476-s1-ls2_2025-11-18_00-00-00_processed_2026-02-25_18-17-21/image_tile_alignment/bigstitcher.xml"
-input_path_translation_fusion: "s3://aind-open-data/HCR_823476-s1-ls2_2025-11-18_00-00-00_processed_2026-02-25_18-17-21/image_radial_correction/"
-output_s3_path_translation_fusion: "s3://aind-scratch-data/sean.fite/HCR_823476_s5_11-18-t1/fusion/fused.zarr"
+xml_path_translation_fusion: "s3://aind-open-data/HCR_823476-s1-ls2_2025-11-18_00-00-00_processed_2026-03-03_22-58-55/image_tile_alignment/bigstitcher.xml"
+input_path_translation_fusion: "s3://aind-open-data/HCR_823476-s1-ls2_2025-11-18_00-00-00_processed_2026-03-03_22-58-55/image_radial_correction/"
+output_s3_path_translation_fusion: "s3://aind-scratch-data/sean.fite/HCR_823476-11-18-t1/fusion/fused.zarr"
 channel: 488
 default_chunk_size: [1, 1, 128, 128, 128]
-cpu_cell_size: [256, 256, 256]
+cpu_cell_size: [640, 256, 256]
 
 # MULTISCALE
 # -----------------------------------
-multiscale_zarr_path: "s3://aind-scratch-data/sean.fite/HCR_823476_s5_12-24/channel_488.zarr/multiscale_fused"
+xml_path_multiscale: "s3://aind-open-data/HCR_823476-s1-ls2_2025-11-18_00-00-00_processed_2026-03-03_22-58-55/image_tile_alignment/bigstitcher.xml"
+multiscale_zarr_path: "s3://aind-scratch-data/sean.fite/HCR_823476-11-18-t1/fusion/fused.zarr"
 multiscale_chunk_size: [128, 128, 128]
 n_lvls: 6                                                              # Including base level
 scale_factor: [[1, 2, 2], [1, 2, 2], [2, 2, 2], [2, 2, 2], [2, 2, 2]]  # ZYX

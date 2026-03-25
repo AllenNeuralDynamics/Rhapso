@@ -546,7 +546,7 @@ def cpu_fusion(
 
     total = time.perf_counter() - t_total0
     # print(f"[cpu_fusion] pid={os.getpid()} DONE blend={t_blend:.3f}s write={t_write:.3f}s total={total:.3f}s", flush=True)
-
+    
 class FusionVolumeSampler(cq.VolumeSampler):
     def __init__(
         self,
@@ -622,8 +622,8 @@ class FusionVolumeSampler(cq.VolumeSampler):
         for t_id, o_ids in tile_to_overlap_ids.items():
             # This is the base nullspace
             t_aabb = list(self.tile_aabbs[t_id])
-            # t_aabb[0] = 0
-            # t_aabb[1] = output_volume_size[0]
+            t_aabb[0] = 0
+            t_aabb[1] = output_volume_size[0]
 
             for o_id in o_ids:
                 o_aabb = modified_overlaps[o_id]
@@ -696,36 +696,34 @@ class FusionVolumeSampler(cq.VolumeSampler):
 
     def _check_true_collision(
         self,
-        cell_box: geometry.AABB,
-        transform_list: list[geometry.Transform],
+        cell_box: "geometry.AABB",
+        transform_list: list["geometry.Transform"],
         src_vol_shape_zyx: tuple[int, int, int],
     ) -> bool:
-        # Build the 8 corners (zyx) with +/-0.5 offsets
         z_min, z_max, y_min, y_max, x_min, x_max = cell_box
+
+        # sample at voxel centers: (min+0.5, max-0.5) on each axis
         zs = np.array([z_min + 0.5, z_max - 0.5], dtype=np.float32)
         ys = np.array([y_min + 0.5, y_max - 0.5], dtype=np.float32)
         xs = np.array([x_min + 0.5, x_max - 0.5], dtype=np.float32)
 
-        cell_box_pts = np.array(
-            [[z, y, x] for z in zs for y in ys for x in xs],
-            dtype=np.float32
-        )  # (8, 3)
+        # 2x2x2 grid of corners, shape (2,2,2,3) in ZYX order
+        z_grid, y_grid, x_grid = np.meshgrid(zs, ys, xs, indexing="ij")
+        cell_box_pts = np.stack([z_grid, y_grid, x_grid], axis=-1).astype(np.float32)
 
-        # Apply origin
-        cell_box_pts += np.asarray(self.output_volume_origin, dtype=np.float32).reshape(1, 3)
+        # move into output/global space
+        cell_box_pts = cell_box_pts + np.asarray(self.output_volume_origin, dtype=np.float32)
 
-        # Apply inverse transforms (NumPy)
+        # apply inverse transforms in reverse order
         for tfm in reversed(transform_list):
+            # assumes tfm.backward can accept numpy arrays; if not, see note below
             cell_box_pts = tfm.backward_np(cell_box_pts)
 
-        # AABB of transformed points (zyx)
-        z0, z1 = float(cell_box_pts[:, 0].min()), float(cell_box_pts[:, 0].max())
-        y0, y1 = float(cell_box_pts[:, 1].min()), float(cell_box_pts[:, 1].max())
-        x0, x1 = float(cell_box_pts[:, 2].min()), float(cell_box_pts[:, 2].max())
-        cell_box_src: geometry.AABB = (z0, z1, y0, y1, x0, x1)
+        # compute AABB in source space
+        cell_box_src: "geometry.AABB" = geometry.aabb_3d_np(cell_box_pts)
 
         sv_z, sv_y, sv_x = src_vol_shape_zyx
-        aabb_src: geometry.AABB = (0, sv_z, 0, sv_y, 0, sv_x)
+        aabb_src: "geometry.AABB" = (0, sv_z, 0, sv_y, 0, sv_x)
 
         return utils.check_collision(cell_box_src, aabb_src)
 
