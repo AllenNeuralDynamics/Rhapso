@@ -3,7 +3,7 @@ from Rhapso.pipelines.ray.multiscale import MultiScale
 import yaml
 
 # Point to param file
-with open("Rhapso/pipelines/ray/param/fusion/HCR_000000-s40.yml", "r") as file:
+with open("Rhapso/pipelines/ray/param/fusion/HCR_823476.yml", "r") as file:
     config = yaml.safe_load(file)
 
 # FUSION
@@ -28,5 +28,5 @@ multiscale = MultiScale(
 )
 
 # Run pipeline
-fusion.execute_job()
+# fusion.execute_job()
 multiscale.run()
