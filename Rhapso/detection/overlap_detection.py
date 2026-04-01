@@ -56,13 +56,18 @@ class OverlapDetection():
             print(f"[OverlapDetection] Opening root zarr: {file_path}")
             try:
                 store = s3fs.S3Map(root=file_path, s3=s3)
-                zarr_array = zarr.open(store, mode='r')
-                print(f"[OverlapDetection] Successfully opened. Available multiscales: {list(zarr_array.keys())}")
-                dask_array = da.from_zarr(zarr_array)
+                zarr_obj = zarr.open(store, mode='r')
+                if isinstance(zarr_obj, zarr.hierarchy.Group):
+                    print(f"[OverlapDetection] Opened zarr Group. Available levels: {list(zarr_obj.keys())}")
+                    zarr_arr = zarr_obj['0']
+                else:
+                    print(f"[OverlapDetection] Opened zarr Array directly.")
+                    zarr_arr = zarr_obj
+                dask_array = da.from_zarr(zarr_arr)
                 dask_array = da.expand_dims(dask_array, axis=2)
                 shape = dask_array.shape
                 self.image_shape_cache[file_path] = shape
-                print(f"[OverlapDetection] Root shape (after expand): {shape}")
+                print(f"[OverlapDetection] Shape (after expand): {shape}")
             except Exception as e:
                 print(f"[OverlapDetection] ERROR opening root zarr: {e}")
                 raise
@@ -283,7 +288,7 @@ class OverlapDetection():
                 if is_split:
                     dim_base = self._split_tile_shape(row_i)
                 else:
-                    dim_base = self.load_image_metadata(os.path.join(self.prefix, row_i['file_path'], str(level)))
+                    dim_base = self.load_image_metadata(self.prefix)
 
                 # isotropic pyramid
                 s = float(2 ** level)  
@@ -312,7 +317,7 @@ class OverlapDetection():
                         if is_split:
                             dim_other = self._split_tile_shape(row_j)
                         else:
-                            dim_other = self.load_image_metadata(os.path.join(self.prefix, row_j['file_path'], str(level)))
+                            dim_other = self.load_image_metadata(self.prefix)
                     elif self.file_type == 'tiff':
                         dim_other = self.load_image_metadata(os.path.join(self.prefix, row_j['file_path']))
 

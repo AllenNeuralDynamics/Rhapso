@@ -18,7 +18,7 @@ class XMLToDataFrame:
 
         for il in root.findall(".//ImageLoader/zgroups/zgroup"):
             view_setup = il.get("setup")
-            timepoint = il.get("timepoint")
+            timepoint = il.get("tp") or il.get("timepoint")
             file_path = il.get("path")
             if file_path is None:
                 element_string = ET.tostring(il, encoding='unicode')
