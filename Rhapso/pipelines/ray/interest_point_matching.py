@@ -5,10 +5,17 @@ from Rhapso.matching.save_matches import SaveMatches
 import ray
 
 class InterestPointMatching:
-    def __init__(self, xml_input_path, n5_output_path, input_type, match_type, num_neighbors, redundancy, significance, 
-                 search_radius, num_required_neighbors, model_min_matches, inlier_threshold, min_inlier_ratio, num_iterations, 
-                 regularization_weight, image_file_prefix):
-        self.xml_input_path = xml_input_path
+    def __init__(self, xml_input_path, n5_output_path, input_type, match_type, num_neighbors, redundancy, significance,
+                 search_radius, num_required_neighbors, model_min_matches, inlier_threshold, min_inlier_ratio, num_iterations,
+                 regularization_weight, image_file_prefix, pair_with_view=None):
+        # Accept single path (str) or multiple paths (list)
+        if isinstance(xml_input_path, str):
+            self.xml_input_path = xml_input_path
+            self.xml_input_paths = [xml_input_path]
+        else:
+            self.xml_input_paths = list(xml_input_path)
+            self.xml_input_path = self.xml_input_paths[0]
+        self.pair_with_view = pair_with_view
         self.n5_output_path = n5_output_path
         self.input_type = input_type
         self.match_type = match_type              
@@ -25,13 +32,14 @@ class InterestPointMatching:
         self.image_file_prefix = image_file_prefix
 
     def match(self):
-        # Load XML
-        parser = XMLParserMatching(self.xml_input_path, self.input_type)
+        # Load XML(s)
+        parser = XMLParserMatching(self.xml_input_paths, self.input_type)
         data_global = parser.run()
         print("XML loaded and parsed")
 
         # Load and transform points
-        data_loader = LoadAndTransformPoints(data_global, self.xml_input_path, self.n5_output_path, self.match_type)
+        data_loader = LoadAndTransformPoints(data_global, self.xml_input_path, self.n5_output_path, self.match_type,
+                                             pair_with_view=self.pair_with_view)
         process_pairs, view_registrations = data_loader.run()
         print("Points loaded and transformed into global space")
 

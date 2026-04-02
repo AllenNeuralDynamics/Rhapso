@@ -7,7 +7,13 @@ XML Parser Matching parses xml content into memory
 
 class XMLParserMatching:
     def __init__(self, xml_input_path, input_type):
-        self.xml_input_path = xml_input_path  
+        # Accept single path (str) or multiple paths (list)
+        if isinstance(xml_input_path, str):
+            self.xml_input_paths = [xml_input_path]
+        else:
+            self.xml_input_paths = list(xml_input_path)
+        # Keep for backwards compat (used by LoadAndTransformPoints)
+        self.xml_input_path = self.xml_input_paths[0]
         self.input_type = input_type
         self.data_global = None
     
@@ -292,11 +298,40 @@ class XMLParserMatching:
         
         return xml_content
     
+    def _merge_parsed(self, base, other):
+        """Merge two parsed data_global dicts."""
+        # imageLoader: list concat
+        base['imageLoader'].extend(other['imageLoader'])
+        # viewRegistrations: dict merge (keyed by (tp, setup))
+        base['viewRegistrations'].update(other['viewRegistrations'])
+        # viewsInterestPoints: dict merge (keyed by (tp, setup))
+        base['viewsInterestPoints'].update(other['viewsInterestPoints'])
+        # viewSetup: merge sub-dicts
+        base['viewSetup']['byId'].update(other['viewSetup']['byId'])
+        base['viewSetup']['viewSizes'].update(
+            other['viewSetup']['viewSizes']
+        )
+        base['viewSetup']['viewVoxelSizes'].update(
+            other['viewSetup']['viewVoxelSizes']
+        )
+        return base
+
     def run(self):
         """
-        Executes the entry point of the script.
+        Parse all input XMLs and merge into a single data_global.
         """
+        # Parse first XML
+        self.xml_input_path = self.xml_input_paths[0]
         xml_content = self.get_xml_content()
         data_global = self.parse(xml_content)
+
+        # Parse and merge additional XMLs
+        for path in self.xml_input_paths[1:]:
+            self.xml_input_path = path
+            xml_content = self.get_xml_content()
+            other = self.parse(xml_content)
+            data_global = self._merge_parsed(data_global, other)
+
+        self.data_global = data_global
         return data_global
 

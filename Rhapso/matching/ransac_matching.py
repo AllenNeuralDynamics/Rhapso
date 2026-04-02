@@ -265,18 +265,27 @@ class RansacMatching:
         return best_inliers, best_model
 
     def create_candidates(self, desc_a, desc_b):
+        """Enumerate all subset pairs (SubsetMatcher style).
+
+        Each descriptor's ``subsets`` field contains C(n+r, n) subsets
+        of relative neighbor vectors.  We pair every subset from A with
+        every subset from B (index-paired within each subset) and return
+        all combinations so ``descriptor_distance`` can pick the best.
+        """
+        subsets_a = desc_a['subsets']
+        subsets_b = desc_b['subsets']
+
         match_list = []
-        
-        for a in range(1):
-            for b in range(1):
-
+        for sa in subsets_a:
+            for sb in subsets_b:
+                # sa and sb are arrays of shape (num_neighbors, 3)
+                # relative vectors, sorted by distance from basis point
                 matches = []
-                for i in range(self.num_required_neighbors):
-                    point_match = (desc_a['relative_descriptors'][i], desc_b['relative_descriptors'][i])
+                for i in range(len(sa)):
+                    point_match = (sa[i], sb[i])
                     matches.append(point_match)
-
                 match_list.append(matches)
-        
+
         return match_list
     
     def descriptor_distance(self, desc_a, desc_b):
@@ -320,7 +329,7 @@ class RansacMatching:
                 elif len(neighbors) > num_required_neighbors:
                     idx_sets = matcher["neighbors"] 
 
-                relative_vectors = neighbors - basis_point     
+                relative_vectors = neighbors - basis_point
 
                 # Final descriptor representation (as dict)
                 descriptor = {
@@ -329,7 +338,7 @@ class RansacMatching:
                     "neighbors": neighbors,
                     "relative_descriptors": relative_vectors,
                     "matcher": matcher,
-                    "subsets": np.stack([neighbors[list(c)] for c in idx_sets])
+                    "subsets": np.stack([relative_vectors[list(c)] for c in idx_sets])
                 }
 
                 descriptors.append(descriptor)

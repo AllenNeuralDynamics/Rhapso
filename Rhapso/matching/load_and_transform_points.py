@@ -9,11 +9,14 @@ Load and Transform Points loads interest points from n5 and transforms them into
 """
 
 class LoadAndTransformPoints:
-    def __init__(self, data_global, xml_input_path, n5_output_path, match_type):
+    def __init__(self, data_global, xml_input_path, n5_output_path, match_type,
+                 pair_with_view=None):
         self.data_global = data_global
         self.xml_input_path = xml_input_path
         self.n5_output_path = n5_output_path
         self.match_type = match_type
+        # If set, only generate pairs that include this view (tp, setup)
+        self.pair_with_view = pair_with_view
     
     def transform_interest_points(self, points, transformation_matrix):
         """
@@ -446,6 +449,15 @@ class LoadAndTransformPoints:
             return pointsA, pointsB, viewA_str, viewB_str, label
 
         setup['pairs'] = self.expand_pairs_with_labels(setup['pairs'], view_ids_global)
+
+        # Filter pairs to only include those containing pair_with_view
+        if self.pair_with_view is not None:
+            anchor = self.pair_with_view
+            setup['pairs'] = [
+                (va, vb, label) for va, vb, label in setup['pairs']
+                if va == anchor or vb == anchor
+            ]
+            print(f"[LoadAndTransformPoints] Filtered to {len(setup['pairs'])} pairs containing {anchor}")
 
         # launch Ray tasks
         futures = [

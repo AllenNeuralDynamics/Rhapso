@@ -7,7 +7,13 @@ XML to Dataframe Solver is a Solver specific XML parsing tool
 
 class XMLToDataFrameSolver:
     def __init__(self, xml_file):
-        self.xml_content = xml_file
+        # Accept single XML string or list of XML strings
+        if isinstance(xml_file, str):
+            self.xml_contents = [xml_file]
+        else:
+            self.xml_contents = list(xml_file)
+        # Keep for backwards compat
+        self.xml_content = self.xml_contents[0]
 
     def parse_image_loader_zarr(self, root):
         """
@@ -195,19 +201,31 @@ class XMLToDataFrameSolver:
             length = False  
         return length
 
+    def _parse_single(self, xml_content):
+        """Parse a single XML string into DataFrames."""
+        root = ET.fromstring(xml_content)
+        try:
+            image_loader = self.route_image_loader(root)
+        except Exception:
+            image_loader = pd.DataFrame()
+        return {
+            "image_loader": image_loader,
+            "view_setups": self.parse_view_setups(root),
+            "view_registrations": self.parse_view_registrations(root),
+            "view_interest_points": self.parse_view_interest_points(root),
+        }
+
     def run(self):
         """
-        Executes the entry point of the script.
+        Parse all input XMLs and merge into combined DataFrames.
         """
-        root = ET.fromstring(self.xml_content)
-        image_loader_df = self.route_image_loader(root)
-        view_setups_df = self.parse_view_setups(root)
-        view_registrations_df = self.parse_view_registrations(root)
-        view_interest_points_df = self.parse_view_interest_points(root)
+        result = self._parse_single(self.xml_contents[0])
 
-        return {
-            "image_loader": image_loader_df,
-            "view_setups": view_setups_df,
-            "view_registrations": view_registrations_df,
-            "view_interest_points": view_interest_points_df,
-        }
+        for xml_content in self.xml_contents[1:]:
+            other = self._parse_single(xml_content)
+            for key in result:
+                result[key] = pd.concat(
+                    [result[key], other[key]], ignore_index=True
+                )
+
+        return result
