@@ -82,20 +82,32 @@ class ImageReader:
             dask_array = img.get_dask_stack()[0, 0, 0, :, :, :]
         
         elif self.file_type == "zarr":
-            s3 = s3fs.S3FileSystem(anon=False)
             full_path = f"{file_path}"
+            is_local = not full_path.startswith("s3://")
             try:
-                store = s3fs.S3Map(root=full_path, s3=s3)
-                zarr_array = zarr.open(store, mode='r')
-                dask_array = da.from_zarr(zarr_array)[0, 0, :, :, :]
+                if is_local:
+                    zarr_array = zarr.open(full_path, mode='r')
+                else:
+                    s3 = s3fs.S3FileSystem(anon=False)
+                    store = s3fs.S3Map(root=full_path, s3=s3)
+                    zarr_array = zarr.open(store, mode='r')
+                if zarr_array.ndim == 5:
+                    dask_array = da.from_zarr(zarr_array)[0, 0, :, :, :]
+                elif zarr_array.ndim == 3:
+                    dask_array = da.from_zarr(zarr_array)
+                else:
+                    raise ValueError(f"Expected 3D or 5D zarr, got {zarr_array.ndim}D with shape {zarr_array.shape}")
             except Exception as e:
                 print(f"[ImageReader] ERROR opening zarr at {full_path}: {e}")
                 # Try to inspect root to show available multiscales
                 try:
                     root_path = full_path.rsplit('/', 1)[0]
                     print(f"[ImageReader] Attempting to inspect root zarr at: {root_path}")
-                    root_store = s3fs.S3Map(root=root_path, s3=s3)
-                    root_zarr = zarr.open(root_store, mode='r')
+                    if is_local:
+                        root_zarr = zarr.open(root_path, mode='r')
+                    else:
+                        root_store = s3fs.S3Map(root=root_path, s3=s3)
+                        root_zarr = zarr.open(root_store, mode='r')
                     available_levels = list(root_zarr.keys()) if hasattr(root_zarr, 'keys') else 'unknown'
                     print(f"[ImageReader] Available multiscale levels at root: {available_levels}")
                 except Exception as e2:

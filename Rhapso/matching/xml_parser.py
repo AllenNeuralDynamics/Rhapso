@@ -126,7 +126,10 @@ class XMLParserMatching:
                 view_setup = il.get("setup")
                 timepoint = il.get('timepoint') if 'timepoint' in il else il.get('tp')
                 file_path = (il.get("path") or il.findtext("path") or "").strip()
-                channel = file_path.split("_ch_", 1)[1].split(".ome.zarr", 1)[0]
+                if "_ch_" in file_path:
+                    channel = file_path.split("_ch_", 1)[1].split(".ome.zarr", 1)[0]
+                else:
+                    channel = "0"  # default channel for non-exaSPIM paths
 
                 image_loader_data.append(
                     {
