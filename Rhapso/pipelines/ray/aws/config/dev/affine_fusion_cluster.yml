@@ -1,6 +1,7 @@
 cluster_name: rhapso-fusion-cluster-ray-123456
-max_workers: 40
-min_workers: 40
+max_workers: 30
+min_workers: 30
+idle_timeout_minutes: 30 
 
 provider:
   type: aws
@@ -25,8 +26,6 @@ available_node_types:
           Tags:
             - Key: Owner
               Value: sean.fite@alleninstitute.org
-            - Key: PROJECT
-              Value: exaSPIM
 
   ray.worker.default:
     node_config:
@@ -40,8 +39,8 @@ available_node_types:
           Tags:
             - Key: Owner
               Value: sean.fite@alleninstitute.org
-            - Key: PROJECT
-              Value: exaSPIM
+
+# add project tag for exaSPIM
 
 head_node_type: ray.head.default
 
@@ -63,6 +62,7 @@ setup_commands:
 head_start_ray_commands:
   - ray stop
   - ray start --head --port=6379 --dashboard-host=0.0.0.0 --autoscaling-config=~/ray_bootstrap_config.yaml 
+  - python3 -m Rhapso.pipelines.ray.affine_fusion
 
 worker_start_ray_commands:
   - ray stop
@@ -74,12 +74,12 @@ worker_start_ray_commands:
 # python3 setup.py bdist_wheel 
 
 # RAY UP / DOWN / CLEAR CACHE COMMANDS
-# ray up fusion_cluster_sean.yml --no-config-cache
-# ray down fusion_cluster_sean.yml
+# ray up affine_fusion_cluster.yml --no-config-cache
+# ray down affine_fusion_cluster.yml
 # rm -rf ~/.cache/ray
 
 # ACCESS RAY DASHBOARD
-# ssh -i /Users/sean.fite/Desktop/AllenInstitute/Auth/AWS/EC2-SSH-KEY/aind-ray-cluster.pem -L 8265:localhost:8265 ubuntu@35.85.51.80
+# ssh -i /Users/sean.fite/Desktop/AllenInstitute/Auth/AWS/EC2-SSH-KEY/aind-ray-cluster.pem -L 8265:localhost:8265 ubuntu@44.247.156.104 
 # http://localhost:8265
 
 # TO FIX

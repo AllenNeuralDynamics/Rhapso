@@ -1,0 +1,308 @@
+{
+  "ng_link": "https://neuroglancer-demo.appspot.com/#!s3://aind-scratch-data/s3://aind-scratch-data/sean.fite/new-test/HCR_000000-s107-ls1_2026-01-23_00-00-00_processed_2026-01-24_06-00-53/fusion/fused_ng.json",
+  "dimensions": {
+    "x": [
+      9.201793828644069e-08,
+      "m"
+    ],
+    "y": [
+      9.201793828644069e-08,
+      "m"
+    ],
+    "z": [
+      4.4860451398192966e-07,
+      "m"
+    ],
+    "c'": [
+      1,
+      ""
+    ],
+    "t": [
+      0.001,
+      "s"
+    ]
+  },
+  "layers": [
+    {
+      "type": "image",
+      "source": [
+        {
+          "url": "zarr://s3://aind-scratch-data/sean.fite/new-test/HCR_000000-s107-ls1_2026-01-23_00-00-00_processed_2026-01-24_06-00-53/fusion/ch_488/fused.zarr/",
+          "transform": {
+            "matrix": [
+              [
+                1.0,
+                0.0,
+                0.0,
+                0.0,
+                0.0,
+                0.0
+              ],
+              [
+                0.0,
+                1.0,
+                0.0,
+                0.0,
+                0.0,
+                0.0
+              ],
+              [
+                0.0,
+                0.0,
+                1.0,
+                0.0,
+                0.0,
+                0.0
+              ],
+              [
+                0.0,
+                0.0,
+                0.0,
+                1.0,
+                0.0,
+                0.0
+              ],
+              [
+                0.0,
+                0.0,
+                0.0,
+                0.0,
+                1.0,
+                0.0
+              ]
+            ],
+            "outputDimensions": {
+              "t": [
+                0.001,
+                "s"
+              ],
+              "c'": [
+                1,
+                ""
+              ],
+              "z": [
+                4.4860451398192966e-07,
+                "m"
+              ],
+              "y": [
+                9.201793828644069e-08,
+                "m"
+              ],
+              "x": [
+                9.201793828644069e-08,
+                "m"
+              ]
+            }
+          }
+        }
+      ],
+      "localDimensions": {
+        "c'": [
+          1,
+          ""
+        ]
+      },
+      "shaderControls": {
+        "normalized": {
+          "range": [
+            90,
+            400
+          ]
+        }
+      },
+      "shader": "#uicontrol vec3 color color(default=\"#59d5f8\")\n#uicontrol invlerp normalized\nvoid main() {\nemitRGB(color * normalized());\n}",
+      "visible": true,
+      "opacity": 1.0,
+      "name": "CH_488",
+      "blend": "additive"
+    },
+    {
+      "type": "image",
+      "source": [
+        {
+          "url": "zarr://s3://aind-scratch-data/sean.fite/new-test/HCR_000000-s107-ls1_2026-01-23_00-00-00_processed_2026-01-24_06-00-53/fusion/ch_561/fused.zarr/",
+          "transform": {
+            "matrix": [
+              [
+                1.0,
+                0.0,
+                0.0,
+                0.0,
+                0.0,
+                0.0
+              ],
+              [
+                0.0,
+                1.0,
+                0.0,
+                0.0,
+                0.0,
+                0.0
+              ],
+              [
+                0.0,
+                0.0,
+                1.0,
+                0.0,
+                0.0,
+                0.0
+              ],
+              [
+                0.0,
+                0.0,
+                0.0,
+                1.0,
+                0.0,
+                0.0
+              ],
+              [
+                0.0,
+                0.0,
+                0.0,
+                0.0,
+                1.0,
+                0.0
+              ]
+            ],
+            "outputDimensions": {
+              "t": [
+                0.001,
+                "s"
+              ],
+              "c'": [
+                1,
+                ""
+              ],
+              "z": [
+                4.4860451398192966e-07,
+                "m"
+              ],
+              "y": [
+                9.201793828644069e-08,
+                "m"
+              ],
+              "x": [
+                9.201793828644069e-08,
+                "m"
+              ]
+            }
+          }
+        }
+      ],
+      "localDimensions": {
+        "c'": [
+          1,
+          ""
+        ]
+      },
+      "shaderControls": {
+        "normalized": {
+          "range": [
+            90,
+            400
+          ]
+        }
+      },
+      "shader": "#uicontrol vec3 color color(default=\"#f5b64a\")\n#uicontrol invlerp normalized\nvoid main() {\nemitRGB(color * normalized());\n}",
+      "visible": true,
+      "opacity": 1.0,
+      "name": "CH_561",
+      "blend": "additive"
+    },
+    {
+      "type": "image",
+      "source": [
+        {
+          "url": "zarr://s3://aind-scratch-data/sean.fite/new-test/HCR_000000-s107-ls1_2026-01-23_00-00-00_processed_2026-01-24_06-00-53/fusion/ch_638/fused.zarr/",
+          "transform": {
+            "matrix": [
+              [
+                1.0,
+                0.0,
+                0.0,
+                0.0,
+                0.0,
+                0.0
+              ],
+              [
+                0.0,
+                1.0,
+                0.0,
+                0.0,
+                0.0,
+                0.0
+              ],
+              [
+                0.0,
+                0.0,
+                1.0,
+                0.0,
+                0.0,
+                0.0
+              ],
+              [
+                0.0,
+                0.0,
+                0.0,
+                1.0,
+                0.0,
+                0.0
+              ],
+              [
+                0.0,
+                0.0,
+                0.0,
+                0.0,
+                1.0,
+                0.0
+              ]
+            ],
+            "outputDimensions": {
+              "t": [
+                0.001,
+                "s"
+              ],
+              "c'": [
+                1,
+                ""
+              ],
+              "z": [
+                4.4860451398192966e-07,
+                "m"
+              ],
+              "y": [
+                9.201793828644069e-08,
+                "m"
+              ],
+              "x": [
+                9.201793828644069e-08,
+                "m"
+              ]
+            }
+          }
+        }
+      ],
+      "localDimensions": {
+        "c'": [
+          1,
+          ""
+        ]
+      },
+      "shaderControls": {
+        "normalized": {
+          "range": [
+            90,
+            400
+          ]
+        }
+      },
+      "shader": "#uicontrol vec3 color color(default=\"#f25b5b\")\n#uicontrol invlerp normalized\nvoid main() {\nemitRGB(color * normalized());\n}",
+      "visible": true,
+      "opacity": 1.0,
+      "name": "CH_638",
+      "blend": "additive"
+    }
+  ],
+  "showAxisLines": false,
+  "showScaleBar": false
+}

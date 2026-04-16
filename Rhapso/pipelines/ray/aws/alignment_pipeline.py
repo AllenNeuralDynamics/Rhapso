@@ -5,7 +5,7 @@ import json
 import base64, json
 from pathlib import Path
 
-with open("Rhapso/pipelines/ray/param/exaSPIM_802450.yml", "r") as file:
+with open("Rhapso/pipelines/ray/param/alignment/exaSPIM_794495.yml", "r") as file:
     config = yaml.safe_load(file)
 
 serialized_config = base64.b64encode(json.dumps(config).encode()).decode()
@@ -213,10 +213,10 @@ try:
     solver_rigid.run()
     exec_on_cluster("Matching (affine)", unified_yml, matching_cmd_affine, prefix)
     solver_affine.run()
-    # exec_on_cluster("Split Dataset", unified_yml, split_cmd, prefix)
-    # exec_on_cluster("Matching (split_affine)", unified_yml, matching_cmd_split_affine, prefix)
-    # solver_split_affine.run()
-    # print("\n✅ Pipeline complete.")
+    exec_on_cluster("Split Dataset", unified_yml, split_cmd, prefix)
+    exec_on_cluster("Matching (split_affine)", unified_yml, matching_cmd_split_affine, prefix)
+    solver_split_affine.run()
+    print("\n✅ Pipeline complete.")
 
 except subprocess.CalledProcessError as e:
     print(f"❌ Pipeline error: {e}")

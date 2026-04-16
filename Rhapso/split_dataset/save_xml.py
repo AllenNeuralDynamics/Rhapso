@@ -538,11 +538,13 @@ class SaveXML:
         # (Re)build ViewSetups for each new split view
         for view in self.self_definition:
             new_id = _norm_id(view['new_view'])
-            # old_id = _norm_id(view['old_view'])   # not strictly needed here
+            # THIS is the original tile id we want to use for illumination
+            old_id = _norm_id(view['old_view'])
 
             angle       = view['angle']
             channel     = view['channel']
-            illumination = view['illumination']
+            # 🔑 illumination = original tile id (OldId), NOT the old illumination=0
+            illumination = old_id
             tile        = new_id
             voxel_unit  = view['voxel_unit']
             voxel_size  = view['voxel_dim']
