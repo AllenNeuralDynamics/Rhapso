@@ -6,6 +6,7 @@ import boto3
 from io import BytesIO
 import io
 import json
+import time
 
 """
 Save Interest Points saves interest points as N5 and updates the xml with pathways
@@ -242,8 +243,19 @@ class SaveInterestPoints:
         for _, row in self.image_loader_df.iterrows():
             view_id = f"timepoint: {row['timepoint']}, setup: {row['view_setup']}"
             n5_path = f"interestpoints.n5/tpId_{row['timepoint']}_viewSetupId_{row['view_setup']}/beads"
-            self.save_interest_points_to_n5(view_id, n5_path)
-            self.save_intensities_to_n5(view_id, n5_path)
+            # Retry on FileNotFoundError: zarr's write-then-rename pattern can fail
+            # transiently on network filesystems (e.g. /scratch/ on EFS/NFS) where
+            # the temp file's directory entry isn't immediately visible to the rename
+            # syscall. Both save functions delete before writing, so retries are safe.
+            for attempt in range(3):
+                try:
+                    self.save_interest_points_to_n5(view_id, n5_path)
+                    self.save_intensities_to_n5(view_id, n5_path)
+                    break
+                except FileNotFoundError:
+                    if attempt == 2:
+                        raise
+                    time.sleep(0.5)
 
         path = self.n5_output_file_prefix + "interestpoints.n5"
         
