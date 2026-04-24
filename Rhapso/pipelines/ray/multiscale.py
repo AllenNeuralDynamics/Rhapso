@@ -50,8 +50,10 @@ class MultiScale:
         array, dataset_shape, chunk_size, voxel_size = prep.run(array)
         print(f"[MultiScale] Prepared array shape={dataset_shape}, chunks={chunk_size}")
 
-        # Open root + channel group and write OME metadata
-        ome = OMEMetadata(self.zarr_path, list(dataset_shape), self.scale_factor, voxel_size, self.n_lvls, list(chunk_size))
+        # Open root + channel group and write OME metadata.
+        # origin=None suppresses half-pixel translation injection so the
+        # output .zattrs has pure-scale entries matching the fixed image.
+        ome = OMEMetadata(self.zarr_path, list(dataset_shape), self.scale_factor, voxel_size, self.n_lvls, list(chunk_size), origin=None)
         channel_group, stack_name, scale_factors = ome.run()
         print(f"[MultiScale] Using channel group '{stack_name}'")
 

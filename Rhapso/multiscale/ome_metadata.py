@@ -23,7 +23,7 @@ class OMEMetadata:
         self.n_lvls = n_lvls
         self.chunk_size = chunk_size
         self.channel_names = channel_names
-        self.origin = origin or [0.0, 0.0, 0.0]
+        self.origin = origin  # None means no translation entries in output .zattrs
 
     @staticmethod
     def is_s3_path(path: str) -> bool:
