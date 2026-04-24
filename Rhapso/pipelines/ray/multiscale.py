@@ -10,8 +10,24 @@ Multiscle Pipeline
 """
 
 class MultiScale:
-    def __init__(self, xml_path, zarr_path: str, chunk_size: List[int], n_lvls: int, scale_factor, 
-                 target_block_size_mb: int, base_level: int):
+    def __init__(self, zarr_path: str, chunk_size: List[int], n_lvls: int, scale_factor,
+                 target_block_size_mb: int, base_level: int, xml_path=None,
+                 voxel_size: List[float] = None, reducer=None):
+        """
+        Parameters
+        ----------
+        voxel_size : list[float], optional
+            Explicit ZYX voxel size (in micrometers) for the base level.
+            When provided, overrides reading voxel size from a
+            BigStitcher XML. Required if ``xml_path`` is not given.
+        xml_path : str, optional
+            BigStitcher XML path. Ignored when ``voxel_size`` is given.
+        reducer : callable, optional
+            Per-block downsampling function forwarded to
+            :class:`PyramidExecutor`. Defaults to windowed-mean. Use
+            ``PyramidExecutor.windowed_min`` / ``windowed_max`` for
+            integer segmentation or mask data.
+        """
         self.xml_path = xml_path
         self.zarr_path = zarr_path
         self.chunk_size = chunk_size
@@ -19,13 +35,18 @@ class MultiScale:
         self.scale_factor = scale_factor
         self.target_block_size_mb = target_block_size_mb
         self.base_level = base_level
+        self.voxel_size = voxel_size
+        self.reducer = reducer
 
     def multiscale(self) -> None:
         array = da.from_zarr(f"{self.zarr_path}/{self.base_level}")
         print(f"[MultiScale] Loading base level from {self.zarr_path}/{self.base_level}")
 
         # Normalize to TCZYX + clamp chunks
-        prep = ArrayAndChunkPrep(self.chunk_size, self.xml_path, dim=5)
+        prep = ArrayAndChunkPrep(
+            self.chunk_size, xml_path=self.xml_path, dim=5,
+            voxel_size=self.voxel_size,
+        )
         array, dataset_shape, chunk_size, voxel_size = prep.run(array)
         print(f"[MultiScale] Prepared array shape={dataset_shape}, chunks={chunk_size}")
 
@@ -41,7 +62,10 @@ class MultiScale:
         print(f"[MultiScale] Block shape ZYX={block_shape_zyx}")
 
         # Execute multiscale pyramid
-        executor = PyramidExecutor(self.n_lvls, scale_factors, tuple(chunk_size), block_shape_zyx, self.zarr_path, self.base_level)
+        executor = PyramidExecutor(
+            self.n_lvls, scale_factors, tuple(chunk_size), block_shape_zyx,
+            self.zarr_path, self.base_level, reducer=self.reducer,
+        )
         executor.run(channel_group)
         print("[MultiScale] Pyramid build complete")
 

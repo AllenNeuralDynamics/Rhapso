@@ -9,10 +9,24 @@ Pads arrays to TCZYX and clamps chunks to data shape.
 """
 
 class ArrayAndChunkPrep:
-    def __init__(self, chunk_size: List[int], xml_path, dim: int = 5) -> None:
+    def __init__(self, chunk_size: List[int], xml_path=None, dim: int = 5,
+                 voxel_size: List[float] = None) -> None:
+        """
+        Parameters
+        ----------
+        voxel_size : list[float], optional
+            Explicit ZYX voxel size (in micrometers). When provided, skips
+            the BigStitcher XML read. Useful when the caller already has
+            the base-level physical spacing in hand (e.g. from an OME-NGFF
+            multiscales entry).
+        xml_path : str, optional
+            BigStitcher XML path. Required if ``voxel_size`` is not given;
+            ignored otherwise.
+        """
         self.chunk_size = chunk_size
         self.xml_path = xml_path
         self.dim = dim
+        self.voxel_size = voxel_size
 
     def voxel_size_zyx_from_xml(self) -> list[float]:
         if self.xml_path.startswith("s3://"):
@@ -50,9 +64,16 @@ class ArrayAndChunkPrep:
         """
         Entry point
         """
-        voxel_size = self.voxel_size_zyx_from_xml()
+        if self.voxel_size is not None:
+            voxel_size = [float(v) for v in self.voxel_size]
+        elif self.xml_path is not None:
+            voxel_size = self.voxel_size_zyx_from_xml()
+        else:
+            raise ValueError(
+                "ArrayAndChunkPrep requires either voxel_size or xml_path"
+            )
         arr = self._pad_array_n_d(data)
         dataset_shape = self._compute_dataset_shape(arr)
         full_chunks = self._clamp_chunks(dataset_shape)
-        
+
         return arr, dataset_shape, full_chunks, voxel_size

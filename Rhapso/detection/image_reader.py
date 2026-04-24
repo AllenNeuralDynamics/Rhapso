@@ -192,14 +192,35 @@ class ImageReader:
                 crop_min_scaled[1]:crop_max_scaled[1] + 1,
                 crop_min_scaled[2]:crop_max_scaled[2] + 1
             ]
+            # After cropping, detected peaks land at coords relative to
+            # the CROPPED chunk's origin (0..chunk_size). The subsequent
+            # ``DoG.apply_lower_bounds(peaks, lb)`` step adds ``lb``
+            # elementwise — that addition happens BEFORE
+            # ``upsample_coordinates`` scales up to L0, so ``lb`` must
+            # be in the same array-voxel unit system as the peaks.
+            # Without this correction, ``lower_bound`` is (0,0,0) in
+            # split-tile mode (it comes from the tile-local
+            # ``_split_tile_shape`` bounds which always start at zero),
+            # so every tile's peaks re-origin to (0,0,0) and all tiles'
+            # IPs collapse into the global frame's top-left corner —
+            # visible in ``03-tile_edge_filter/moving.png`` as IPs
+            # clustered in the 0..tile_size region regardless of which
+            # grid cell the tile is supposed to cover. Add
+            # ``crop_min_scaled`` so the crop offset propagates into
+            # the peak coordinate transform.
+            lower_bound = [
+                int(lower_bound[i]) + int(crop_min_scaled[i])
+                for i in range(3)
+            ]
+            print(f"[ImageReader] crop offset applied → lower_bound={lower_bound}")
 
         # Load image chunk into mem
         downsampled_image_chunk = downsampled_stack[lb[0]:ub[0]+1, lb[1]:ub[1]+1, lb[2]:ub[2]+1].compute()
-    
+
         interval_key = (
             tuple(lb),
             tuple(ub),
-            tuple((ub[0] - lb[0]+1, ub[1] - lb[1]+1, ub[2] - lb[2]+1))  
+            tuple((ub[0] - lb[0]+1, ub[1] - lb[1]+1, ub[2] - lb[2]+1))
         )
 
         return view_id, interval_key, downsampled_image_chunk, offset, lower_bound

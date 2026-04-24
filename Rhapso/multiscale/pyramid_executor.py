@@ -11,14 +11,24 @@ Handles windowed downsampling and block-wise execution using Ray.
 """
 
 class PyramidExecutor:
-    def __init__(self, n_lvls: int, scale_factors, chunk_size: Tuple[int, ...], block_shape_zyx: Tuple[int, int, int], 
-                 zarr_path: str, base_level: int) -> None:
+    def __init__(self, n_lvls: int, scale_factors, chunk_size: Tuple[int, ...], block_shape_zyx: Tuple[int, int, int],
+                 zarr_path: str, base_level: int, reducer=None) -> None:
+        """
+        Parameters
+        ----------
+        reducer : callable, optional
+            Function ``(array, window_size) -> downsampled_array`` applied
+            per block. Defaults to :meth:`windowed_mean`. Use
+            :meth:`windowed_min` / :meth:`windowed_max` for segmentation
+            or mask-style data where label/value blending is unwanted.
+        """
         self.n_lvls = n_lvls
         self.scale_factors = scale_factors
         self.chunk_size = chunk_size
         self.block_shape_zyx = block_shape_zyx
         self.zarr_path = zarr_path
         self.base_level = base_level
+        self.reducer = reducer if reducer is not None else PyramidExecutor.windowed_mean
 
     @staticmethod
     def reshape_windowed(array: npt.NDArray[Any], window_size: Sequence[int]) -> npt.NDArray[Any]:
@@ -36,6 +46,24 @@ class PyramidExecutor:
     def windowed_mean(array: npt.NDArray[Any], window_size: Sequence[int], **kwargs: Any) -> npt.NDArray[Any]:
         reshaped = PyramidExecutor.reshape_windowed(array, window_size)
         result: npt.NDArray[Any] = reshaped.mean(
+            axis=tuple(range(1, reshaped.ndim, 2)), **kwargs
+        )
+        return result
+
+    @staticmethod
+    def windowed_min(array: npt.NDArray[Any], window_size: Sequence[int], **kwargs: Any) -> npt.NDArray[Any]:
+        """Per-block minimum. Preserves label boundaries for integer segmentation."""
+        reshaped = PyramidExecutor.reshape_windowed(array, window_size)
+        result: npt.NDArray[Any] = reshaped.min(
+            axis=tuple(range(1, reshaped.ndim, 2)), **kwargs
+        )
+        return result
+
+    @staticmethod
+    def windowed_max(array: npt.NDArray[Any], window_size: Sequence[int], **kwargs: Any) -> npt.NDArray[Any]:
+        """Per-block maximum. Preserves non-background labels for sparse masks."""
+        reshaped = PyramidExecutor.reshape_windowed(array, window_size)
+        result: npt.NDArray[Any] = reshaped.max(
             axis=tuple(range(1, reshaped.ndim, 2)), **kwargs
         )
         return result
@@ -105,7 +133,10 @@ class PyramidExecutor:
                     )
 
                     futures.append(
-                        process_block_instruction_remote.remote(src_level, dst_level, src_slices, dst_slices, sz, sy, sx, channel_group)
+                        process_block_instruction_remote.remote(
+                            src_level, dst_level, src_slices, dst_slices,
+                            sz, sy, sx, channel_group, self.reducer,
+                        )
                     )
 
                     x0 = x1
@@ -181,10 +212,10 @@ class PyramidExecutor:
 
 @ray.remote
 def process_block_instruction_remote(src_level: int, dst_level: int, src_slices: Tuple[slice, ...], dst_slices: Tuple[slice, ...],
-                                     sz: int, sy: int, sx: int, channel_group):
+                                     sz: int, sy: int, sx: int, channel_group, reducer):
     src_arr = channel_group[str(src_level)]
     dst_arr = channel_group[str(dst_level)]
     src_block = np.asarray(src_arr[src_slices])
     window_size = (1, 1, sz, sy, sx)
-    dst_block = PyramidExecutor.windowed_mean(src_block, window_size=window_size)
+    dst_block = reducer(src_block, window_size=window_size)
     dst_arr[dst_slices] = dst_block
