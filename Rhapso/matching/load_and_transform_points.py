@@ -8,6 +8,16 @@ import ray
 Load and Transform Points loads interest points from n5 and transforms them into global space
 """
 
+# Name of the per-split-tile translation ViewTransform emitted by
+# ``Rhapso.splitting.split_images`` for BigStitcher provenance.
+# Detection stores IPs in L0 world voxel coords (see
+# ``Rhapso/detection/image_reader.py`` L195-214), so this translation
+# is redundant with what is already baked into the stored IPs and
+# MUST NOT be composed again during matching — doing so produces
+# double-translated correspondences and a k × tile_step residual
+# gradient across the moving-tile grid.
+SPLIT_TILE_TRANSFORM_NAME = "Image Splitting"
+
 class LoadAndTransformPoints:
     def __init__(self, data_global, xml_input_path, n5_output_path, match_type,
                  pair_with_view=None):
@@ -62,7 +72,15 @@ class LoadAndTransformPoints:
         
     def get_transformation_matrix(self, view_id, view_registrations):
         """
-        Compose all affine ViewTransforms for a given view (timepoint, setup)
+        Compose affine ViewTransforms for a given view (timepoint, setup).
+
+        Every transform is composed except the reserved
+        ``SPLIT_TILE_TRANSFORM_NAME`` ("Image Splitting"). That entry
+        records the split tile's world-grid position for BigStitcher
+        provenance, but the per-tile translation has already been
+        baked into stored IP coords by detection
+        (``image_reader.py`` L195-214 + ``difference_of_gaussian.py``
+        L318). Applying it again double-translates split-tile IPs.
         """
         try:
             transforms = view_registrations.get(view_id, [])
@@ -73,6 +91,9 @@ class LoadAndTransformPoints:
             final_matrix = np.eye(4)
 
             for i, transform in enumerate(transforms):
+                if transform.get("name") == SPLIT_TILE_TRANSFORM_NAME:
+                    continue
+
                 affine_str = transform.get("affine")
                 if not affine_str:
                     print(f"⚠️ No affine string in transform {i+1} for view {view_id}")

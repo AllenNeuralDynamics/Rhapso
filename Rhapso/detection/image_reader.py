@@ -208,6 +208,16 @@ class ImageReader:
             # grid cell the tile is supposed to cover. Add
             # ``crop_min_scaled`` so the crop offset propagates into
             # the peak coordinate transform.
+            #
+            # COORDINATE-FRAME CONTRACT (split-tile IPs):
+            # The stored N5 IPs produced downstream of this adjustment
+            # are in L0 WORLD voxel coords (tile grid position baked
+            # in). Matching MUST skip the "Image Splitting"
+            # ViewTransform when composing per-view transforms — see
+            # ``Rhapso/matching/load_and_transform_points.py``
+            # (``SPLIT_TILE_TRANSFORM_NAME``). Applying it again would
+            # double-translate each split tile's IPs and produce a
+            # residual gradient of k × tile_step across the grid.
             lower_bound = [
                 int(lower_bound[i]) + int(crop_min_scaled[i])
                 for i in range(3)
