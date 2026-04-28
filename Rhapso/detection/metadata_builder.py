@@ -18,9 +18,22 @@ class MetadataBuilder:
         self.chunks_per_bound = chunks_per_bound
         self.run_type = run_type
         self.level = level
-        self.overlap = int(np.ceil(3 * sigma))
+        # Overlap must cover the full scipy gaussian_filter kernel radius.
+        # scipy uses truncate=4.0 by default: kernel radius = int(4*sigma + 0.5).
+        # The larger Gaussian in the DoG is sigma_2 = sigma * k where k = 2^(1/4),
+        # after accounting for image_sigma=0.5: sigma_2_eff = sqrt((sigma*k)^2 - 0.5^2).
+        # Using ceil(4 * sigma_2_eff) ensures no boundary artifact from truncation.
+        _k = 2 ** (1.0 / 4.0)
+        _sigma_2_eff = float(np.sqrt(max((sigma * _k) ** 2 - 0.5 ** 2, sigma ** 2)))
+        self.overlap = int(np.ceil(4.0 * _sigma_2_eff))
         self.sub_region_chunking = not chunks_per_bound == 0
         self.metadata = []
+        print(
+            f"[MetadataBuilder] sigma={sigma} sigma_2_eff={_sigma_2_eff:.4f} "
+            f"overlap={self.overlap} chunks_per_bound={chunks_per_bound} "
+            f"sub_region_chunking={self.sub_region_chunking} "
+            f"num_cpus={os.cpu_count()}"
+        )
     
     def build_image_metadata(self, process_intervals, file_path, view_id, crop_min=None, crop_max=None):
         """
