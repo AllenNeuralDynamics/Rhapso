@@ -1,12 +1,13 @@
 import numpy as np
 
 class OverlappingBlocks:
-    def __init__(self, per_view_transforms, overlapping_views, super_block_offset, fused_min, fused_max):
+    def __init__(self, per_view_transforms, overlapping_views, super_block_offset, fused_min, fused_max, grid_block):
         self.per_view_transforms = per_view_transforms
         self.overlapping_views = overlapping_views
         self.super_block_offset = super_block_offset
         self.fused_min = np.asarray(fused_min, dtype=np.int64)
         self.fused_max = np.asarray(fused_max, dtype=np.int64)
+        self.grid_block = grid_block
         self.expand = 1
         self.cell_dimensions = np.array([256, 256, 128], dtype=np.int64)
 
@@ -82,43 +83,99 @@ class OverlappingBlocks:
         cell_max = cell_min + cell_dim - 1
         return cell_min, cell_max
 
+    # def find_overlapping_blocks(self, model, size):
+    #     prefetch = []
+
+    #     dims_xyz = np.asarray(size, dtype=np.int64)
+    #     cd = np.asarray(self.cell_dimensions, dtype=np.int64)
+    #     grid_dims = (dims_xyz + cd - 1) // cd
+    #     b = int(self.expand)
+
+    #     _, mipmap_transform = self.for_best_resolution()
+    #     img_to_world = np.asarray(model, dtype=np.float64) @ np.asarray(mipmap_transform, dtype=np.float64)
+
+    #     # --- NEW: compute candidate cell index range by inverse-mapping fused bbox to local ---
+    #     inv = np.linalg.inv(img_to_world)
+
+    #     # Use expanded fused interval (same logic as expand_interval but local here)
+    #     fused_min = self.fused_min.astype(np.float64) - b
+    #     fused_max = self.fused_max.astype(np.float64) + b
+
+    #     # 8 corners of the fused/world interval
+    #     x0, y0, z0 = fused_min
+    #     x1, y1, z1 = fused_max
+    #     world_corners = np.array([
+    #         [x0, y0, z0], [x0, y0, z1], [x0, y1, z0], [x0, y1, z1],
+    #         [x1, y0, z0], [x1, y0, z1], [x1, y1, z0], [x1, y1, z1],
+    #     ], dtype=np.float64)
+
+    #     Ainv = inv[:3, :3]
+    #     tinv = inv[:3, 3]
+    #     local = world_corners @ Ainv.T + tinv
+
+    #     local_min = np.floor(local.min(axis=0)).astype(np.int64)
+    #     local_max = np.ceil(local.max(axis=0)).astype(np.int64)
+
+    #     # Clamp to image bounds (inclusive)
+    #     local_min = np.maximum(local_min, 0)
+    #     local_max = np.minimum(local_max, dims_xyz - 1)
+
+    #     # Convert local voxel range -> cell index range
+    #     gmin = np.maximum(local_min // cd, 0)
+    #     gmax = np.minimum(local_max // cd, grid_dims - 1)
+
+    #     # --- loop only candidate grid positions ---
+    #     for gx in range(int(gmin[0]), int(gmax[0]) + 1):
+    #         for gy in range(int(gmin[1]), int(gmax[1]) + 1):
+    #             for gz in range(int(gmin[2]), int(gmax[2]) + 1):
+    #                 grid_pos = np.array([gx, gy, gz], dtype=np.int64)
+
+    #                 cell_min = grid_pos * cd
+    #                 cell_max = np.minimum(cell_min + cd, dims_xyz) - 1  # inclusive
+
+    #                 expanded_min = cell_min - b
+    #                 expanded_max = cell_max + b
+
+    #                 bounds_min, bounds_max = self.transformed_bounding_box_from_minmax(
+    #                     img_to_world, expanded_min, expanded_max
+    #                 )
+
+    #                 if self.overlaps(bounds_min, bounds_max, self.fused_min, self.fused_max):
+    #                     prefetch.append({"cell_min": cell_min.copy()})
+
+    #     return prefetch
+
     def find_overlapping_blocks(self, model, size):
-        """
-        Brute-force loop over CellGrid cells 
-        Returns a list of "prefetch blocks" (cellMin)
-        """
         prefetch = []
 
-        best_level, mipmap_transform = self.for_best_resolution()
+        # Treat `size` as the source tile/image dims (XYZ)
+        dims_xyz = np.asarray(size, dtype=np.int64)
+        cd = np.asarray(self.cell_dimensions, dtype=np.int64)
+
+        _, mipmap_transform = self.for_best_resolution()
 
         # Java: imgToWorld = model.copy(); imgToWorld.concatenate(best.mipmapTransform)
         img_to_world = np.asarray(model, dtype=np.float64) @ np.asarray(mipmap_transform, dtype=np.float64)
 
-        size = np.asarray(size, dtype=np.int64)
-
-        # Ensure XYZ only (Java dims may be 5D with trailing 1,1)
-        if size.shape[0] > 3:
-            size_xyz = size[:3]
-        else:
-            size_xyz = size
-
-        num_cells, border_size = self._cellgrid_params_xyz(size_xyz)
+        # Java: grid.getGridDimensions()
+        grid_dims = (dims_xyz + cd - 1) // cd  # ceil(dims/cellDims)
 
         b = int(self.expand)
 
-        for gx in range(int(num_cells[0])):
-            for gy in range(int(num_cells[1])):
-                for gz in range(int(num_cells[2])):
+        for gx in range(int(grid_dims[0])):
+            for gy in range(int(grid_dims[1])):
+                for gz in range(int(grid_dims[2])):
                     grid_pos = np.array([gx, gy, gz], dtype=np.int64)
 
                     # Java: grid.getCellInterval(gridPos, cellMin, cellMax)
-                    cell_min, cell_max = self._get_cell_interval_xyz(grid_pos, num_cells, border_size)
+                    cell_min = grid_pos * cd
+                    cell_max = np.minimum(cell_min + cd, dims_xyz) - 1  # inclusive, border-clamped
 
                     # Java: expand(cellBBox, expand, projectedCellBBox)
                     expanded_min = cell_min - b
                     expanded_max = cell_max + b
 
-                    # Java: bounds = smallestContainingInterval(imgToWorld.estimateBounds(projectedCellInterval))
+                    # Java: bounds = smallestContainingInterval(imgToWorld.estimateBounds(...))
                     bounds_min, bounds_max = self.transformed_bounding_box_from_minmax(
                         img_to_world, expanded_min, expanded_max
                     )
@@ -131,8 +188,7 @@ class OverlappingBlocks:
     def find(self):
         expanded_min, expanded_max = self.expand_interval()
 
-        pre_fetch = []
-
+        blocks_by_view = {}
         for view_id in self.overlapping_views:
             info = self.per_view_transforms[view_id]
             model = info["transform"]
@@ -152,9 +208,11 @@ class OverlappingBlocks:
             )
 
             if self.overlaps(expanded_min, expanded_max, bounds_min, bounds_max):
-                pre_fetch = self.find_overlapping_blocks(model, size_xyz)
+                blocks = self.find_overlapping_blocks(model, size_xyz)
+                if blocks:
+                    blocks_by_view[view_id] = blocks
 
-        return pre_fetch
+        return blocks_by_view
 
     def run(self):
         return self.find()

@@ -1,4 +1,4 @@
-cluster_name: rhapso-fusion-cluster-ray-123456
+cluster_name: rhapso-fusion-cluster-ray-00000
 max_workers: 40
 min_workers: 40
 
@@ -76,10 +76,11 @@ worker_start_ray_commands:
 # RAY UP / DOWN / CLEAR CACHE COMMANDS
 # ray up fusion_cluster_sean.yml --no-config-cache
 # ray down fusion_cluster_sean.yml
+# ray get-head-ip fusion_cluster_sean.yml
 # rm -rf ~/.cache/ray
 
 # ACCESS RAY DASHBOARD
-# ssh -i /Users/sean.fite/Desktop/AllenInstitute/Auth/AWS/EC2-SSH-KEY/aind-ray-cluster.pem -L 8265:localhost:8265 ubuntu@35.85.51.80
+# ssh -i /Users/sean.fite/Desktop/AllenInstitute/Auth/AWS/EC2-SSH-KEY/aind-ray-cluster.pem -L 8265:localhost:8265 ubuntu@35.165.112.192
 # http://localhost:8265
 
 # TO FIX

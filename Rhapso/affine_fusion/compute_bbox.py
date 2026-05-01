@@ -80,6 +80,47 @@ class ComputeBBox():
         for M in mats:
             T = T @ M
         return T
+    
+    def sample_bbox_points_xyz(self, size_xyz: tuple[int, int, int]) -> np.ndarray:
+        sx, sy, sz = size_xyz
+
+        xs = [0.0, float(sx - 1)]
+        ys = [0.0, float(sy - 1)]
+        zs = [0.0, float(sz - 1)]
+
+        xm = float(sx - 1) * 0.5
+        ym = float(sy - 1) * 0.5
+        zm = float(sz - 1) * 0.5
+
+        pts = []
+
+        # corners
+        for x in xs:
+            for y in ys:
+                for z in zs:
+                    pts.append([x, y, z, 1.0])
+
+        # face centers
+        pts += [
+            [xm, ys[0], zm, 1.0],
+            [xm, ys[1], zm, 1.0],
+            [xs[0], ym, zm, 1.0],
+            [xs[1], ym, zm, 1.0],
+            [xm, ym, zs[0], 1.0],
+            [xm, ym, zs[1], 1.0],
+        ]
+
+        # edge midpoints
+        pts += [
+            [xm, ys[0], zs[0], 1.0],
+            [xm, ys[1], zs[1], 1.0],
+            [xs[0], ym, zs[0], 1.0],
+            [xs[1], ym, zs[1], 1.0],
+            [xs[0], ys[0], zm, 1.0],
+            [xs[1], ys[1], zm, 1.0],
+        ]
+
+        return np.array(pts, dtype=np.float64)
 
     def corners_xyz(self, size_xyz: tuple[int, int, int]) -> np.ndarray:
         sx, sy, sz = size_xyz
@@ -124,7 +165,8 @@ class ComputeBBox():
                 "path": full_path, 
             }
 
-            pts = self.corners_xyz(sizes[setup])
+            # pts = self.corners_xyz(sizes[setup])
+            pts = self.sample_bbox_points_xyz(sizes[setup])
             w = (T @ pts.T).T[:, :3]
 
             gmin = np.minimum(gmin, w.min(axis=0))

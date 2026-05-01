@@ -4,7 +4,7 @@ import base64
 import json
 from pathlib import Path
 
-with open("Rhapso/pipelines/ray/param/fusion/HCR_823476.yml", "r") as file:
+with open("Rhapso/pipelines/ray/param/fusion/exaSPIM_720164.yml", "r") as file:
     config = yaml.safe_load(file)
 
 serialized_config = base64.b64encode(json.dumps(config).encode()).decode()
@@ -13,17 +13,17 @@ fusion_cmd = (
     "bash -lc \""
     "python3 - <<\\\"PY\\\"\n"
     "import json, base64\n"
-    "from Rhapso.pipelines.ray.fusion import AffineFusion\n"
+    "from Rhapso.pipelines.ray.affine_fusion import AffineFusion\n"
     f"cfg = json.loads(base64.b64decode(\\\"{serialized_config}\\\").decode())\n"
     "fusion = AffineFusion(\n"
-    "    xml_path=cfg[\\\"xml_path_affine_fusion\\\"],\n"
-    "    input_path=cfg[\\\"input_path_affine_fusion\\\"],\n"
-    "    output_s3_path=cfg[\\\"output_s3_path_affine_fusion\\\"],\n"
-    "    channel=cfg[\\\"channel\\\"],\n"
-    "    default_chunk_size=cfg[\\\"default_chunk_size\\\"],\n"
-    "    cpu_cell_size=cfg[\\\"cpu_cell_size\\\"],\n"
+    "    aligned_xml_path=cfg[\\\"aligned_xml_path\\\"],\n"
+    "    zarr_input_prefix=cfg[\\\"zarr_input_prefix\\\"],\n"
+    "    output_path=cfg[\\\"output_path\\\"],\n"
+    "    block_size=cfg[\\\"block_size\\\"],\n"
+    "    intensity_range=cfg[\\\"intensity_range\\\"],\n"
+    "    block_scale=cfg[\\\"block_scale\\\"],\n"
     ")\n"
-    "fusion.execute_job()\n"
+    "fusion.run()\n"
     "PY\n"
     "\""
 )

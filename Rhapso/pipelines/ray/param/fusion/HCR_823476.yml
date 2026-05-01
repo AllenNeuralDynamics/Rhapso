@@ -9,11 +9,12 @@ cpu_cell_size: [640, 256, 256]
 
 # MULTISCALE
 # -----------------------------------
-multiscale_zarr_path: "s3://aind-scratch-data/sean.fite/affine_fusion/test_18/fusion/fused.zarr"
+multiscale_zarr_path: "s3://aind-scratch-data/sean.fite/new_affine_fusion/test_150/fusion/fused.zarr"
 multiscale_chunk_size: [128, 128, 128]
-voxel_size: [0.4586981717240068, 0.0920179382864407, 0.0920179382864407]        # ZYX
+voxel_size: [1.0, 0.7480000148631624, 0.747999882518797]                        # ZYX
 n_lvls: 6                                                                       # Including base level
-scale_factor: [[1, 2, 2], [1, 2, 2], [2, 2, 2], [2, 2, 2], [2, 2, 2]]           # ZYX
+scale_factor: [[2, 2, 2], [2, 2, 2], [2, 2, 2], [2, 2, 2], [2, 2, 2]]           # ZYX
+# scale_factor: [[1, 2, 2], [1, 2, 2], [2, 2, 2], [2, 2, 2], [2, 2, 2]]         # ZYX
 target_block_size_mb: 256
 base_level: 0
 

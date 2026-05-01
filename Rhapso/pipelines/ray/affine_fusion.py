@@ -2,102 +2,26 @@ from Rhapso.affine_fusion.compute_bbox import ComputeBBox
 from Rhapso.affine_fusion.compute_grid import ComputeGrid
 from Rhapso.affine_fusion.overlapping_views import OverlappingViews
 from Rhapso.affine_fusion.overlapping_blocks import OverlappingBlocks
-from Rhapso.affine_fusion.fused_cell import FusedCell
+from Rhapso.affine_fusion.generate_fusion_intstructions import GenerateFusionInstructions
+from Rhapso.affine_fusion.fuse_cell import FuseCell
 import ray
 import time
-import zarr
-import fsspec
-import numpy as np
 
 # This class implements the affine fusion pipeline
 
 class AffineFusion:
-    def __init__(self):
-        # Z1
-        # self.aligned_xml_path = "s3://aind-open-data/HCR_823476-s1-ls2_2025-11-18_00-00-00_processed_2026-03-03_22-58-55/image_tile_alignment/bigstitcher.xml"
-        # self.zarr_input_prefix = "s3://aind-open-data/HCR_823476-s1-ls2_2025-11-18_00-00-00_processed_2026-03-03_22-58-55/image_radial_correction"
-        
-        # exaSPIM
-        self.aligned_xml_path = "s3://aind-scratch-data/sean.fite/bigstitcher_kept.xml"
-        self.zarr_input_prefix = "s3://aind-open-data/exaSPIM_720164_2025-07-07_17-55-45_processed_2025-07-15_16-22-02/flatfield_correction/SPIM.ome.zarr"
+    def __init__(self, aligned_xml_path, zarr_input_prefix, output_path, block_size, intensity_range, block_scale):
+        self.aligned_xml_path = aligned_xml_path
+        self.zarr_input_prefix = zarr_input_prefix
+        self.output_path = output_path 
+        self.block_size = block_size
+        self.intensity_range = intensity_range
+        self.block_scale = block_scale
 
-        self.output_path = "s3://aind-scratch-data/sean.fite/affine_fusion/test_19/fusion/fused.zarr" 
-        self.block_size = [256, 256, 128] 
-        self.intensity_range = [0, 65535]    # UINT16 default
-        self.block_scale = [2, 2, 1]
-
-    def affine_fusion(self):
-        ray.init()
-
-        # Compute bounding box for fused volume based on alignment xml
-        compute_bbox = ComputeBBox(self.aligned_xml_path, self.zarr_input_prefix)
-        bb_min, bb_max, per_view_transforms = compute_bbox.run() 
-        dims = (bb_max - bb_min) + 1
-
-        # Compute grid for fused volume
-        compute_grid = ComputeGrid(dims, self.block_size, self.block_scale)
-        grid = compute_grid.run()
-
-        dims_xyz = (bb_max - bb_min) + 1
-        output_shape_zyx = (int(dims_xyz[2]), int(dims_xyz[1]), int(dims_xyz[0]))
-
-        # --- Create output zarr driver (match reference layout) ---
-        root_store = fsspec.get_mapper(self.output_path.rstrip("/"))
-
-        # Ensure fused.zarr is a zarr group (creates fused.zarr/.zgroup)
-        zarr.storage.init_group(store=root_store, overwrite=False)
-
-        # Open destination root group
-        root = zarr.open_group(store=root_store, mode="a")
-
-        # Copy root attrs from input (to get the big .zattrs like the reference)
-        src_store = fsspec.get_mapper(self.zarr_input_prefix.rstrip("/"))
-        src_root = zarr.open_group(store=src_store, mode="r")
-        root.attrs.update(dict(src_root.attrs))
-
-        # IMPORTANT: create array "0" at ROOT (fused.zarr/0/.zarray)
-        if "0" not in root:
-            Z, Y, X = output_shape_zyx
-            root.create_dataset(
-                "0",
-                shape=(1, 1, Z, Y, X),
-                chunks=(1, 1, 128, 256, 256),
-                dtype=np.uint16,
-                overwrite=False,
-                fill_value=0,
-                dimension_separator="/",
-            )
-
-        print("[fusion] output zarr initialized", flush=True)
-
-        # Distributed approach
-        @ray.remote(num_cpus=2)
-        def fuse_grid_block(grid_block, bb_min, per_view_transforms, output_path, output_shape_zyx):
-            # The min coordinates and size of the block this job renders
-            super_block_offset = grid_block[0] + bb_min
-            super_block_size   = grid_block[1]
-
-            # Find overlapping views for this job
-            find_overlapping_views = OverlappingViews(super_block_offset, super_block_size, per_view_transforms)
-            overlapping_views, fused_min, fused_max = find_overlapping_views.run()
-
-            if not overlapping_views:
-                return
-
-            # Use overlapping view to find overlapping blocks for this job
-            find_overlapping_blocks = OverlappingBlocks(per_view_transforms, overlapping_views, super_block_offset, 
-                                                        fused_min, fused_max)
-            blocks = find_overlapping_blocks.run()
-
-            if not blocks:
-                return
-
-            # Fuse overlapping blocks
-            fused_cell = FusedCell(per_view_transforms, overlapping_views, fused_min, fused_max, output_path, 
-                                   grid_block[0], bb_min, output_shape_zyx)
-            fused_cell.run()
-
-        # progress
+    def run_grid_with_progress(self, grid, fuse_task_remote, *task_args):
+        """
+        Submits ray task and prints progress as tasks finish.
+        """
         futures = []
         total_cells = len(grid)
         completed = 0
@@ -107,18 +31,14 @@ class AffineFusion:
 
         print(f"[fusion] submitting {total_cells} tasks", flush=True)
 
-        for i, grid_block in enumerate(grid, start=1):
-            futures.append(
-                fuse_grid_block.remote(
-                    grid_block, bb_min, per_view_transforms, self.output_path, output_shape_zyx
-                )
-            )
+        for grid_block in grid:
+            futures.append(fuse_task_remote.remote(grid_block, *task_args))
 
             # drain completions while submitting
             done, futures = ray.wait(futures, num_returns=1, timeout=0)
             while done:
                 try:
-                    ray.get(done[0])   
+                    ray.get(done[0])
                     completed += 1
                 except Exception as e:
                     failed += 1
@@ -138,7 +58,7 @@ class AffineFusion:
 
                 done, futures = ray.wait(futures, num_returns=1, timeout=0)
 
-        # finish remaining tasks 
+        # finish remaining tasks
         while futures:
             done, futures = ray.wait(futures, num_returns=1, timeout=1.0)
             if not done:
@@ -165,35 +85,95 @@ class AffineFusion:
 
         print("Fusion done", flush=True)
 
+    def affine_fusion(self):
+        ray.init()
+
+        # Compute bounding box for fused volume based on alignment xml
+        compute_bbox = ComputeBBox(self.aligned_xml_path, self.zarr_input_prefix)
+        bb_min, bb_max, per_view_transforms = compute_bbox.run() 
+        dims = (bb_max - bb_min) + 1
+
+        # Compute grid for fused volume
+        compute_grid = ComputeGrid(dims, self.block_size, self.block_scale, self.zarr_input_prefix, self.output_path)
+        grid, _ = compute_grid.run()
+
+        # Distribute grid and implement core fusion work
+        @ray.remote
+        def fuse_grid_block(grid_block, bb_min, per_view_transforms, output_path):
+            # The min coordinates and size of the block this job renders
+            super_block_offset = grid_block[0] + bb_min
+            super_block_size   = grid_block[1]
+
+            # Find and gate for overlapping views 
+            find_overlapping_views = OverlappingViews(super_block_offset, super_block_size, per_view_transforms)
+            overlapping_views, fused_min, fused_max = find_overlapping_views.run()
+            if not overlapping_views:
+                return
+
+            # Find and gate for overlapping blocks
+            find_overlapping_blocks = OverlappingBlocks(
+                per_view_transforms, overlapping_views, super_block_offset, fused_min, fused_max, grid_block
+            )
+            blocks = find_overlapping_blocks.run()
+            if not any(blocks.values()):
+                return
+            
+            # Define instructions for fusing contributing image blocks
+            map_fusion_instructions = GenerateFusionInstructions(per_view_transforms, grid_block, bb_min, bb_max)
+            image_instructions, blocks = map_fusion_instructions.run()
+
+            # Fuse blocks into cell
+            fuse_cell = FuseCell(
+                image_instructions, blocks, per_view_transforms, output_path, grid_block, bb_min, bb_max
+            )
+            fuse_cell.run()
+
+        # run jobs with progress prints
+        self.run_grid_with_progress(grid, fuse_grid_block, bb_min, per_view_transforms, self.output_path)
+
     def run(self):
         self.affine_fusion()
 
-affine_fusion = AffineFusion()
-affine_fusion.run()
 
-# Iterative approach (dev)
+# ITERATIVE APPROACH
 # for grid_block in grid:
+#     # Left off: [16896, 5632, 128]
     
-#     # The min coordinates and size of the block this job renders
-#     super_block_offset = grid_block[0] + bb_min   
-#     super_block_size   = grid_block[1] 
+#     # DEBUG: run only this specific fused grid block ----
+#     # TARGET_OFFSET = (65024, 512, 0)
+#     # TARGET_OFFSET = (1024, 19968, 128)
+#     # TARGET_OFFSET = (512, 20480, 128)
 
-#     # Find overlapping views for this job
+#     # gb_off = tuple(int(x) for x in grid_block[0]) # (ox,oy,oz)
+#     # if gb_off != TARGET_OFFSET:
+#     #     continue
+
+#     # The min coordinates and size of the block this job renders
+#     super_block_offset = grid_block[0] + bb_min
+#     super_block_size   = grid_block[1]
+
+#     # Find overlapping views 
 #     find_overlapping_views = OverlappingViews(super_block_offset, super_block_size, per_view_transforms)
 #     overlapping_views, fused_min, fused_max = find_overlapping_views.run()
 
 #     if not overlapping_views:
 #         continue
-    
+
 #     # Use overlapping view to find overlapping blocks for this job
-#     find_overlapping_blocks = OverlappingBlocks(per_view_transforms, overlapping_views, super_block_offset, fused_min, fused_max)
+#     find_overlapping_blocks = OverlappingBlocks(
+#         per_view_transforms, overlapping_views, super_block_offset, fused_min, fused_max, grid_block
+#     )
 #     blocks = find_overlapping_blocks.run()
 
-#     if not blocks:
+#     if not any(blocks.values()):
 #         continue
     
-#     # Fuse overlapping blocks
-#     dims_xyz = (bb_max - bb_min) + 1
-#     output_shape_zyx = (int(dims_xyz[2]), int(dims_xyz[1]), int(dims_xyz[0]))
-#     fused_cell = FusedCell(per_view_transforms, overlapping_views, fused_min, fused_max, self.output_path, grid_block[0], bb_min, output_shape_zyx)
-#     fused_cell.run()
+#     # Map instructions for fusing images
+#     map_fusion_instructions = GenerateFusionInstructions(per_view_transforms, grid_block, bb_min, bb_max)
+#     image_instructions, blocks = map_fusion_instructions.run()
+
+#     # Fuse blocks into cell
+#     fuse_cell = FuseCell(
+#         image_instructions, blocks, per_view_transforms, self.output_path, grid_block, bb_min, bb_max
+#     )
+#     fuse_cell.run()
