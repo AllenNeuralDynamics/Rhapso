@@ -27,6 +27,7 @@ detection_cmd = (
     "    combine_distance=cfg[\\\"combine_distance\\\"],\n"
     "    chunks_per_bound=cfg[\\\"chunks_per_bound\\\"], run_type=cfg[\\\"detection_run_type\\\"],\n"
     "    max_spots=cfg[\\\"max_spots\\\"], median_filter=cfg[\\\"median_filter\\\"],\n"
+    "    min_peak_intensity=cfg.get(\\\"min_peak_intensity\\\"),\n"
     ")\n"
     "ipd.run()\n"
     "PY\n"

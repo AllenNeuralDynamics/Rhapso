@@ -234,17 +234,192 @@ class OverlapDetection():
         return max(0, int(math.floor(math.log2(max(1, n)))))
 
     def choose_zarr_level(self):
-        """
-        pick the highest power-of-two pyramid level ( ≤ 7) compatible with dsxy/dsz
+        """Pick the actual pyramid level closest to the requested dsxy/dsz.
+
+        Reads per-axis downsample factors from the parent zarr group's
+        OME-zarr ``coordinateTransformations.scale`` metadata (the
+        pyramid writer's declared per-axis sampling-density ratio) —
+        NOT from an isotropic ``2 ** level`` assumption, NOT from
+        array-shape ratios. Metadata is the right primitive: it
+        explicitly encodes whatever anisotropy the pyramid has, and is
+        immune to integer-flooring slack at odd L0 extents (e.g.
+        dataset A L0_z=220, L4_z=13 → shape-ratio 16.92 vs metadata
+        16.0; metadata is the writer's intent).
+
+        Picks the level whose per-axis ds is the largest possible while
+        still ``≤`` the request on every axis (so the remaining
+        downsampling can be done in software without ever upsampling),
+        preferring the smallest leftover product to minimize redundant
+        downsampling work.
+
+        Anisotropic-pyramid example (HCR_823476_s5, request dsxy=16, dsz=4):
+          L0: ds=(1,1,1)
+          L1: ds=(2,2,1)
+          L2: ds=(4,4,1)
+          L3: ds=(8,8,2)
+          L4: ds=(16,16,4)  ← exact match, leftover=(1,1,1) — picked
+          L5: ds=(32,32,8)  ← rejected (over-downsamples on every axis)
+        Legacy ``min(log2_xy, log2_z)`` would have picked L2 with
+        leftover ``(4, 4, 1)`` — pulling 64× more bytes from S3 and
+        re-doing the antialiasing in software.
+
+        Falls back to legacy isotropic ``min(log2(dsxy), log2(dsz))`` when
+        the parent zarr's metadata can't be parsed (preserves prior
+        behavior on non-OME-zarr inputs / tests). Tuple convention for
+        ``leftovers`` is preserved as ``(_, dsxy_leftover, dsz_leftover)``
+        so the call site at ``__call__`` is untouched — only the first
+        slot is unused-but-kept-for-shape.
         """
         max_level = 7
-        lvl_xy = self.floor_log2(self.dsxy)
-        lvl_z  = self.floor_log2(self.dsz)
-        best = min(lvl_xy, lvl_z, max_level)
-        factor = 1 << best  
-        leftovers = (max(1, self.dsxy // factor), max(1, self.dsxy // factor), max(1, self.dsz // factor))
-        return best, leftovers
+        try:
+            root = zarr.open(self.prefix, mode='r')
+            scale_l0 = self._ome_scale_zyx(root, "0")
+            if scale_l0 is None:
+                raise ValueError("no scale metadata at L0")
+
+            # Iterate every level declared in the multiscales metadata
+            # (NOT array_keys() — the metadata is what defines the
+            # pyramid's intent).
+            attrs = root.attrs.asdict()
+            datasets = attrs.get("multiscales", [{}])[0].get("datasets", [])
+            level_records = []
+            for d in datasets:
+                level_name = str(d.get("path"))
+                if not level_name.isdigit():
+                    continue
+                lvl_int = int(level_name)
+                if lvl_int > max_level:
+                    continue
+                scale_ln = self._ome_scale_zyx(root, level_name)
+                if scale_ln is None:
+                    continue
+                # ds_axis = scale(L)[axis] / scale(L0)[axis]. Rounded to
+                # int because the request and downstream downsamplers
+                # are integer-valued.
+                ds_z = max(1, int(round(scale_ln[0] / max(scale_l0[0], 1e-12))))
+                ds_y = max(1, int(round(scale_ln[1] / max(scale_l0[1], 1e-12))))
+                ds_x = max(1, int(round(scale_ln[2] / max(scale_l0[2], 1e-12))))
+                level_records.append((lvl_int, ds_x, ds_y, ds_z))
+
+            if not level_records:
+                raise ValueError("no usable pyramid levels in metadata")
+
+            req_xy = max(1, int(self.dsxy))
+            req_z = max(1, int(self.dsz))
+
+            # Eligibility: every axis's ds must be ≤ the request, so the
+            # remaining downsampling can be done in software without
+            # ever needing to upsample. With metadata-declared ds (no
+            # rounding slack), this is the strict comparison we want.
+            eligible = [
+                rec for rec in level_records
+                if rec[1] <= req_xy
+                and rec[2] <= req_xy
+                and rec[3] <= req_z
+            ]
+            if not eligible:
+                # Request is finer than even L0. Pick L0 and pass through.
+                eligible = [(0, 1, 1, 1)]
+
+            # Score each candidate: (leftover_x * leftover_y * leftover_z).
+            # Exact match → score=1 (perfect). Lower is better; tiebreak
+            # by deeper level (cheaper S3 reads).
+            def _score(rec):
+                lvl, dsx, dsy, dsz = rec
+                lo_x = max(1, req_xy // max(dsx, 1))
+                lo_y = max(1, req_xy // max(dsy, 1))
+                lo_z = max(1, req_z // max(dsz, 1))
+                return (lo_x * lo_y * lo_z, -lvl)
+
+            best_lvl, dsx_lvl, dsy_lvl, dsz_lvl = min(eligible, key=_score)
+
+            # ``leftovers`` tuple convention: (unused, leftover_xy, leftover_z).
+            # leftover_xy = max(leftover_x, leftover_y) so subsequent code
+            # that applies a single dsxy-factor never under-downsamples
+            # either axis. In the typical case dsx==dsy so this is just
+            # ``req_xy // dsx``.
+            leftover_x = max(1, req_xy // max(dsx_lvl, 1))
+            leftover_y = max(1, req_xy // max(dsy_lvl, 1))
+            leftover_z = max(1, req_z // max(dsz_lvl, 1))
+            leftover_xy = max(leftover_x, leftover_y)
+            leftovers = (leftover_xy, leftover_xy, leftover_z)
+            return best_lvl, leftovers
+        except Exception as e:
+            # Legacy fallback: assume isotropic 2**level pyramid. Safe
+            # for unit tests + any pyramid with that structure that
+            # lacks parseable OME-zarr metadata.
+            print(
+                f"[OverlapDetection] choose_zarr_level falling back to "
+                f"legacy isotropic picker (metadata not readable: {e!r})"
+            )
+            lvl_xy = self.floor_log2(self.dsxy)
+            lvl_z = self.floor_log2(self.dsz)
+            best = min(lvl_xy, lvl_z, max_level)
+            factor = 1 << best
+            leftovers = (
+                max(1, self.dsxy // factor),
+                max(1, self.dsxy // factor),
+                max(1, self.dsz // factor),
+            )
+            return best, leftovers
     
+    def _per_axis_pyramid_scale(self, level):
+        """Return (sx, sy, sz) — the level→L0 voxel-grid scale per axis.
+
+        Reads the OME-zarr ``coordinateTransformations.scale`` metadata
+        (the writer's declared per-axis ds) — same source of truth as
+        ``choose_zarr_level``. Falls back to isotropic ``2 ** level`` if
+        the parent zarr's metadata can't be parsed.
+        """
+        if level <= 0:
+            return 1.0, 1.0, 1.0
+        try:
+            root = zarr.open(self.prefix, mode='r')
+            scale_l0 = self._ome_scale_zyx(root, "0")
+            scale_ln = self._ome_scale_zyx(root, str(level))
+            if scale_l0 is None or scale_ln is None:
+                raise ValueError("scale metadata missing")
+            sz = max(1.0, scale_ln[0] / max(scale_l0[0], 1e-12))
+            sy = max(1.0, scale_ln[1] / max(scale_l0[1], 1e-12))
+            sx = max(1.0, scale_ln[2] / max(scale_l0[2], 1e-12))
+            return float(sx), float(sy), float(sz)
+        except Exception as e:
+            print(
+                f"[OverlapDetection] _per_axis_pyramid_scale fallback to "
+                f"isotropic 2**{level}: metadata not readable ({e!r})"
+            )
+            s = float(2 ** level)
+            return s, s, s
+
+    @staticmethod
+    def _ome_scale_zyx(root_group, level_name: str):
+        """Return (scale_z, scale_y, scale_x) from OME-zarr multiscales metadata.
+
+        Reads ``coordinateTransformations[type==scale]`` for the named
+        level. Slices the trailing ZYX entries from a 3- or 5-axis
+        scale declaration. Returns ``None`` when the metadata is missing
+        or malformed — caller falls back to legacy heuristic.
+        """
+        try:
+            attrs = root_group.attrs.asdict()
+            multiscales = attrs.get("multiscales", [])
+            if not multiscales:
+                return None
+            for d in multiscales[0].get("datasets", []):
+                if str(d.get("path")) != str(level_name):
+                    continue
+                for ct in d.get("coordinateTransformations", []):
+                    if ct.get("type") == "scale":
+                        s = ct.get("scale", [])
+                        if len(s) == 5:
+                            return float(s[2]), float(s[3]), float(s[4])
+                        if len(s) == 3:
+                            return float(s[0]), float(s[1]), float(s[2])
+                        return None
+        except Exception:
+            return None
+        return None
+
     def affine_with_half_pixel_shift(self, sx, sy, sz):
         """
         Build a 4x4 scaling affine that also shifts by 0.5·(scale-1) per axis so voxel centers stay aligned after 
@@ -290,11 +465,19 @@ class OverlapDetection():
                 else:
                     dim_base = self.load_image_metadata(self.prefix)
 
-                # isotropic pyramid
-                s = float(2 ** level)  
-                mipmap_of_downsample = self.affine_with_half_pixel_shift(s, s, s)
+                # Per-axis pyramid scale. The legacy ``s = 2 ** level``
+                # is wrong for anisotropic pyramids that preserve one
+                # axis at coarse levels (e.g. HCR_823476_s5 keeps Z at
+                # full-res through L2 while halving XY). Read the actual
+                # shape ratio from the parent zarr; fall back to
+                # isotropic on lookup failure.
+                sx, sy, sz = self._per_axis_pyramid_scale(level)
 
-                # TODO - update mipmap with leftovers if other than 1
+                mipmap_of_downsample = self.affine_with_half_pixel_shift(sx, sy, sz)
+
+                # leftovers are returned by ``choose_zarr_level`` as
+                # (ds_x, ds_y, ds_z) — what remains to be applied as
+                # software downsampling on top of the chosen level.
                 _, dsxy, dsz = leftovers
                 
             elif self.file_type == 'tiff':

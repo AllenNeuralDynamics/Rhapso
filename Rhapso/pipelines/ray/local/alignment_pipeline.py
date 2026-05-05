@@ -32,6 +32,7 @@ interest_point_detection = InterestPointDetection(
     run_type=config['detection_run_type'],
     max_spots=config['max_spots'],
     median_filter=config['median_filter'],
+    min_peak_intensity=config.get('min_peak_intensity'),
 )
 
 # INTEREST POINT MATCHING RIGID

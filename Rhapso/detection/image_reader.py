@@ -9,6 +9,73 @@ import s3fs
 Image Reader loads and downsamples Zarr and TIFF OME data
 """
 
+
+def _per_axis_pyramid_ds_xyz(file_path: str, level: int):
+    """Return (ds_x, ds_y, ds_z) downsample factors for ``level`` vs L0.
+
+    Source of truth: OME-zarr v0.4 ``coordinateTransformations.scale``
+    metadata in the parent group's ``.zattrs`` — i.e. the pyramid
+    writer's declared per-axis sampling-density ratio. This is the
+    correct primitive (the metadata explicitly encodes whatever
+    anisotropy the pyramid has) and avoids integer-flooring slack from
+    array-shape ratios (e.g. dataset A L0_z=220 / L4_z=13 = 16.92,
+    while the metadata correctly says scale_z(L4)/scale_z(L0) = 16.0).
+
+    Returns ``(None, None, None)`` when the metadata cannot be read —
+    caller is expected to fall back to legacy ``2 ** level`` behavior.
+
+    ``file_path`` is the full path to the level-N array
+    (e.g. ``s3://…/channel_488.zarr/2``); the parent group is the
+    OME-zarr root carrying the multiscales metadata.
+    """
+    try:
+        root_path = file_path.rstrip('/').rsplit('/', 1)[0]
+        root = zarr.open(root_path, mode='r')
+        scale_l0 = _ome_zarr_scale_zyx(root, "0")
+        scale_ln = _ome_zarr_scale_zyx(root, str(level))
+    except Exception:
+        return None, None, None
+    if scale_l0 is None or scale_ln is None:
+        return None, None, None
+    # Per-axis ds = scale(L) / scale(L0). Round to int (≥ 1) since the
+    # caller ultimately uses these as integer divisors for voxel bounds.
+    sz0, sy0, sx0 = scale_l0
+    szn, syn, sxn = scale_ln
+    ds_z = max(1, int(round(szn / max(sz0, 1e-12))))
+    ds_y = max(1, int(round(syn / max(sy0, 1e-12))))
+    ds_x = max(1, int(round(sxn / max(sx0, 1e-12))))
+    return ds_x, ds_y, ds_z
+
+
+def _ome_zarr_scale_zyx(root_group, level_name: str):
+    """Return ``(scale_z, scale_y, scale_x)`` from OME-zarr multiscales.
+
+    Reads ``coordinateTransformations[type==scale]`` for the given
+    level path. Slices the trailing ZYX entries from a 3- or 5-axis
+    declaration. Returns ``None`` if the metadata is missing or
+    malformed — caller should treat that as "metadata unreadable" and
+    fall back to a legacy heuristic.
+    """
+    try:
+        attrs = root_group.attrs.asdict()
+        multiscales = attrs.get("multiscales", [])
+        if not multiscales:
+            return None
+        for d in multiscales[0].get("datasets", []):
+            if str(d.get("path")) != str(level_name):
+                continue
+            for ct in d.get("coordinateTransformations", []):
+                if ct.get("type") == "scale":
+                    s = ct.get("scale", [])
+                    if len(s) == 5:
+                        return float(s[2]), float(s[3]), float(s[4])
+                    if len(s) == 3:
+                        return float(s[0]), float(s[1]), float(s[2])
+                    return None
+    except Exception:
+        return None
+    return None
+
 class CustomBioImage(BioImage):
     def standard_metadata(self):
         pass
@@ -130,18 +197,42 @@ class ImageReader:
 
         # Bounds are in full-resolution (level 0) coordinates.
         # We loaded from a potentially downsampled multiscale level,
-        # so we need to scale the bounds down by 2^level.
-        # Extract level from file_path (last component after final /)
+        # so we need to scale the bounds down to that level's voxel
+        # space. Anisotropic-pyramid-safe: compute per-axis ds from
+        # actual ``shape(L0) / shape(level)`` rather than the legacy
+        # isotropic ``2 ** level`` (which broke on pyramids that
+        # preserve Z at coarse levels — e.g. HCR_823476_s5 keeps Z
+        # full-res at L1/L2 while halving XY, causing the legacy code
+        # to read only the top quarter of Z; see
+        # new_reports/11_ANISOTROPIC_PYRAMID_BUG.md).
+        #
+        # ``lb``/``ub`` are XYZ-ordered, but zarr ``shape`` is ZYX —
+        # the indexing below is explicit on that axis swap.
         try:
             level_str = file_path.rstrip('/').split('/')[-1]
             level = int(level_str)
             print(f"[ImageReader] file_path={file_path}, extracted level={level}")
             print(f"[ImageReader] Before scaling: lb={lb}, ub={ub}, downsampled_stack.shape={downsampled_stack.shape}")
             if level > 0:
-                scale = 2 ** level
-                lb = [x // scale for x in lb]
-                ub = [x // scale for x in ub]
-                print(f"[ImageReader] After scaling by 2^{level}={scale}: lb={lb}, ub={ub}")
+                ds_x, ds_y, ds_z = _per_axis_pyramid_ds_xyz(file_path, level)
+                if ds_x is not None:
+                    lb = [lb[0] // ds_x, lb[1] // ds_y, lb[2] // ds_z]
+                    ub = [ub[0] // ds_x, ub[1] // ds_y, ub[2] // ds_z]
+                    print(
+                        f"[ImageReader] After per-axis scaling "
+                        f"(ds_xyz=({ds_x},{ds_y},{ds_z})): lb={lb}, ub={ub}"
+                    )
+                else:
+                    # Fallback: legacy isotropic behavior (e.g. when the
+                    # parent pyramid metadata isn't accessible).
+                    scale = 2 ** level
+                    lb = [x // scale for x in lb]
+                    ub = [x // scale for x in ub]
+                    print(
+                        f"[ImageReader] After scaling by 2^{level}={scale} "
+                        f"(fallback, parent pyramid not readable): "
+                        f"lb={lb}, ub={ub}"
+                    )
         except (ValueError, IndexError) as e:
             print(f"[ImageReader] Level extraction failed ({e}); using bounds as-is")
             pass  # Level extraction failed; use bounds as-is
@@ -155,20 +246,31 @@ class ImageReader:
                 )
 
             # Scale crop bounds from level-0 coordinates to downsampled array
-            # coordinates.  The array has been downsampled by 2^level (zarr
-            # pyramid) AND by dsxy/dsz (interface_downsampling), so crop
-            # bounds must be divided by the total factor.
+            # coordinates. The array has been downsampled by the pyramid
+            # level (anisotropic-safe per-axis ds — see comment above)
+            # AND by dsxy/dsz (interface_downsampling), so crop bounds
+            # must be divided by the total per-axis factor.
             try:
                 level_str = file_path.rstrip('/').split('/')[-1]
                 level = int(level_str)
-                total_scale_xy = (2 ** level) * dsxy
-                total_scale_z = (2 ** level) * dsz
+                if level > 0:
+                    ds_x_p, ds_y_p, ds_z_p = _per_axis_pyramid_ds_xyz(
+                        file_path, level
+                    )
+                    if ds_x_p is None:
+                        # Same legacy fallback as the lb/ub block above.
+                        ds_x_p = ds_y_p = ds_z_p = 2 ** level
+                else:
+                    ds_x_p = ds_y_p = ds_z_p = 1
+                total_scale_x = ds_x_p * dsxy
+                total_scale_y = ds_y_p * dsxy
+                total_scale_z = ds_z_p * dsz
             except (ValueError, IndexError):
-                total_scale_xy = dsxy
+                total_scale_x = total_scale_y = dsxy
                 total_scale_z = dsz
 
-            # crop bounds are in XYZ order: [0]=X, [1]=Y use xy scale; [2]=Z
-            scales = [total_scale_xy, total_scale_xy, total_scale_z]
+            # crop bounds are in XYZ order: [0]=X, [1]=Y, [2]=Z.
+            scales = [total_scale_x, total_scale_y, total_scale_z]
             crop_min_scaled = [int(x // s) for x, s in zip(crop_min, scales)]
             crop_max_scaled = [int(np.ceil((x + 1) / s) - 1) for x, s in zip(crop_max, scales)]
 
