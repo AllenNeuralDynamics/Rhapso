@@ -4,12 +4,12 @@
 
 xml_file_path_detection: 's3://aind-open-data/HCR_807074_2025-08-26_15-45-00_processed_2025-09-03_17-17-18/image_tile_alignment/single_channel_xmls/channel_405.xml'
 image_file_prefix: 's3://aind-open-data/HCR_807074_2025-08-26_15-45-00_processed_2025-09-03_17-17-18/image_radial_correction/' 
-xml_output_file_path: &detection_xml_output_file_path 's3://aind-scratch-data/sean.fite/HCR_807074/rhapso-detection.xml'
-n5_output_file_prefix: &n5_output_file_prefix 's3://aind-scratch-data/sean.fite/HCR_807074/' 
+xml_output_file_path: &detection_xml_output_file_path 's3://rhapso-matching-test/rhapso-detection.xml'
+n5_output_file_prefix: &n5_output_file_prefix 's3://rhapso-matching-test/' 
 detection_run_type: 'ray' 
 file_type: 'zarr' 
-dsxy: 4
-dsz: 4
+dsxy: 16
+dsz: 16
 min_intensity: 1                          # normalize - dog
 max_intensity: 5                          # normalize - dog
 sigma: 1.8                                # blur - dog

@@ -1,6 +1,6 @@
-cluster_name: rhapso-fusion-cluster-ray-00001
-max_workers: 30
-min_workers: 30
+cluster_name: rhapso-fusion-cluster-ray-00000
+max_workers: 40
+min_workers: 40
 
 provider:
   type: aws
@@ -25,6 +25,8 @@ available_node_types:
           Tags:
             - Key: Owner
               Value: sean.fite@alleninstitute.org
+            - Key: PROJECT
+              Value: exaSPIM
 
   ray.worker.default:
     node_config:
@@ -38,6 +40,8 @@ available_node_types:
           Tags:
             - Key: Owner
               Value: sean.fite@alleninstitute.org
+            - Key: PROJECT
+              Value: exaSPIM
 
 head_node_type: ray.head.default
 
@@ -50,12 +54,11 @@ setup_commands:
   - sudo DEBIAN_FRONTEND=noninteractive apt install -y python3-pip 
   - sudo python3 -m pip install awscli
   - sudo python3 -m pip install "ray[default]==2.9.1"  
-  - sudo python3 -m pip install protobuf==4.23.4 
-  - sudo -E python3 -m pip install --no-cache-dir torch --index-url https://download.pytorch.org/whl/cpu 
-  - aws s3 cp s3://aind-scratch-data/sean.fite/Rhapso-0.2.3-py3-none-any.whl /tmp/Rhapso-0.2.3-py3-none-any.whl
+  - sudo python3 -m pip install protobuf==4.23.4  
+  - aws s3 cp s3://aind-scratch-data/sean.fite/Rhapso-0.1.991-py3-none-any.whl /tmp/Rhapso-0.1.991-py3-none-any.whl
   - echo 'export PATH=$HOME/.local/bin:$PATH' >> ~/.bashrc
   - source ~/.bashrc
-  - sudo python3 -m pip install /tmp/Rhapso-0.2.3-py3-none-any.whl  
+  - sudo python3 -m pip install /tmp/Rhapso-0.1.991-py3-none-any.whl  
 
 head_start_ray_commands:
   - ray stop
@@ -73,10 +76,11 @@ worker_start_ray_commands:
 # RAY UP / DOWN / CLEAR CACHE COMMANDS
 # ray up fusion_cluster_sean.yml --no-config-cache
 # ray down fusion_cluster_sean.yml
+# ray get-head-ip fusion_cluster_sean.yml
 # rm -rf ~/.cache/ray
 
 # ACCESS RAY DASHBOARD
-# ssh -i /Users/sean.fite/Desktop/AllenInstitute/Auth/AWS/EC2-SSH-KEY/aind-ray-cluster.pem -L 8265:localhost:8265 ubuntu@18.237.96.228
+# ssh -i /Users/sean.fite/Desktop/AllenInstitute/Auth/AWS/EC2-SSH-KEY/aind-ray-cluster.pem -L 8265:localhost:8265 ubuntu@54.245.151.106
 # http://localhost:8265
 
 # TO FIX

@@ -74,43 +74,15 @@ def filter_spimdata_xml(input_path: str, output_path: str) -> None:
 if __name__ == "__main__":
     # Hard-coded ranges (inclusive)
     KEEP_RANGES = [
-        (0, 8),
-        (9, 27),
-        (28, 56),
-        (57, 94),
-        (101, 138),
-        (148, 185),
-        (195, 232),
-        (242, 279),
-        (289, 326),
-        (336, 373),
-        (383, 420),
-        (430, 467),
-        (477, 514),
-        (524, 561),
-        (571, 608),
-        (618, 655),
-        (665, 702),
-        (712, 749),
-        (759, 796),
-        (806, 843),
-        (853, 889),
-        (899, 935),
-        (945, 981),
-        (990, 1026),
-        (1032, 1068),
-        (1071, 1106),
-        (1107, 1140),
-        (1141, 1170),
-        (1171, 1197),
-        (1198, 1219),
-        (1220, 1238),
-        (1239, 1253),
-        (1254, 1262),
+        (6,6),
+        (10,10),
+        (14,14),
+        (18,18),
+        # (12,13)
     ]
 
-    INPUT_XML = "/Users/sean.fite/Desktop/813720_round_2/HCR_813720_round_2_start.xml"
-    OUTPUT_XML = "/Users/sean.fite/Desktop/813720_round_2/Filtered_Region_7/dataset_start.xml"
+    INPUT_XML = "/Users/sean.fite/Desktop/bigstitcher_affine.xml"
+    OUTPUT_XML = "/Users/sean.fite/Desktop/bigstitcher_kept_4tile_row.xml"
 
     filter_spimdata_xml(INPUT_XML, OUTPUT_XML)
 

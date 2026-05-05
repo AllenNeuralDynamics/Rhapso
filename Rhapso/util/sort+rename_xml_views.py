@@ -261,6 +261,6 @@ def process_xml(input_path: str, output_path: str) -> None:
 # Inline params (edit me)
 # ------------------------
 if __name__ == "__main__":
-    INPUT_XML = "/Users/sean.fite/Desktop/823476_s5_12-24_solver.xml"
-    OUTPUT_XML = "/Users/sean.fite/Desktop/823476_s5_12-24_solver_sorted.xml"
+    INPUT_XML = "/Users/sean.fite/Desktop/bigstitcher_kept.xml"
+    OUTPUT_XML = "/Users/sean.fite/Desktop/bigstitcher_sorted.xml"
     process_xml(INPUT_XML, OUTPUT_XML)

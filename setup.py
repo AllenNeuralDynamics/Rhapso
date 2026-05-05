@@ -7,7 +7,7 @@ long_description = (this_directory / "README.md").read_text(encoding="utf-8")
 
 setup(
     name='Rhapso',
-    version='0.2.5',
+    version='0.1.991',
     author='ND',
     author_email='sean.fite@alleninstitute.org',
     description='A python package for aligning and stitching light sheet fluorescence microscopy images',
@@ -35,12 +35,21 @@ setup(
         's3fs==2024.12.0',
         'scikit-learn',
         'click==8.2.1',
-
-        'ray[default]==2.9.1',
+        
         'tensorstore',
         'xmltodict',
+        'xarray',
+        'ome-zarr',
+        'toolz',
         'nptyping',
-        "setuptools==68.2.2"
+        "aind-data-schema==2.0.5",  
+        "numba==0.59.1",
+        "czifile==2019.7.2.1",
+        "xarray-multiscale==1.1.0", 
+        "natsort==8.4.0",
+        "packaging>=24.1",
+        "llvmlite==0.42.*",
+        "dask[distributed]==2024.12.1"
     ],
     python_requires='>=3.10',
     classifiers=[
@@ -51,11 +60,6 @@ setup(
         'Operating System :: OS Independent',
     ],
 )
-
-
-
-
-
 
 
 
