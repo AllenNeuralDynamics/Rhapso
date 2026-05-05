@@ -1,5 +1,9 @@
 import numpy as np
 
+""""
+Find blocks that overlap
+"""
+
 class OverlappingBlocks:
     def __init__(self, per_view_transforms, overlapping_views, super_block_offset, fused_min, fused_max, grid_block):
         self.per_view_transforms = per_view_transforms
@@ -36,32 +40,51 @@ class OverlappingBlocks:
         mipmap_transform = np.eye(4, dtype=np.float64)  # identity 
         return best_level, mipmap_transform
 
-    def transformed_bounding_box_from_minmax(self, T4, interval_min_xyz, interval_max_xyz):
-        """
-        Transform an arbitrary local interval [min..max] by transforming 8 corners.
-        Returns integer world bounds (floor min, ceil max), inclusive.
-        """
-        x0, y0, z0 = map(float, interval_min_xyz)
-        x1, y1, z1 = map(float, interval_max_xyz)
+    # def transformed_bounding_box_from_minmax(self, T4, interval_min_xyz, interval_max_xyz):
+    #     """
+    #     Transform an arbitrary local interval [min..max] by transforming 8 corners.
+    #     Returns integer world bounds (floor min, ceil max), inclusive.
+    #     """
+    #     x0, y0, z0 = map(float, interval_min_xyz)
+    #     x1, y1, z1 = map(float, interval_max_xyz)
 
-        corners = np.array([
-            [x0, y0, z0],
-            [x0, y0, z1],
-            [x0, y1, z0],
-            [x0, y1, z1],
-            [x1, y0, z0],
-            [x1, y0, z1],
-            [x1, y1, z0],
-            [x1, y1, z1],
-        ], dtype=np.float64)
+    #     corners = np.array([
+    #         [x0, y0, z0],
+    #         [x0, y0, z1],
+    #         [x0, y1, z0],
+    #         [x0, y1, z1],
+    #         [x1, y0, z0],
+    #         [x1, y0, z1],
+    #         [x1, y1, z0],
+    #         [x1, y1, z1],
+    #     ], dtype=np.float64)
+
+    #     A = np.asarray(T4[:3, :3], dtype=np.float64)
+    #     t = np.asarray(T4[:3, 3], dtype=np.float64)
+
+    #     world = corners @ A.T + t
+    #     bounds_min = np.floor(world.min(axis=0)).astype(np.int64)
+    #     bounds_max = np.ceil(world.max(axis=0)).astype(np.int64)
+    #     return bounds_min, bounds_max
+
+    def transformed_bounding_box_from_minmax(self, T4, interval_min_xyz, interval_max_xyz):
+        # Exact for affine, but much faster than transforming 8 corners
+        interval_min = np.asarray(interval_min_xyz, dtype=np.float64)
+        interval_max = np.asarray(interval_max_xyz, dtype=np.float64)
 
         A = np.asarray(T4[:3, :3], dtype=np.float64)
         t = np.asarray(T4[:3, 3], dtype=np.float64)
 
-        world = corners @ A.T + t
-        bounds_min = np.floor(world.min(axis=0)).astype(np.int64)
-        bounds_max = np.ceil(world.max(axis=0)).astype(np.int64)
-        return bounds_min, bounds_max
+        c = (interval_min + interval_max) * 0.5   # center
+        e = (interval_max - interval_min) * 0.5   # half extents
+
+        wc = A @ c + t
+        we = np.abs(A) @ e
+
+        wmin = wc - we
+        wmax = wc + we
+
+        return np.floor(wmin).astype(np.int64), np.ceil(wmax).astype(np.int64)
 
     def _cellgrid_params_xyz(self, size_xyz):
         size_xyz = np.asarray(size_xyz, dtype=np.int64)
@@ -86,56 +109,34 @@ class OverlappingBlocks:
     # def find_overlapping_blocks(self, model, size):
     #     prefetch = []
 
+    #     # Treat `size` as the source tile/image dims (XYZ)
     #     dims_xyz = np.asarray(size, dtype=np.int64)
     #     cd = np.asarray(self.cell_dimensions, dtype=np.int64)
-    #     grid_dims = (dims_xyz + cd - 1) // cd
-    #     b = int(self.expand)
 
     #     _, mipmap_transform = self.for_best_resolution()
+
+    #     # Java: imgToWorld = model.copy(); imgToWorld.concatenate(best.mipmapTransform)
     #     img_to_world = np.asarray(model, dtype=np.float64) @ np.asarray(mipmap_transform, dtype=np.float64)
 
-    #     # --- NEW: compute candidate cell index range by inverse-mapping fused bbox to local ---
-    #     inv = np.linalg.inv(img_to_world)
+    #     # Java: grid.getGridDimensions()
+    #     grid_dims = (dims_xyz + cd - 1) // cd  # ceil(dims/cellDims)
 
-    #     # Use expanded fused interval (same logic as expand_interval but local here)
-    #     fused_min = self.fused_min.astype(np.float64) - b
-    #     fused_max = self.fused_max.astype(np.float64) + b
+    #     b = int(self.expand)
 
-    #     # 8 corners of the fused/world interval
-    #     x0, y0, z0 = fused_min
-    #     x1, y1, z1 = fused_max
-    #     world_corners = np.array([
-    #         [x0, y0, z0], [x0, y0, z1], [x0, y1, z0], [x0, y1, z1],
-    #         [x1, y0, z0], [x1, y0, z1], [x1, y1, z0], [x1, y1, z1],
-    #     ], dtype=np.float64)
-
-    #     Ainv = inv[:3, :3]
-    #     tinv = inv[:3, 3]
-    #     local = world_corners @ Ainv.T + tinv
-
-    #     local_min = np.floor(local.min(axis=0)).astype(np.int64)
-    #     local_max = np.ceil(local.max(axis=0)).astype(np.int64)
-
-    #     # Clamp to image bounds (inclusive)
-    #     local_min = np.maximum(local_min, 0)
-    #     local_max = np.minimum(local_max, dims_xyz - 1)
-
-    #     # Convert local voxel range -> cell index range
-    #     gmin = np.maximum(local_min // cd, 0)
-    #     gmax = np.minimum(local_max // cd, grid_dims - 1)
-
-    #     # --- loop only candidate grid positions ---
-    #     for gx in range(int(gmin[0]), int(gmax[0]) + 1):
-    #         for gy in range(int(gmin[1]), int(gmax[1]) + 1):
-    #             for gz in range(int(gmin[2]), int(gmax[2]) + 1):
+    #     for gx in range(int(grid_dims[0])):
+    #         for gy in range(int(grid_dims[1])):
+    #             for gz in range(int(grid_dims[2])):
     #                 grid_pos = np.array([gx, gy, gz], dtype=np.int64)
 
+    #                 # Java: grid.getCellInterval(gridPos, cellMin, cellMax)
     #                 cell_min = grid_pos * cd
-    #                 cell_max = np.minimum(cell_min + cd, dims_xyz) - 1  # inclusive
+    #                 cell_max = np.minimum(cell_min + cd, dims_xyz) - 1  # inclusive, border-clamped
 
+    #                 # Java: expand(cellBBox, expand, projectedCellBBox)
     #                 expanded_min = cell_min - b
     #                 expanded_max = cell_max + b
 
+    #                 # Java: bounds = smallestContainingInterval(imgToWorld.estimateBounds(...))
     #                 bounds_min, bounds_max = self.transformed_bounding_box_from_minmax(
     #                     img_to_world, expanded_min, expanded_max
     #                 )
@@ -148,34 +149,57 @@ class OverlappingBlocks:
     def find_overlapping_blocks(self, model, size):
         prefetch = []
 
-        # Treat `size` as the source tile/image dims (XYZ)
         dims_xyz = np.asarray(size, dtype=np.int64)
         cd = np.asarray(self.cell_dimensions, dtype=np.int64)
-
-        _, mipmap_transform = self.for_best_resolution()
-
-        # Java: imgToWorld = model.copy(); imgToWorld.concatenate(best.mipmapTransform)
-        img_to_world = np.asarray(model, dtype=np.float64) @ np.asarray(mipmap_transform, dtype=np.float64)
-
-        # Java: grid.getGridDimensions()
-        grid_dims = (dims_xyz + cd - 1) // cd  # ceil(dims/cellDims)
-
+        grid_dims = (dims_xyz + cd - 1) // cd
         b = int(self.expand)
 
-        for gx in range(int(grid_dims[0])):
-            for gy in range(int(grid_dims[1])):
-                for gz in range(int(grid_dims[2])):
+        _, mipmap_transform = self.for_best_resolution()
+        img_to_world = np.asarray(model, dtype=np.float64) @ np.asarray(mipmap_transform, dtype=np.float64)
+
+        inv = np.linalg.inv(img_to_world)
+
+        # Expanded fused interval in world coords (inclusive)
+        fused_min_w = (self.fused_min.astype(np.float64) - b)
+        fused_max_w = (self.fused_max.astype(np.float64) + b)
+
+        x0, y0, z0 = fused_min_w
+        x1, y1, z1 = fused_max_w
+
+        world_corners = np.array([
+            [x0, y0, z0], [x0, y0, z1], [x0, y1, z0], [x0, y1, z1],
+            [x1, y0, z0], [x1, y0, z1], [x1, y1, z0], [x1, y1, z1],
+        ], dtype=np.float64)
+
+        Ainv = inv[:3, :3]
+        tinv = inv[:3, 3]
+        local = world_corners @ Ainv.T + tinv
+
+        # Candidate local voxel range that could overlap fused bbox.
+        # Use floor/ceil, then expand by +1 voxel to be safe with inclusive bounds.
+        local_min = np.floor(local.min(axis=0)).astype(np.int64) - 1
+        local_max = np.ceil(local.max(axis=0)).astype(np.int64) + 1
+
+        # Clamp to valid local image bounds (inclusive: [0 .. dims-1])
+        local_min = np.maximum(local_min, 0)
+        local_max = np.minimum(local_max, dims_xyz - 1)
+
+        # Convert local voxel range -> cell index range (inclusive cell indices)
+        gmin = np.maximum(local_min // cd, 0)
+        gmax = np.minimum(local_max // cd, grid_dims - 1)
+
+        # Loop only candidate grid positions
+        for gx in range(int(gmin[0]), int(gmax[0]) + 1):
+            for gy in range(int(gmin[1]), int(gmax[1]) + 1):
+                for gz in range(int(gmin[2]), int(gmax[2]) + 1):
                     grid_pos = np.array([gx, gy, gz], dtype=np.int64)
 
-                    # Java: grid.getCellInterval(gridPos, cellMin, cellMax)
                     cell_min = grid_pos * cd
-                    cell_max = np.minimum(cell_min + cd, dims_xyz) - 1  # inclusive, border-clamped
+                    cell_max = np.minimum(cell_min + cd, dims_xyz) - 1  # inclusive
 
-                    # Java: expand(cellBBox, expand, projectedCellBBox)
                     expanded_min = cell_min - b
                     expanded_max = cell_max + b
 
-                    # Java: bounds = smallestContainingInterval(imgToWorld.estimateBounds(...))
                     bounds_min, bounds_max = self.transformed_bounding_box_from_minmax(
                         img_to_world, expanded_min, expanded_max
                     )

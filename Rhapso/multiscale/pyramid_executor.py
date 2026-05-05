@@ -90,13 +90,15 @@ class PyramidExecutor:
         # Higher levels have fewer tasks, but each task can still write many chunks,
         # so we intentionally scale down to avoid writing the whole level at once.
         if dst_level == 1:
-            max_in_flight = 150
+            max_in_flight = 300
         elif dst_level == 2:
-            max_in_flight = 64
+            max_in_flight = 150
         elif dst_level == 3:
-            max_in_flight = 16
+            max_in_flight = 100
+        elif dst_level == 4:
+            max_in_flight = 50
         else:
-            max_in_flight = 2
+            max_in_flight = 5
 
         print(
             f"[PyramidExecutor] store: dispatching {total_blocks} Ray tasks "

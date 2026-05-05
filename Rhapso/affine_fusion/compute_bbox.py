@@ -165,7 +165,6 @@ class ComputeBBox():
                 "path": full_path, 
             }
 
-            # pts = self.corners_xyz(sizes[setup])
             pts = self.sample_bbox_points_xyz(sizes[setup])
             w = (T @ pts.T).T[:, :3]
 

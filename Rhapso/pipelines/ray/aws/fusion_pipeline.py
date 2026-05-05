@@ -4,7 +4,7 @@ import base64
 import json
 from pathlib import Path
 
-with open("Rhapso/pipelines/ray/param/fusion/exaSPIM_720164.yml", "r") as file:
+with open("Rhapso/pipelines/ray/param/fusion/HCR_823476.yml", "r") as file:
     config = yaml.safe_load(file)
 
 serialized_config = base64.b64encode(json.dumps(config).encode()).decode()
@@ -22,6 +22,7 @@ fusion_cmd = (
     "    block_size=cfg[\\\"block_size\\\"],\n"
     "    intensity_range=cfg[\\\"intensity_range\\\"],\n"
     "    block_scale=cfg[\\\"block_scale\\\"],\n"
+    "    overlap_strategy=cfg[\\\"overlap_strategy\\\"],\n"
     ")\n"
     "fusion.run()\n"
     "PY\n"

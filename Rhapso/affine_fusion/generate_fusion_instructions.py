@@ -5,11 +5,12 @@ Create fuse instructions
 """
 
 class GenerateFusionInstructions():
-    def __init__(self, per_view_transforms, grid_block, fusion_min_global, fusion_max_global):
+    def __init__(self, per_view_transforms, grid_block, fusion_min_global, fusion_max_global, overlap_strategy):
         self.per_view_transforms = per_view_transforms
         self.grid_block = grid_block
         self.fusion_min_global = fusion_min_global
         self.fusion_max_global = fusion_max_global
+        self.overlap_strategy = overlap_strategy
 
     def estimate_bounds(self, t, dim_xyz):
         A = np.asarray(t[:3, :3], dtype=np.float64)
@@ -183,6 +184,32 @@ class GenerateFusionInstructions():
 
         return blending, border
     
+    def create_masking(self, dim_xyz, border, transform_from_source, interval_min_xyz=(0,0,0)):
+        # Build concatenated transform t = T @ shift(interval.min)
+        m = np.eye(4, dtype=np.float64)
+        m[0, 3] = float(interval_min_xyz[0])
+        m[1, 3] = float(interval_min_xyz[1])
+        m[2, 3] = float(interval_min_xyz[2])
+
+        T = np.asarray(transform_from_source, dtype=np.float64)
+        t = T @ m
+        inv_t = np.linalg.inv(t)
+
+        dim_xyz = np.asarray(dim_xyz, dtype=np.float64)
+        border = np.asarray(border, dtype=np.float64)
+
+        # b0/b3 match MaskingBlockSupplier logic
+        b0 = border.copy()
+        b3 = (dim_xyz - 1.0) - border
+
+        return {
+            "t": t,
+            "inv_t": inv_t,
+            "b0": b0.astype(np.float32),
+            "b3": b3.astype(np.float32),
+            "border": border.astype(np.float32).copy(),
+        }
+    
     def create_avg_blend(self, dim_xyz, border, blending, transform_from_source, interval_min_xyz=(0, 0, 0)):
         n = 3
 
@@ -236,7 +263,6 @@ class GenerateFusionInstructions():
         }
     
     def fuse(self):
-        fusion_type = "avg_blend"
         num_dimensions = 3
 
         bb = self.overlap()
@@ -276,10 +302,16 @@ class GenerateFusionInstructions():
 
             blending, border = self.adjust_blending(blending, border, transform)
             
-            if fusion_type == "avg_blend":
-                weights = self.create_avg_blend(dim, border, blending, transform, interval_min_xyz=(0, 0, 0))
-
-            image_instructions[view] = weights
+            if self.overlap_strategy == "avg_blend":
+                instructions = self.create_avg_blend(dim, border, blending, transform, interval_min_xyz=(0, 0, 0))
+            elif self.overlap_strategy == "lowest_view_wins":
+                instructions = self.create_masking(dim, border, transform, interval_min_xyz=(0,0,0))
+            else:
+                raise ValueError(
+                f"Unknown fusion_type={self.overlap_strategy!r}. Expected 'avg_blend' or 'lowest_view_wins'."
+            )
+                
+            image_instructions[view] = instructions
         
         return image_instructions, blocks
 

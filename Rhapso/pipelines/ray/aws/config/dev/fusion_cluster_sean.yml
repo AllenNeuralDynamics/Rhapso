@@ -80,7 +80,7 @@ worker_start_ray_commands:
 # rm -rf ~/.cache/ray
 
 # ACCESS RAY DASHBOARD
-# ssh -i /Users/sean.fite/Desktop/AllenInstitute/Auth/AWS/EC2-SSH-KEY/aind-ray-cluster.pem -L 8265:localhost:8265 ubuntu@35.165.112.192
+# ssh -i /Users/sean.fite/Desktop/AllenInstitute/Auth/AWS/EC2-SSH-KEY/aind-ray-cluster.pem -L 8265:localhost:8265 ubuntu@54.245.151.106
 # http://localhost:8265
 
 # TO FIX
