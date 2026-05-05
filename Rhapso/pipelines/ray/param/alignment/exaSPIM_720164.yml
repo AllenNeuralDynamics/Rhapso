@@ -4,8 +4,8 @@
 
 xml_file_path_detection: 's3://aind-open-data/exaSPIM_720164_2025-07-07_17-55-45_processed_2025-07-15_16-22-02/tile_alignment/dataset.xml'
 image_file_prefix: 's3://aind-open-data/exaSPIM_720164_2025-07-07_17-55-45_processed_2025-07-15_16-22-02/flatfield_correction/SPIM.ome.zarr/' 
-xml_output_file_path: &detection_xml_output_file_path 's3://aind-scratch-data/sean.fite/exaSPIM_794495/rhapso-detection.xml'
-n5_output_file_prefix: &n5_output_file_prefix 's3://aind-scratch-data/sean.fite/exaSPIM_794495/' 
+xml_output_file_path: &detection_xml_output_file_path 's3://rhapso-matching-test/rhapso-detection.xml'
+n5_output_file_prefix: &n5_output_file_prefix 's3://rhapso-matching-test/' 
 detection_run_type: 'ray' 
 file_type: 'zarr' 
 dsxy: 16
