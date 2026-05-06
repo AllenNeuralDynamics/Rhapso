@@ -19,11 +19,11 @@ setup(
     },
     packages=find_packages(),
     install_requires=[
-        'pandas',
+        'pandas==3.0.2',
         'dask[array]==2024.12.1',
         'zarr==2.18.3',
         'scipy==1.13.1',
-        'scikit-image',
+        'scikit-image==0.22.0',
         'bioio==1.3.0',
         'bioio-tifffile==1.0.0',
         'tifffile==2025.1.10',
@@ -33,14 +33,14 @@ setup(
         'matplotlib==3.10.0',
         'memory-profiler==0.61.0',
         's3fs==2024.12.0',
-        'scikit-learn',
+        'scikit-learn==1.8.0',
         'click==8.2.1',
 
-        'ray[default]==2.9.1',
-        'tensorstore',
-        'xmltodict',
-        'nptyping',
-        "setuptools==68.2.2"
+        'ray==2.54.1',
+        'tensorstore==0.1.82',
+        'xmltodict==1.0.4',
+        'nptyping==2.5.0',
+        "setuptools==71.0.4"
     ],
     python_requires='>=3.10',
     classifiers=[
