@@ -49,7 +49,8 @@ Questions or want to contribute? Please open an issue..
 - **Interest Point Detection** - DOG based feature detection
 - **Interest Point Matching** - Descriptor based RANSAC to match feature points
 - **Global Optimization** - Align matched features between tile pairs globally
-- **Affine Fusion** - Fuse tiles using generated alignments up to affine with multiscale support
+- **Affine Fusion** - Fuse tiles using generated alignments up to affine
+- **Multiscale** - Add lower resolution scaling to dataset
 - **Validation and Visualization Tools** - Validate component specific results for the best output
 - **ZARR** - Zarr data as input
 - **TIFF** - TIFF data as input
