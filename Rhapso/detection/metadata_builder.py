@@ -84,12 +84,19 @@ class MetadataBuilder:
                         span = tuple(actual_ub[i] - actual_lb[i] for i in range(3))
                         interval_key = (actual_lb, actual_ub, span)
 
+                        # `lb` is the chunk's parent-frame starting voxel
+                        # (used by DoG.apply_lower_bounds to map peaks back
+                        # to the parent's coord frame). `offset` is 0
+                        # because chunk-shift is already encoded in `lb`;
+                        # leaving it as `z` would double-add the shift and
+                        # produce Z-banded IPs (one band per chunk after
+                        # the first). Image read uses interval_key bounds.
                         self.metadata.append({
                             'view_id': view_id,
                             'file_path': file_path,
                             'interval_key': interval_key,
-                            'offset': z,
-                            'lb' : lb,
+                            'offset': 0,
+                            'lb' : actual_lb,
                             'crop_min': crop_min,
                             'crop_max': crop_max
                         })
@@ -109,18 +116,22 @@ class MetadataBuilder:
                         z = max(0, chunk[0] - self.overlap)
                         z_end = min(chunk[-1] + 1 + self.overlap, z_stop - z_start)
 
-                        actual_lb = (lb[0], lb[1], z_start + z)        
+                        actual_lb = (lb[0], lb[1], z_start + z)
                         actual_ub = (ub[0], ub[1], z_start + z_end)
 
                         span = tuple(actual_ub[i] - actual_lb[i] for i in range(3))
                         interval_key = (actual_lb, actual_ub, span)
 
+                        # See tiff branch above: `lb` must be the chunk's
+                        # parent-frame starting voxel and `offset` zero,
+                        # else apply_lower_bounds + apply_offset double-add
+                        # the chunk-shift and produce Z-banded IPs.
                         self.metadata.append({
                             'view_id': view_id,
                             'file_path': file_path,
                             'interval_key': interval_key,
-                            'offset': z,
-                            'lb' : lb,
+                            'offset': 0,
+                            'lb' : actual_lb,
                             'crop_min': crop_min,
                             'crop_max': crop_max
                         })
