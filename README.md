@@ -31,16 +31,6 @@ This is the official code base for **Rhapso**, a modular Python toolkit for the 
 
 ---
 
-<br>
-
-**Update 1/12/26** 
---------
-Rhapso is still loading... and while we wrap up development, a couple things to know if you are outside the Allen Institute: 
-   - This process requires a very specific XML structure to work.
-   - Fusion/Mutliscale is included but still under testing and development
-
-<br>
-
 ## Summary
 Rhapso is a set of Python components used to register, align, and stitch large-scale, overlapping, tile-based, multiscale microscopy datasets. Its stateless components can run on a single machine or scale out across cloud-based clusters. 
 
@@ -59,6 +49,7 @@ Questions or want to contribute? Please open an issue..
 - **Interest Point Detection** - DOG based feature detection
 - **Interest Point Matching** - Descriptor based RANSAC to match feature points
 - **Global Optimization** - Align matched features between tile pairs globally
+- **Affine Fusion** - Fuse tiles using generated alignments up to affine with multiscale support
 - **Validation and Visualization Tools** - Validate component specific results for the best output
 - **ZARR** - Zarr data as input
 - **TIFF** - TIFF data as input
@@ -78,7 +69,8 @@ Rhapso/
     ├── data_prep/                          # Custom data loaders
     ├── detection/
     ├── evaluation/
-    ├── fusion/
+    ├── affine_fusion/
+    ├── multiscale/
     ├── image_split/
     ├── matching/
     ├── pipelines/
@@ -86,12 +78,16 @@ Rhapso/
     │       ├── aws/
     │       │   ├── config/                 # Cluster templates (edit for your account)
     │       │   └── alignment_pipeline.py   # AWS Ray pipeline entry point
+    |       |   └── fusion_pipeline.py      # AWS Ray pipeline entry point
     │       ├── local/
     │       │   └── alignment_pipeline.py   # Local Ray pipeline entry point
+    |       |   └── fusion_pipeline.py      # AWS Ray pipeline entry point
     │       ├── param/                      # Run parameter files (customize per run)
     │       ├── interest_point_detection.py # Detection pipeline script
     │       ├── interest_point_matching.py  # Matching pipeline script
-    │       └── solver.py                   # Global solver script
+    │       └── solver.py                   # Global solver pipeline script
+    │       └── affine_fusion.py            # Affine fusion pipeline script
+    │       └── multiscale.py               # Multiscale pipeline script
     ├── solver/
     └── visualization/                      # Validation tools
 ```
@@ -387,6 +383,30 @@ python Rhapso/pipelines/ray/aws/alignment_pipeline.py
 | `max_iterations`     | Optimization   | Upper bound on solver iterations                                   | 10,0000             |
 | `max_allowed_error`  | Optimization   | Overall error cap; `inf` disables hard stop by error               | `inf`               |
 | `max_plateauwidth`   | Early stopping | Stagnation window before stopping on no improvement                | 200                 |
+
+```
+
+### Fusion
+```
+| Parameter            | Feature / step | What it does                                                       | Typical range       |
+| :------------------- | :------------- | :----------------------------------------------------------------- | :------------------ |
+| `block_size`         | Optimization   | Cell size per task xyz                                             | 256, 256, 256       |
+| `intensity_range`    | Optimization   | Range of intensity values                                          | 0, 65535            |
+| `block_scale`        | Optimization   | Scaling of cell size                                               | 2, 2, 1             |
+| `overlap_strategy`   | Early stopping | Strategy when more than 1 view contributes also lowest_view_wins   | avg_blend           |
+
+```
+
+### Multiscale
+```
+| Parameter               | Feature / step | What it does                                                       | Typical range       |
+| :---------------------- | :------------- | :----------------------------------------------------------------- | :------------------ |
+| `multiscale_chunk_size` | Graph pruning  | Output cell size                                                   | 128, 128, 128       |
+| `voxel_size`            | Graph pruning  | Voxel size of data in zyx                                          | 1.0, .748, .748     |
+| `n_lvls`                | Optimization   | Num levels to multiscale including base level                      | 7                   |
+| `scale_factor`          | Optimization   | Scaling factor per level for entropy                               | [2,2,2],...num lvls |
+| `target_block_size_mb`  | Optimization   | Per worker block size                                              | 256                 |
+| `base_level`            | Early stopping | Existing base res level                                            | 0                   |
 
 ```
 
