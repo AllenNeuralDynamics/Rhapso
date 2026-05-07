@@ -16,7 +16,8 @@ import os
 class InterestPointDetection:
     def __init__(self, dsxy, dsz, min_intensity, max_intensity, sigma, threshold, file_type, xml_file_path,
                  image_file_prefix, xml_output_file_path, n5_output_file_prefix, combine_distance, chunks_per_bound, run_type,
-                 max_spots, median_filter, overlapping_only=True, min_peak_intensity=None):
+                 max_spots, median_filter, overlapping_only=True, min_peak_intensity=None,
+                 num_cpus_per_task=1):
         self.dsxy = dsxy
         self.dsz = dsz
         self.min_intensity = min_intensity
@@ -35,6 +36,11 @@ class InterestPointDetection:
         self.median_filter = median_filter
         self.overlapping_only = overlapping_only
         self.min_peak_intensity = min_peak_intensity
+        # Per-task CPU reservation. Caps detection concurrency to
+        # floor(num_cpus / num_cpus_per_task) — the only knob to bound
+        # peak resident memory when one DoG task can balloon to many GB.
+        # Default 1 preserves legacy behavior (concurrency = num_cpus).
+        self.num_cpus_per_task = max(1, int(num_cpus_per_task))
 
     def detection(self):
         # Get XML file
@@ -105,12 +111,18 @@ class InterestPointDetection:
                 print(traceback.format_exc(), flush=True)
                 return {'error': str(e), 'view_id': chunk_metadata.get('view_id', 'unknown')}
 
-        # Submit tasks to Ray
-        futures = [process_peak_detection_task.remote(chunk_metadata, new_dsxy, new_dsz, self.min_intensity, self.max_intensity,
-                                                      self.sigma, self.threshold, self.median_filter, mip_map_downsample,
-                                                      self.min_peak_intensity)
+        # Submit tasks to Ray. `num_cpus` reservation per task caps
+        # concurrency to floor(num_cpus / num_cpus_per_task), bounding
+        # peak resident memory when DoG amplifies the input chunk.
+        futures = [process_peak_detection_task.options(num_cpus=self.num_cpus_per_task).remote(
+                       chunk_metadata, new_dsxy, new_dsz, self.min_intensity, self.max_intensity,
+                       self.sigma, self.threshold, self.median_filter, mip_map_downsample,
+                       self.min_peak_intensity)
             for chunk_metadata in image_chunk_metadata
         ]
+        print(f"[InterestPointDetection] Submitted {len(image_chunk_metadata)} tasks "
+              f"with num_cpus={self.num_cpus_per_task} per task "
+              f"(max concurrency = {os.cpu_count() // self.num_cpus_per_task})")
 
         # Gather and process results
         results = ray.get(futures)

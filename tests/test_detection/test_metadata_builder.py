@@ -183,14 +183,16 @@ class TestMetadataBuilder(unittest.TestCase):
             self.assertGreater(chunk_z_start, prev_chunk_z_start)
             prev_chunk_z_start = chunk_z_start
 
-        # Simulate the DoG recombine step: a synthetic peak at chunk-
-        # local (0,0,0) in chunk i should land at global Z =
-        # interval_key[0][2] (the chunk's parent-frame start), not
-        # 2*interval_key[0][2] as the buggy double-add produced.
+        # Simulate the DoG recombine step: upsample first (identity at
+        # level 0), then add lb (L0 coords), then add offset (0).
+        # A synthetic peak at chunk-local (0,0,0) in chunk i should
+        # land at global Z = interval_key[0][2].
         for entry in builder.metadata:
             local_peak_xyz = np.array([[0.0, 0.0, 0.0]], dtype=np.float32)
+            # upsample_coordinates is identity at level 0
+            upsampled_peak = local_peak_xyz.copy()
             lb_xyz = np.array(entry['lb'], dtype=np.float32)
-            global_peak = local_peak_xyz + lb_xyz  # apply_lower_bounds
+            global_peak = upsampled_peak + lb_xyz  # apply_lower_bounds
             global_peak[:, 2] += entry['offset']   # apply_offset (now 0)
             self.assertEqual(
                 float(global_peak[0, 2]),

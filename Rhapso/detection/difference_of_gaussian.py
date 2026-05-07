@@ -356,9 +356,9 @@ class DifferenceOfGaussian:
                     )
                 peaks = peaks[keep]
                 intensities = intensities[keep]
-            final_peaks = self.apply_lower_bounds(peaks, lb)
+            final_peaks = self.upsample_coordinates(peaks)
+            final_peaks = self.apply_lower_bounds(final_peaks, lb)
             final_peaks = self.apply_offset(final_peaks, offset)
-            final_peaks = self.upsample_coordinates(final_peaks)
 
         print(f"[DoG] final_peaks after transforms={len(final_peaks)}")
         return {

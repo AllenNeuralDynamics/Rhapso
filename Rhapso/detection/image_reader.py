@@ -321,7 +321,7 @@ class ImageReader:
             # double-translate each split tile's IPs and produce a
             # residual gradient of k × tile_step across the grid.
             lower_bound = [
-                int(lower_bound[i]) + int(crop_min_scaled[i])
+                int(lower_bound[i]) + int(crop_min[i])
                 for i in range(3)
             ]
             print(f"[ImageReader] crop offset applied → lower_bound={lower_bound}")
