@@ -352,23 +352,18 @@ python Rhapso/pipelines/ray/aws/alignment_pipeline.py
 
 ### Matching
 ```
-# Candidate Selection
-| Parameter                      | Feature / step      | What it does                                                      | Typical range  |
-| :----------------------------- | :------------------ | :---------------------------------------------------------------- | :------------- |
-| `num_neighbors`                | Candidate search    | Number of nearest neighbors to consider per point                 | 3              |
-| `redundancy`                   | Candidate search    | Extra neighbors added for robustness beyond `num_neighbors`       | 0 - 1          |
-| `significance`                 | Ratio test          | Strictness of descriptor ratio test; larger = stricter acceptance | 3              |
-| `search_radius`                | Spatial gating      | Max spatial distance for candidate matches (in downsampled units) | 100 - 300      |
-| `num_required_neighbors`       | Candidate filtering | Minimum neighbors required to keep a candidate point              | 3              |
-
-# Ransac
-| Parameter                     | Feature / step       | What it does                                                      | Typical range  |
-| :---------------------------- | :------------------- | :---------------------------------------------------------------- | :------------- |
-| `model_min_matches`           | RANSAC               | Minimum correspondences to estimate a rigid transform             | 18 – 32        |
-| `inlier_factor`               | RANSAC               | Inlier tolerance scaling; larger = looser inlier threshold        | 30 – 100       |
-| `lambda_value`                | RANSAC               | Regularization strength during model fitting                      | 0.1 – 0.05     |
-| `num_iterations`              | RANSAC               | Number of RANSAC trials; higher = more robust, slower             | 10,0000        |
-| `regularization_weight`       | RANSAC               | Weight applied to the regularization term                         | 1.0            |
+| Parameter                 | Feature / step      | What it does                                                      | Typical range  |
+| :------------------------ | :------------------ | :---------------------------------------------------------------- | :------------- |
+| `num_neighbors`           | Candidate search    | Number of nearest neighbors to consider per point                 | 3              |
+| `redundancy`              | Candidate search    | Extra neighbors added for robustness beyond `num_neighbors`       | 0 - 1          |
+| `significance`            | Ratio test          | Strictness of descriptor ratio test; larger = stricter acceptance | 3              |
+| `search_radius`           | Spatial gating      | Max spatial distance for candidate matches (in downsampled units) | 100 - 300      |
+| `num_required_neighbors`  | Candidate filtering | Minimum neighbors required to keep a candidate point              | 3              |
+| `model_min_matches`       | RANSAC              | Minimum correspondences to estimate a rigid transform             | 18 – 32        |
+| `inlier_factor`           | RANSAC              | Inlier tolerance scaling; larger = looser inlier threshold        | 30 – 100       |
+| `lambda_value`            | RANSAC              | Regularization strength during model fitting                      | 0.1 – 0.05     |
+| `num_iterations`          | RANSAC              | Number of RANSAC trials; higher = more robust, slower             | 10,0000        |
+| `regularization_weight`   | RANSAC              | Weight applied to the regularization term                         | 1.0            |
 
 ```
 <br>
@@ -384,6 +379,21 @@ python Rhapso/pipelines/ray/aws/alignment_pipeline.py
 | `max_iterations`     | Optimization   | Upper bound on solver iterations                                   | 10,0000             |
 | `max_allowed_error`  | Optimization   | Overall error cap; `inf` disables hard stop by error               | `inf`               |
 | `max_plateauwidth`   | Early stopping | Stagnation window before stopping on no improvement                | 200                 |
+
+```
+<br>
+
+### Split
+```
+| Parameter            | Feature / step | What it does                                       | Typical range       |
+| :------------------- | :------------- | :------------------------------------------------- | :------------------ |
+| `point_density`      | Fake points    | Controls overlap point count                       | 100                 |
+| `min_points`         | Fake points    | Min points per overlap                             | 20                  |
+| `max_points`         | Fake points    | Max points per overlap                             | 500                 |
+| `error`              | Fake points    | Adds random coordinate jitter                      | 0.5                 |
+| `exclude_radius`     | Fake points    | Prevents points from being too close               | 200                 |
+| `target_image_size`  | Grid split     | Desired split tile size                            | [7040, 7040, 7040]  |
+| `target_overlap`     | Grid split     | Desire tile overlap size                           | [128, 128, 128]     |
 
 ```
 <br>
@@ -419,17 +429,16 @@ python Rhapso/pipelines/ray/aws/alignment_pipeline.py
 
 ## Tuning Guide
 
-- **Start with Detection.** The quality and density of interest points strongly determine alignment outcomes.
+- **Start with Detection:** Interest point quality and coverage have the biggest impact on alignment results.
 
-- **Target Counts (exaSPIM):** ~25–35k points per tile in dense regions; ~10k for sparser tiles. Going much higher usually increases runtime without meaningful accuracy gains.
+- **Inspect the Peaks:** There is no universal peak count that guarantees good alignment. Tune detection to capture as many meaningful peaks as possible without mostly detecting noise. Use `detection_visualization.py` to compare detected points against the image data. Good settings should produce points that follow visible tissue structure rather than random background. It is usually better to allow some extra peaks because RANSAC can reject noisy matches, but this will increase runtime.
 
-- **Inspect Early.** After detection, run the visualization script and verify that peaks form **clustered shapes/lines** with a **good spatial spread**—a good sign for robust rigid matches.
+- **Rigid -> Affine Alignment:** For large datasets, acquisition can take long enough that the sample may slightly deform over time. Start by solving rigid/translation alignment between overlapping tiles, then run affine alignment to account for remaining local scale, shear, or deformation effects.
 
-- **Rigid → Affine Dependency.** Weak rigid matches produce poor rigid transforms, which then degrade affine matching (points don’t land close enough). If tiles fail to align:
-  - Check **match counts** for the problem tile and its neighbors.
-  - Adjust high-impact detection knobs—`sigma`, `threshold`, and `median_filter`—within sensible ranges.
-  - Revisit `max_spots` and `combine_distance` to balance density vs. duplicate detections.
+- **Debug Weak Regions Locally:** If a tile aligns poorly, first inspect its match counts with neighboring tiles. Low match counts usually point back to detection quality, overlap quality, or overly strict matching settings.
 
+- **Tune Matching Carefully:** Adjust the matching regularization weight when needed, but avoid making RANSAC too permissive. A loose RANSAC threshold can accept bad matches and usually makes alignment worse, not better.
+  
 ---
 
 <br>
