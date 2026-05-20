@@ -2,7 +2,7 @@
 # -----------------------------------
 aligned_xml_path: "s3://aind-scratch-data/sean.fite/exaSPIM_720164_split.xml"
 zarr_input_prefix: "s3://aind-open-data/exaSPIM_720164_2025-07-07_17-55-45_processed_2025-07-15_16-22-02/flatfield_correction/SPIM.ome.zarr"
-output_path: "s3://aind-scratch-data/sean.fite/optimizations/720164-4/fusion/fused.zarr" 
+output_path: "s3://aind-scratch-data/sean.fite/optimizations/720164-5/fusion/fused.zarr" 
 block_size: [256, 256, 384]           # xyz
 intensity_range: [0, 65535]           # UINT16 default
 block_scale: [2, 2, 1]                # xyz
@@ -10,7 +10,7 @@ overlap_strategy: "avg_blend"
 
 # MULTISCALE
 # -----------------------------------
-multiscale_zarr_path: "s3://aind-scratch-data/sean.fite/optimizations/720164-4/fusion/fused.zarr"
+multiscale_zarr_path: "s3://aind-scratch-data/sean.fite/optimizations/720164-5/fusion/fused.zarr"
 multiscale_chunk_size: [128, 128, 128]
 voxel_size: [1.0, 0.7480000148631624, 0.747999882518797]                                   # ZYX
 n_lvls: 7                                                                                  # Including base level

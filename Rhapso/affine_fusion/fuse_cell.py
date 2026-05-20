@@ -1,7 +1,6 @@
 import numpy as np
 import zarr
 import fsspec
-import time
 from scipy.ndimage import map_coordinates
 
 """
