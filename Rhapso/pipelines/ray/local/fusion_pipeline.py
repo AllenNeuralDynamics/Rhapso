@@ -4,7 +4,7 @@ from Rhapso.util.ng_link_gen_z1 import NeuroglancerLinkGeneratorZ1
 import yaml
 
 # Point to param file
-with open("Rhapso/pipelines/ray/param/fusion/HCR_823476.yml", "r") as file:
+with open("Rhapso/pipelines/ray/param/fusion/exaSPIM_720164.yml", "r") as file:
     config = yaml.safe_load(file)
 
 # FUSION
@@ -37,6 +37,6 @@ ng_link_gen = NeuroglancerLinkGeneratorZ1(
 )
 
 # Run pipeline
-# fusion.run()
+fusion.run()
 multiscale.run()
 # ng_link_gen.run()
