@@ -4,7 +4,7 @@ import base64
 import json
 from pathlib import Path
 
-with open("Rhapso/pipelines/ray/param/fusion/HCR_823476.yml", "r") as file:
+with open("Rhapso/pipelines/ray/param/fusion/exaSPIM_720164.yml", "r") as file:
     config = yaml.safe_load(file)
 
 serialized_config = base64.b64encode(json.dumps(config).encode()).decode()
@@ -62,7 +62,7 @@ print("$", " ".join(["ray", "up", unified_yml, "-y"]))
 subprocess.run(["ray", "up", unified_yml, "-y"], check=True, cwd=prefix)
 
 try:
-    # exec_on_cluster("Affine Fusion", unified_yml, fusion_cmd, prefix)
+    exec_on_cluster("Affine Fusion", unified_yml, fusion_cmd, prefix)
     exec_on_cluster("Multiscale", unified_yml, multiscale_cmd, prefix)
     print("\n✅ Fusion + Multiscale pipeline complete.")
 

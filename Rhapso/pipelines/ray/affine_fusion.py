@@ -23,6 +23,8 @@ class AffineFusion:
     def affine_fusion(self):
         ray.init()
 
+        print("Newest approach")
+
         # Compute bounding box for fused volume based on alignment xml
         compute_bbox = ComputeBBox(self.aligned_xml_path, self.zarr_input_prefix)
         bb_min, bb_max, per_view_transforms = compute_bbox.run() 
@@ -42,7 +44,7 @@ class AffineFusion:
         # Distribute grid and implement core fusion work
         print("Starting fusion for all cells in output grid:")
         @ray.remote
-        def fuse_grid_block(grid_block, bb_min, per_view_transforms, output_path, overlap_strategy):
+        def fuse_grid_block(grid_block, bb_min, bb_max, per_view_transforms, output_path, overlap_strategy):
             # The min coordinates and size of the block this job renders
             super_block_offset = grid_block[0] + bb_min
             super_block_size   = grid_block[1]
@@ -62,7 +64,7 @@ class AffineFusion:
                 return
             
             # Define instructions for fusing contributing image blocks
-            map_fusion_instructions = GenerateFusionInstructions(per_view_transforms, grid_block, bb_min, bb_max, overlap_strategy)
+            map_fusion_instructions = GenerateFusionInstructions(per_view_transforms, grid_block, bb_min, bb_max, overlap_strategy, overlapping_views)
             image_instructions, blocks = map_fusion_instructions.run()
 
             # Fuse blocks into cell
@@ -72,7 +74,7 @@ class AffineFusion:
             fuse_cell.run()
 
         #  jobs with progress prints
-        with_progress = FusionProgress(grid, fuse_grid_block, bb_min, per_view_transforms, self.output_path, self.overlap_strategy)
+        with_progress = FusionProgress(grid, fuse_grid_block, bb_min, bb_max, per_view_transforms, self.output_path, self.overlap_strategy)
         with_progress.run()
         print("Fusion is done")
 
@@ -81,17 +83,13 @@ class AffineFusion:
 
 
 # ITERATIVE APPROACH
-# for grid_block in grid:
-#     # Left off: [16896, 5632, 128]
-    
+# for grid_block in grid:        
 #     # DEBUG: run only this specific fused grid block ----
-#     TARGET_OFFSET = (65024, 512, 0)
-#     # TARGET_OFFSET = (1024, 19968, 128)
-#     # TARGET_OFFSET = (512, 20480, 128)
+#     # TARGET_OFFSET = (65024, 512, 0)
 
-#     gb_off = tuple(int(x) for x in grid_block[0]) # (ox,oy,oz)
-#     if gb_off != TARGET_OFFSET:
-#         continue
+#     # gb_off = tuple(int(x) for x in grid_block[0]) # (ox,oy,oz)
+#     # if gb_off != TARGET_OFFSET:
+#     #     continue
 
 #     # The min coordinates and size of the block this job renders
 #     super_block_offset = grid_block[0] + bb_min
@@ -114,7 +112,7 @@ class AffineFusion:
 #         continue
     
 #     # Map instructions for fusing images
-#     map_fusion_instructions = GenerateFusionInstructions(per_view_transforms, grid_block, bb_min, bb_max, self.overlap_strategy)
+#     map_fusion_instructions = GenerateFusionInstructions(per_view_transforms, grid_block, bb_min, bb_max, self.overlap_strategy, overlapping_views)
 #     image_instructions, blocks = map_fusion_instructions.run()
 
 #     # Fuse blocks into cell

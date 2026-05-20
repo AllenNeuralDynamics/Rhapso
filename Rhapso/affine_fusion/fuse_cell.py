@@ -111,36 +111,54 @@ class FuseCell:
     
     def lowest_view_wins(self, out_shape_zyx, final_blocks, images_dict, X, Y, Z, max_slab_n, slab, nz, ny, nx):
         """
-        First writer wins
+        Lowest view wins / first writer wins.
+
+        For split views:
+        - SX/SY/SZ are split-local coords used for mask evaluation.
+        - SX_read/SY_read/SZ_read are full old-tile coords used to read/sample the source zarr.
         """
         out = np.zeros(out_shape_zyx, dtype=np.float32)
         filled = np.zeros(out_shape_zyx, dtype=bool)
 
         # Iterate views in lowest-first order
         for view_key in sorted(final_blocks.keys()):
+            split_def = self.per_view_transforms[view_key].get("split_def")
+
+            if split_def is not None:
+                split_min = np.asarray(split_def["split_min_xyz"], dtype=np.float32)
+            else:
+                split_min = np.array([0, 0, 0], dtype=np.float32)
+
             instr = images_dict[view_key]
             inv_t = np.asarray(instr["inv_t"], dtype=np.float32)
             A = inv_t[:3, :3]
             t = inv_t[:3, 3]
 
+            # These are split-local coords if this is a split view
             SX = A[0, 0] * X + A[0, 1] * Y + A[0, 2] * Z + t[0]
             SY = A[1, 0] * X + A[1, 1] * Y + A[1, 2] * Z + t[1]
             SZ = A[2, 0] * X + A[2, 1] * Y + A[2, 2] * Z + t[2]
 
-            src_min = np.floor([SX.min(), SY.min(), SZ.min()]).astype(np.int64)
-            src_max = np.ceil([SX.max(), SY.max(), SZ.max()]).astype(np.int64)
+            # These are the coords actually used to read from the OLD tile zarr
+            SX_read = SX + split_min[0]
+            SY_read = SY + split_min[1]
+            SZ_read = SZ + split_min[2]
+
+            src_min = np.floor([SX_read.min(), SY_read.min(), SZ_read.min()]).astype(np.int64)
+            src_max = np.ceil([SX_read.max(), SY_read.max(), SZ_read.max()]).astype(np.int64)
 
             src_chunk_zyx, src_min_xyz = self.load_source_chunk_for_view(view_key, src_min, src_max)
             if src_chunk_zyx.size == 0:
-                del SX, SY, SZ
+                del SX, SY, SZ, SX_read, SY_read, SZ_read
                 continue
 
-            # Compute mask in ABSOLUTE source coords (before subtracting src_min_xyz)
+            # Mask should stay in split-local coords
             mask_zyx = self.evaluate_mask_xyz(instr, SX, SY, SZ)
 
-            SX -= src_min_xyz[0]
-            SY -= src_min_xyz[1]
-            SZ -= src_min_xyz[2]
+            # Convert READ coords to chunk-relative in-place
+            SX_read -= src_min_xyz[0]
+            SY_read -= src_min_xyz[1]
+            SZ_read -= src_min_xyz[2]
 
             out_buf = np.empty(max_slab_n, dtype=np.float32)
 
@@ -150,7 +168,7 @@ class FuseCell:
 
                 map_coordinates(
                     src_chunk_zyx,
-                    [SZ[z0:z1].ravel(), SY[z0:z1].ravel(), SX[z0:z1].ravel()],
+                    [SZ_read[z0:z1].ravel(), SY_read[z0:z1].ravel(), SX_read[z0:z1].ravel()],
                     order=1,
                     mode="nearest",
                     prefilter=False,
@@ -159,12 +177,12 @@ class FuseCell:
 
                 sampled_zyx = out_buf[:n_slab].reshape((z1 - z0, ny, nx))
 
-                # first-writer-wins within mask
+                # First-writer-wins within split-local mask
                 sel = mask_zyx[z0:z1] & (~filled[z0:z1])
                 out[z0:z1][sel] = sampled_zyx[sel]
                 filled[z0:z1][sel] = True
 
-            del SX, SY, SZ, mask_zyx, out_buf
+            del SX, SY, SZ, SX_read, SY_read, SZ_read, mask_zyx, out_buf
 
         return out
     
@@ -173,31 +191,43 @@ class FuseCell:
         Avg blend
         """
         for view_key, _ in final_blocks.items():
+            split_def = self.per_view_transforms[view_key].get("split_def")
+
+            if split_def is not None:
+                split_min = np.asarray(split_def["split_min_xyz"], dtype=np.float32)
+            else:
+                split_min = np.array([0, 0, 0], dtype=np.float32)
+
             instr = images_dict[view_key]
             inv_t = np.asarray(instr["inv_t"], dtype=np.float32)
             A = inv_t[:3, :3]
             t = inv_t[:3, 3]
 
-            # Absolute source coords, shape (nz, ny, nx)
+            # These are split-local coords if this is a split view
             SX = A[0, 0] * X + A[0, 1] * Y + A[0, 2] * Z + t[0]
             SY = A[1, 0] * X + A[1, 1] * Y + A[1, 2] * Z + t[1]
             SZ = A[2, 0] * X + A[2, 1] * Y + A[2, 2] * Z + t[2]
 
-            src_min = np.floor([SX.min(), SY.min(), SZ.min()]).astype(np.int64)
-            src_max = np.ceil([SX.max(), SY.max(), SZ.max()]).astype(np.int64)
+            # These are the coords actually used to read from the OLD tile zarr
+            SX_read = SX + split_min[0]
+            SY_read = SY + split_min[1]
+            SZ_read = SZ + split_min[2]
+
+            src_min = np.floor([SX_read.min(), SY_read.min(), SZ_read.min()]).astype(np.int64)
+            src_max = np.ceil([SX_read.max(), SY_read.max(), SZ_read.max()]).astype(np.int64)
 
             src_chunk_zyx, src_min_xyz = self.load_source_chunk_for_view(view_key, src_min, src_max)
             if src_chunk_zyx.size == 0:
-                del SX, SY, SZ
+                del SX, SY, SZ, SX_read, SY_read, SZ_read
                 continue
 
-            # Weights from ABSOLUTE source coords (no src_pts allocation)
+            # Weights should stay in split-local coords
             weights_zyx = self.evaluate_avg_blend_weights_xyz(instr, SX, SY, SZ)
 
-            # Convert coords to chunk-relative in-place
-            SX -= src_min_xyz[0]
-            SY -= src_min_xyz[1]
-            SZ -= src_min_xyz[2]
+            # Convert READ coords to chunk-relative in-place
+            SX_read -= src_min_xyz[0]
+            SY_read -= src_min_xyz[1]
+            SZ_read -= src_min_xyz[2]
 
             out_buf = np.empty(max_slab_n, dtype=np.float32)
 
@@ -207,7 +237,7 @@ class FuseCell:
 
                 map_coordinates(
                     src_chunk_zyx,
-                    [SZ[z0:z1].ravel(), SY[z0:z1].ravel(), SX[z0:z1].ravel()],
+                    [SZ_read[z0:z1].ravel(), SY_read[z0:z1].ravel(), SX_read[z0:z1].ravel()],
                     order=1,
                     mode="nearest",
                     prefilter=False,
@@ -220,9 +250,8 @@ class FuseCell:
                 numerator[z0:z1] += sampled_zyx * w_slab
                 denominator[z0:z1] += w_slab
 
-            del SX, SY, SZ, weights_zyx, out_buf
+            del SX, SY, SZ, SX_read, SY_read, SZ_read, weights_zyx, out_buf
 
-        # In-place divide (no extra fused_block allocation)
         np.divide(numerator, denominator, out=numerator, where=denominator > 0)
         numerator[denominator == 0] = 0
         return numerator

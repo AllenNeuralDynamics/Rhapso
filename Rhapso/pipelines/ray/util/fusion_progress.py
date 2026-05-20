@@ -2,10 +2,11 @@ import ray
 import time
 
 class FusionProgress:
-    def __init__(self, grid, fuse_task_remote, bb_min, per_view_transforms, output_path, overlap_strategy):
+    def __init__(self, grid, fuse_task_remote, bb_min, bb_max, per_view_transforms, output_path, overlap_strategy):
         self.grid = grid
         self.fuse_task_remote = fuse_task_remote
         self.bb_min = bb_min 
+        self.bb_max = bb_max
         self.per_view_transforms = per_view_transforms
         self.output_path = output_path
         self.overlap_strategy = overlap_strategy
@@ -22,7 +23,7 @@ class FusionProgress:
         print(f"{self.prefix} submitting {total_cells} tasks", flush=True)
 
         for grid_block in self.grid:
-            futures.append(self.fuse_task_remote.remote(grid_block, self.bb_min, self.per_view_transforms, self.output_path, self.overlap_strategy))
+            futures.append(self.fuse_task_remote.remote(grid_block, self.bb_min, self.bb_max, self.per_view_transforms, self.output_path, self.overlap_strategy))
 
             done, futures = ray.wait(futures, num_returns=1, timeout=0)
             while done:

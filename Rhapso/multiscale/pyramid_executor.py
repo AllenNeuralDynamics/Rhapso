@@ -90,7 +90,7 @@ class PyramidExecutor:
         # Higher levels have fewer tasks, but each task can still write many chunks,
         # so we intentionally scale down to avoid writing the whole level at once.
         if dst_level == 1:
-            max_in_flight = 300
+            max_in_flight = 450
         elif dst_level == 2:
             max_in_flight = 150
         elif dst_level == 3:
@@ -206,123 +206,6 @@ class PyramidExecutor:
                         f"[PyramidExecutor]   Progress: {progress_pct_int}% "
                         f"({completed}/{total_blocks} blocks)"
                     )
-
-    # def store(self, channel_group, src_level: int, dst_level: int, src_shape: Tuple[int, ...], dst_shape: Tuple[int, ...],
-    #            block_shape_zyx: Tuple[int, int, int], scale_factors_zyx: Tuple[int, int, int]) -> None:
-    #     """
-    #     Use Ray to process all blocks in parallel.
-    #     """
-    #     t_dim, c_dim, z_dim, y_dim, x_dim = 0, 1, 2, 3, 4
-    #     bz, by, bx = block_shape_zyx
-    #     sz, sy, sx = scale_factors_zyx
-
-    #     # Gate against concurrent partial writes into the same Zarr chunk.
-    #     # This is important because each Ray task writes directly to dst_arr[dst_slices].
-    #     dst_arr_for_gate = channel_group[str(dst_level)]
-    #     dst_chunks = dst_arr_for_gate.chunks
-
-    #     ct, cc, cz, cy, cx = dst_chunks
-
-    #     if bz % cz != 0 or by % cy != 0 or bx % cx != 0:
-    #         raise ValueError(
-    #             "[PyramidExecutor] Unsafe multiscale write grid: block_shape_zyx must be "
-    #             "a clean multiple of destination Zarr chunks to avoid parallel partial-chunk write races. "
-    #             f"block_shape_zyx={block_shape_zyx}, dst_chunks_zyx={(cz, cy, cx)}"
-    #         )
-    #     # -------------------------------------------------------------------------------
-
-    #     t_size = dst_shape[t_dim]
-    #     c_size = dst_shape[c_dim]
-    #     z_size = dst_shape[z_dim]
-    #     y_size = dst_shape[y_dim]
-    #     x_size = dst_shape[x_dim]
-
-    #     t_slice = slice(0, t_size)
-    #     c_slice = slice(0, c_size)
-
-    #     n_z_blocks = math.ceil(z_size / bz)
-    #     n_y_blocks = math.ceil(y_size / by)
-    #     n_x_blocks = math.ceil(x_size / bx)
-    #     total_blocks = n_z_blocks * n_y_blocks * n_x_blocks
-
-    #     if total_blocks == 0:
-    #         print("[PyramidExecutor] store: no blocks to process.")
-    #         return
-
-    #     if not ray.is_initialized():
-    #         print("[PyramidExecutor] store: initializing Ray for parallel processing...")
-    #         ray.init()
-
-    #     print(f"[PyramidExecutor] store: dispatching {total_blocks} Ray tasks (src={src_level}, dst={dst_level})...")
-
-    #     futures = []
-    #     z0 = 0
-    #     while z0 < z_size:
-    #         z1 = min(z0 + bz, z_size)
-    #         y0 = 0
-    #         while y0 < y_size:
-    #             y1 = min(y0 + by, y_size)
-    #             x0 = 0
-    #             while x0 < x_size:
-    #                 x1 = min(x0 + bx, x_size)
-
-    #                 dst_slices = (
-    #                     t_slice,
-    #                     c_slice,
-    #                     slice(z0, z1),
-    #                     slice(y0, y1),
-    #                     slice(x0, x1),
-    #                 )
-
-    #                 src_z0, src_z1 = z0 * sz, z1 * sz
-    #                 src_y0, src_y1 = y0 * sy, y1 * sy
-    #                 src_x0, src_x1 = x0 * sx, x1 * sx
-
-    #                 src_slices = (
-    #                     slice(0, src_shape[t_dim]),
-    #                     slice(0, src_shape[c_dim]),
-    #                     slice(src_z0, src_z1),
-    #                     slice(src_y0, src_y1),
-    #                     slice(src_x0, src_x1),
-    #                 )
-
-    #                 futures.append(
-    #                     process_block_instruction_remote.remote(src_level, dst_level, src_slices, dst_slices, sz, sy, sx, channel_group)
-    #                 )
-
-    #                 x0 = x1
-    #             y0 = y1
-    #         z0 = z1
-
-    #     # completed = 0
-    #     # while futures:
-    #     #     done, futures = ray.wait(futures, num_returns=1, timeout=1.0)
-    #     #     if done:
-    #     #         completed += len(done)
-    #     #         progress_pct = (completed / total_blocks) * 100.0
-    #     #         print(f"[PyramidExecutor]   Progress: {completed}/{total_blocks} blocks ({progress_pct:.1f}%)")
-
-    #     completed = 0
-    #     last_printed_pct = -1
-
-    #     while futures:
-    #         done, futures = ray.wait(futures, num_returns=1, timeout=1.0)
-    #         if done:
-    #             try:
-    #                 ray.get(done)
-    #             except Exception:
-    #                 print("[PyramidExecutor] ERROR: Ray multiscale block failed.")
-    #                 print(f"[PyramidExecutor] src={src_level} dst={dst_level}")
-    #                 print(f"[PyramidExecutor] remaining futures={len(futures)} completed={completed}/{total_blocks}")
-    #                 raise
-
-    #             completed += len(done)
-
-    #             progress_pct_int = int((completed / total_blocks) * 100)
-
-    #             if progress_pct_int > last_printed_pct:
-    #                 last_printed_pct = progress_pct_int
-    #                 print(f"[PyramidExecutor]   Progress: {progress_pct_int}% ({completed}/{total_blocks} blocks)")
 
     def build_pyramid(self, channel_group) -> None:
         """

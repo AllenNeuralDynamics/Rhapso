@@ -5,12 +5,13 @@ Create fuse instructions
 """
 
 class GenerateFusionInstructions():
-    def __init__(self, per_view_transforms, grid_block, fusion_min_global, fusion_max_global, overlap_strategy):
+    def __init__(self, per_view_transforms, grid_block, fusion_min_global, fusion_max_global, overlap_strategy, overlapping_views):
         self.per_view_transforms = per_view_transforms
         self.grid_block = grid_block
         self.fusion_min_global = fusion_min_global
         self.fusion_max_global = fusion_max_global
         self.overlap_strategy = overlap_strategy
+        self.overlapping_views = overlapping_views
 
     def estimate_bounds(self, t, dim_xyz):
         A = np.asarray(t[:3, :3], dtype=np.float64)
@@ -109,7 +110,7 @@ class GenerateFusionInstructions():
         num_dimensions = 3
         f_min = self.fusion_min_global 
         f_max = self.fusion_max_global
-        view_ids = sorted(self.per_view_transforms.keys())
+        view_ids = sorted(self.overlapping_views)
 
         indices = self.get_overlapping_view_indices(f_min, f_max, view_ids, bb)
         filtered_num_views = len(indices)
@@ -133,7 +134,9 @@ class GenerateFusionInstructions():
         expand_overlap = 2
 
         bounds = []
-        for (tp, setup), view_info in self.per_view_transforms.items():
+        # for (tp, setup), view_info in self.per_view_transforms.items():
+        for view in self.overlapping_views:
+            view_info = self.per_view_transforms[view]
             t = view_info["transform"]
             dim = view_info["size"]
             ri = self.estimate_bounds(t, dim)

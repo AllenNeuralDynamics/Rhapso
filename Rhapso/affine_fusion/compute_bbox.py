@@ -55,25 +55,85 @@ class ComputeBBox():
             regs[(tp, setup)] = mats if mats else [np.eye(4, dtype=np.float64)]
         return regs
     
-    def parse_zgroup_paths(self, root: ET.Element) -> dict[tuple[int, int], str]:
-        out = {}
+    def parse_zgroup_paths(self, root: ET.Element) -> tuple[dict[tuple[int, int], str], dict[tuple[int, int], dict]]:
+        out: dict[tuple[int, int], str] = {}
+        split_defs: dict[tuple[int, int], dict] = {}
+
+        # --- existing behavior (un-split XMLs) ---
         zgroups = root.find("./SequenceDescription/ImageLoader/zgroups")
+        split_mode = False
+
+        # --- fallback for split XMLs (nested ImageLoader) ---
         if zgroups is None:
-            raise ValueError("Missing SequenceDescription/ImageLoader/zgroups")
+            zgroups = root.find("./SequenceDescription/ImageLoader/ImageLoader/zgroups")
+            split_mode = zgroups is not None
+
+        if zgroups is None:
+            raise ValueError("Missing SequenceDescription/ImageLoader/zgroups (or split nested ImageLoader/zgroups)")
+
+        # Parse the base zgroup paths.
+        # In normal XML: setup is the actual setup.
+        # In split XML: setup is the OLD setup id.
+        base_by_tp_setup: dict[tuple[int, int], str] = {}
 
         for zg in zgroups.findall("./zgroup"):
             setup = int(zg.attrib["setup"])
             tp = zg.attrib.get("timepoint", zg.attrib.get("tp"))
             tp = int(tp)
 
-            # path can be either an attribute OR a child element
             p = zg.attrib.get("path") or zg.findtext("./path")
             if p is None:
                 continue
 
-            out[(tp, setup)] = p.strip()
+            p = p.strip()
+            out[(tp, setup)] = p
+            base_by_tp_setup[(tp, setup)] = p
 
-        return out
+        if split_mode:
+            setup_ids = root.find("./SequenceDescription/ImageLoader/SetupIds")
+            if setup_ids is None:
+                raise ValueError("Split XML detected (nested zgroups), but missing SequenceDescription/ImageLoader/SetupIds")
+
+            for defn in setup_ids.findall("./SetupIdDefinition"):
+                new_id_txt = defn.findtext("./NewId")
+                old_id_txt = defn.findtext("./OldId")
+                min_txt = defn.findtext("./min")
+                max_txt = defn.findtext("./max")
+
+                if new_id_txt is None or old_id_txt is None:
+                    continue
+
+                new_id = int(new_id_txt.strip())
+                old_id = int(old_id_txt.strip())
+
+                split_min_xyz = None
+                split_max_xyz = None
+
+                if min_txt is not None:
+                    split_min_xyz = np.array(
+                        [int(float(x)) for x in min_txt.strip().split()],
+                        dtype=np.int64,
+                    )
+
+                if max_txt is not None:
+                    split_max_xyz = np.array(
+                        [int(float(x)) for x in max_txt.strip().split()],
+                        dtype=np.int64,
+                    )
+
+                for (tp, setup), path in base_by_tp_setup.items():
+                    if setup == old_id:
+                        # New split setup gets the OLD tile path.
+                        out[(tp, new_id)] = path
+
+                        # And metadata saying where this split lives inside the old tile.
+                        split_defs[(tp, new_id)] = {
+                            "old_id": old_id,
+                            "split_min_xyz": split_min_xyz,
+                            "split_max_xyz": split_max_xyz,
+                        }
+
+        return out, split_defs
 
     def compose_affines(self, mats: list[np.ndarray]) -> np.ndarray:
         T = np.eye(4, dtype=np.float64)
@@ -142,7 +202,7 @@ class ComputeBBox():
 
         sizes = self.parse_view_setup_sizes(root)
         regs = self.parse_view_registration_affines(root)
-        zpaths = self.parse_zgroup_paths(root)
+        zpaths, split_defs = self.parse_zgroup_paths(root)
         prefix = self.zarr_input_prefix
         
         gmin = np.array([np.inf, np.inf, np.inf], dtype=np.float64)
@@ -156,6 +216,8 @@ class ComputeBBox():
 
             T = self.compose_affines(mats)
 
+            split_def = split_defs.get((tp, setup))
+
             tile_rel = zpaths[(tp, setup)] 
             full_path = f"{prefix}/{tile_rel}" if prefix is not None else tile_rel
 
@@ -163,6 +225,7 @@ class ComputeBBox():
                 "transform": T,
                 "size": sizes[setup],
                 "path": full_path, 
+                "split_def": split_def
             }
 
             pts = self.sample_bbox_points_xyz(sizes[setup])
