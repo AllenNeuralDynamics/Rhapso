@@ -386,28 +386,30 @@ python Rhapso/pipelines/ray/aws/alignment_pipeline.py
 | `max_plateauwidth`   | Early stopping | Stagnation window before stopping on no improvement                | 200                 |
 
 ```
+<br>
 
 ### Fusion
 ```
 | Parameter            | Feature / step | What it does                                                       | Typical range       |
 | :------------------- | :------------- | :----------------------------------------------------------------- | :------------------ |
-| `block_size`         | Optimization   | Cell size per task xyz                                             | 256, 256, 256       |
-| `intensity_range`    | Optimization   | Range of intensity values                                          | 0, 65535            |
-| `block_scale`        | Optimization   | Scaling of cell size                                               | 2, 2, 1             |
-| `overlap_strategy`   | Early stopping | Strategy when more than 1 view contributes also lowest_view_wins   | avg_blend           |
+| `block_size`         | Fusion opt     | Cell size per task xyz                                             | 256, 256, 256       |
+| `intensity_range`    | Fusion config  | Range of intensity values                                          | 0, 65535            |
+| `block_scale`        | Fusion opt     | Scaling of cell size                                               | 2, 2, 1             |
+| `overlap_strategy`   | Edge handling  | Strategy when more than 1 view contributes also lowest_view_wins   | avg_blend           |
 
 ```
+<br>
 
 ### Multiscale
 ```
-| Parameter               | Feature / step | What it does                                                       | Typical range       |
-| :---------------------- | :------------- | :----------------------------------------------------------------- | :------------------ |
-| `multiscale_chunk_size` | Graph pruning  | Output cell size                                                   | 128, 128, 128       |
-| `voxel_size`            | Graph pruning  | Voxel size of data in zyx                                          | 1.0, .748, .748     |
-| `n_lvls`                | Optimization   | Num levels to multiscale including base level                      | 7                   |
-| `scale_factor`          | Optimization   | Scaling factor per level for entropy                               | [2,2,2],...num lvls |
-| `target_block_size_mb`  | Optimization   | Per worker block size                                              | 256                 |
-| `base_level`            | Early stopping | Existing base res level                                            | 0                   |
+| Parameter               | Feature / step         | What it does                                            | Typical range       |
+| :---------------------- | :----------------------| :------------------------------------------------------ | :------------------ |
+| `multiscale_chunk_size` | Optimization           | Output cell size                                        | 128, 128, 128       |
+| `voxel_size`            | Data config            | Voxel size of data in zyx                               | 1.0, .748, .748     |
+| `n_lvls`                | Output scale handling  | Num levels to multiscale including base level           | 7                   |
+| `scale_factor`          | Entropy config         | Scaling factor per level for entropy                    | [2,2,2],...num lvls |
+| `target_block_size_mb`  | Optimization           | Per worker block size                                   | 256                 |
+| `base_level`            | Output scale config    | Existing base res level                                 | 0                   |
 
 ```
 
