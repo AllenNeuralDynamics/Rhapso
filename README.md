@@ -6,6 +6,8 @@ This is the official code base for **Rhapso**, a modular Python toolkit for stit
 [![Python Version](https://img.shields.io/badge/python-3.10-blue.svg)](https://www.python.org/downloads/release/python-3100/)
 [![Documentation](https://img.shields.io/badge/docs-wiki-blue)](https://github.com/AllenNeuralDynamics/Rhapso/wiki)
 
+> Rhapso is published on PyPI and developed by the Allen Institute.
+
 <!-- ## Example Usage Media Content Coming Soon....
 -- -->
 
@@ -32,13 +34,11 @@ This is the official code base for **Rhapso**, a modular Python toolkit for stit
 ---
 
 ## Summary
-Rhapso is a set of Python components used to register, align, and fuse large-scale, overlapping, tile-based, multiscale microscopy datasets. Its stateless components can run on a single machine or scale out across cloud-based clusters. 
+Rhapso is a set of Python components used to register, align, and fuse large-scale images. Its stateless components can run on a single machine or scale out across cloud-based clusters. 
 
-Looking forward, we are developing an automated QC system for alignment.
+The core Rhapso components are not tied to any specific cloud service, infrastructure, image type, or imaging modality. They only require image data as NumPy arrays. The initial use case is large-scale, overlapping, tile-based, multiscale 3D microscopy datasets (OME Zarr) hosted in S3, but the same components can be adapted to many other large image workflows.
 
-Rhapso is published on PyPI.
-
-Rhapso is developed by the Allen Institute.
+**Looking forward, we are developing an automated QC system for alignment.**
 
 <br>
 
@@ -57,7 +57,7 @@ Questions or want to contribute? Please open an issue..
 - **ZARR** - Zarr data as input
 - **TIFF** - TIFF data as input
 - **AWS** - AWS S3 based input/output and Ray based EC2 instances
-- **Scale** - Tested on 200 TB of data without downsampling
+- **Scale** - Tested on 130 TB of data without downsampling
 
 ---
 
@@ -431,11 +431,11 @@ python Rhapso/pipelines/ray/aws/alignment_pipeline.py
 
 - **Start with Detection:** Interest point quality and coverage have the biggest impact on alignment results.
 
-- **Inspect the Peaks:** There is no universal peak count that guarantees good alignment. Tune detection to capture as many meaningful peaks as possible without mostly detecting noise. Use `detection_visualization.py` to compare detected points against the image data. Good settings should produce points that follow visible tissue structure rather than random background. It is usually better to allow some extra peaks because RANSAC can reject noisy matches, but this will increase runtime.
+- **Inspect the Peaks:** There is no universal peak count that guarantees good alignment. Tune detection to capture as many meaningful peaks as possible without mostly detecting noise. Use `detection_visualization.py` to compare detected points against the image data. Good params should produce points that follow visible tissue structure rather than random background. It is usually better to allow some extra peaks as RANSAC can reject noisy matches, but this will increase runtime.
 
 - **Rigid -> Affine Alignment:** For large datasets, acquisition can take long enough that the sample may slightly deform over time. Start by solving rigid/translation alignment between overlapping tiles, then run affine alignment to account for remaining local scale, shear, or deformation effects.
 
-- **Debug Weak Regions Locally:** If a tile aligns poorly, first inspect its match counts with neighboring tiles. Low match counts usually point back to detection quality, overlap quality, or overly strict matching settings.
+- **Debug Weak Regions Locally:** If a tile aligns poorly, first inspect its match counts with neighboring tiles. Low match counts usually point back to detection quality, overlap size, and sparsity of data.
 
 - **Tune Matching Carefully:** Adjust the matching regularization weight when needed, but avoid making RANSAC too permissive. A loose RANSAC threshold can accept bad matches and usually makes alignment worse, not better.
   
