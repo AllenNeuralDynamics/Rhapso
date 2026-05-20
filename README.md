@@ -1,6 +1,6 @@
 # Rhapso
 
-This is the official code base for **Rhapso**, a modular Python toolkit for the alignment and stitching of large-scale microscopy datasets. 
+This is the official code base for **Rhapso**, a modular Python toolkit for stitching (alignment and fusion) large-scale microscopy datasets. 
 
 [![License](https://img.shields.io/badge/license-MIT-brightgreen)](LICENSE)
 [![Python Version](https://img.shields.io/badge/python-3.10-blue.svg)](https://www.python.org/downloads/release/python-3100/)
@@ -32,11 +32,13 @@ This is the official code base for **Rhapso**, a modular Python toolkit for the 
 ---
 
 ## Summary
-Rhapso is a set of Python components used to register, align, and stitch large-scale, overlapping, tile-based, multiscale microscopy datasets. Its stateless components can run on a single machine or scale out across cloud-based clusters. 
+Rhapso is a set of Python components used to register, align, and fuse large-scale, overlapping, tile-based, multiscale microscopy datasets. Its stateless components can run on a single machine or scale out across cloud-based clusters. 
+
+Looking forward, we are developing an automated QC system for alignment.
 
 Rhapso is published on PyPI.
 
-Rhapso was developed by the Allen Institute for Neural Dynamics.
+Rhapso is developed by the Allen Institute.
 
 <br>
 
@@ -66,31 +68,27 @@ Questions or want to contribute? Please open an issue..
 
 ```
 Rhapso/
-└── Rhapso/
-    ├── data_prep/                          # Custom data loaders
-    ├── detection/
-    ├── evaluation/
-    ├── affine_fusion/
-    ├── multiscale/
-    ├── image_split/
-    ├── matching/
-    ├── pipelines/
-    │   └── ray/
-    │       ├── aws/
-    │       │   ├── config/                 # Cluster templates (edit for your account)
-    │       │   └── alignment_pipeline.py   # AWS Ray pipeline entry point
-    |       |   └── fusion_pipeline.py      # AWS Ray pipeline entry point
-    │       ├── local/
-    │       │   └── alignment_pipeline.py   # Local Ray pipeline entry point
-    |       |   └── fusion_pipeline.py      # AWS Ray pipeline entry point
-    │       ├── param/                      # Run parameter files (customize per run)
-    │       ├── interest_point_detection.py # Detection pipeline script
-    │       ├── interest_point_matching.py  # Matching pipeline script
-    │       └── solver.py                   # Global solver pipeline script
-    │       └── affine_fusion.py            # Affine fusion pipeline script
-    │       └── multiscale.py               # Multiscale pipeline script
-    ├── solver/
-    └── visualization/                      # Validation tools
+└── rhapso/
+    ├── data_prep/        # Data readers and XML/DataFrame preparation
+    ├── detection/        # Difference-of-Gaussian interest point detection
+    ├── matching/         # RANSAC-based interest point matching
+    ├── solver/           # Global optimization and transform solving
+    ├── affine_fusion/    # Affine fusion 
+    ├── multiscale/       # Multiscale OME-Zarr pyramid generation
+    ├── split_dataset/    # Dataset splitting utilities
+    ├── evaluation/       # QC and visualization helpers
+    ├── util/             # Miscellaneous XML/QC/Neuroglancer utilities
+    └── pipelines/
+        └── ray/
+            ├── aws/      # AWS Ray cluster entry points and config templates
+            ├── local/    # Local Ray entry points
+            ├── param/    # Example/template YAML parameter files
+            ├── interest_point_detection.py
+            ├── interest_point_matching.py
+            ├── solver.py
+            ├── affine_fusion.py
+            ├── multiscale.py
+            └── split_dataset.py
 ```
 
 ---
@@ -141,6 +139,8 @@ A good way to get started:
    For example:
    - `Rhapso/pipelines/ray/local/alignment_pipeline.py` (local)
    - `Rhapso/pipelines/ray/aws/alignment_pipeline.py` (AWS/Ray cluster)
+   - `Rhapso/pipelines/ray/local/fusion_pipeline.py` (local)
+   - `Rhapso/pipelines/ray/aws/fusion_pipeline.py` (AWS/Ray cluster)
 
 3. **Point it to your param file**  
    Update the `with open("...param.yml")` line so it reads your own parameter YAML.
@@ -213,7 +213,7 @@ There is a special case in some datasets where the z-stack is very large. In thi
 | Environment           | Resources            | Avg runtime |
 |:----------------------|:---------------------|:-----------:|
 | Local single machine  | 10 CPU,  10 GB RAM   | ~120 min    |
-| AWS Ray cluster       | 560 CPU, 4.4 TB RAM  | ~30 min     |
+| AWS Ray cluster       | 560 CPU, 4.4 TB RAM  | ~10 min     |
 
 <br>
 *Actual times vary by pipeline components, dataset size, tiling, and parameter choices.*
