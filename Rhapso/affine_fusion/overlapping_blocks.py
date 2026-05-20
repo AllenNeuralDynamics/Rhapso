@@ -40,33 +40,6 @@ class OverlappingBlocks:
         mipmap_transform = np.eye(4, dtype=np.float64)  # identity 
         return best_level, mipmap_transform
 
-    # def transformed_bounding_box_from_minmax(self, T4, interval_min_xyz, interval_max_xyz):
-    #     """
-    #     Transform an arbitrary local interval [min..max] by transforming 8 corners.
-    #     Returns integer world bounds (floor min, ceil max), inclusive.
-    #     """
-    #     x0, y0, z0 = map(float, interval_min_xyz)
-    #     x1, y1, z1 = map(float, interval_max_xyz)
-
-    #     corners = np.array([
-    #         [x0, y0, z0],
-    #         [x0, y0, z1],
-    #         [x0, y1, z0],
-    #         [x0, y1, z1],
-    #         [x1, y0, z0],
-    #         [x1, y0, z1],
-    #         [x1, y1, z0],
-    #         [x1, y1, z1],
-    #     ], dtype=np.float64)
-
-    #     A = np.asarray(T4[:3, :3], dtype=np.float64)
-    #     t = np.asarray(T4[:3, 3], dtype=np.float64)
-
-    #     world = corners @ A.T + t
-    #     bounds_min = np.floor(world.min(axis=0)).astype(np.int64)
-    #     bounds_max = np.ceil(world.max(axis=0)).astype(np.int64)
-    #     return bounds_min, bounds_max
-
     def transformed_bounding_box_from_minmax(self, T4, interval_min_xyz, interval_max_xyz):
         # Exact for affine, but much faster than transforming 8 corners
         interval_min = np.asarray(interval_min_xyz, dtype=np.float64)
@@ -104,47 +77,8 @@ class OverlappingBlocks:
         is_last = (gp + 1 == nc)
         cell_dim = np.where(is_last, bs, cd)
         cell_max = cell_min + cell_dim - 1
+        
         return cell_min, cell_max
-
-    # def find_overlapping_blocks(self, model, size):
-    #     prefetch = []
-
-    #     # Treat `size` as the source tile/image dims (XYZ)
-    #     dims_xyz = np.asarray(size, dtype=np.int64)
-    #     cd = np.asarray(self.cell_dimensions, dtype=np.int64)
-
-    #     _, mipmap_transform = self.for_best_resolution()
-
-    #     # Java: imgToWorld = model.copy(); imgToWorld.concatenate(best.mipmapTransform)
-    #     img_to_world = np.asarray(model, dtype=np.float64) @ np.asarray(mipmap_transform, dtype=np.float64)
-
-    #     # Java: grid.getGridDimensions()
-    #     grid_dims = (dims_xyz + cd - 1) // cd  # ceil(dims/cellDims)
-
-    #     b = int(self.expand)
-
-    #     for gx in range(int(grid_dims[0])):
-    #         for gy in range(int(grid_dims[1])):
-    #             for gz in range(int(grid_dims[2])):
-    #                 grid_pos = np.array([gx, gy, gz], dtype=np.int64)
-
-    #                 # Java: grid.getCellInterval(gridPos, cellMin, cellMax)
-    #                 cell_min = grid_pos * cd
-    #                 cell_max = np.minimum(cell_min + cd, dims_xyz) - 1  # inclusive, border-clamped
-
-    #                 # Java: expand(cellBBox, expand, projectedCellBBox)
-    #                 expanded_min = cell_min - b
-    #                 expanded_max = cell_max + b
-
-    #                 # Java: bounds = smallestContainingInterval(imgToWorld.estimateBounds(...))
-    #                 bounds_min, bounds_max = self.transformed_bounding_box_from_minmax(
-    #                     img_to_world, expanded_min, expanded_max
-    #                 )
-
-    #                 if self.overlaps(bounds_min, bounds_max, self.fused_min, self.fused_max):
-    #                     prefetch.append({"cell_min": cell_min.copy()})
-
-    #     return prefetch
 
     def find_overlapping_blocks(self, model, size):
         prefetch = []

@@ -1,4 +1,4 @@
-cluster_name: rhapso-fusion-cluster-ray-sean-00000
+cluster_name: rhapso-fusion-cluster-ray-sean-0000011
 max_workers: 40
 min_workers: 40
 
@@ -15,7 +15,7 @@ auth:
 available_node_types:
   ray.head.default:
     node_config:
-      InstanceType: r5.16xlarge
+      InstanceType: r5.4xlarge
       ImageId: ami-0ec1bf4a8f92e7bd1
       KeyName: aind-ray-cluster
       IamInstanceProfile:
@@ -55,10 +55,10 @@ setup_commands:
   - sudo python3 -m pip install awscli
   - sudo python3 -m pip install "ray[default]==2.9.1"  
   - sudo python3 -m pip install protobuf==4.23.4  
-  - aws s3 cp s3://aind-scratch-data/sean.fite/Rhapso-0.1.991-py3-none-any.whl /tmp/Rhapso-0.1.991-py3-none-any.whl
+  - aws s3 cp s3://aind-scratch-data/sean.fite/Rhapso-0.2.7-py3-none-any.whl /tmp/Rhapso-0.2.7-py3-none-any.whl
   - echo 'export PATH=$HOME/.local/bin:$PATH' >> ~/.bashrc
   - source ~/.bashrc
-  - sudo python3 -m pip install /tmp/Rhapso-0.1.991-py3-none-any.whl  
+  - sudo python3 -m pip install /tmp/Rhapso-0.2.7-py3-none-any.whl  
 
 head_start_ray_commands:
   - ray stop

@@ -8,9 +8,6 @@ This is the official code base for **Rhapso**, a modular Python toolkit for stit
 
 > Rhapso is published on PyPI and developed by the Allen Institute.
 
-<!-- ## Example Usage Media Content Coming Soon....
--- -->
-
 <br>
 
 ## Table of Contents
