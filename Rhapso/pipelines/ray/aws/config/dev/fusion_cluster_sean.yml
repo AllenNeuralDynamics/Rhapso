@@ -1,6 +1,6 @@
 cluster_name: rhapso-fusion-cluster-ray-sean-0000011
 max_workers: 40
-min_workers: 40
+min_workers: 0
 
 provider:
   type: aws

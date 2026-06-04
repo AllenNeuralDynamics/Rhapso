@@ -5,6 +5,8 @@ import xml.etree.ElementTree as ET
 import matplotlib.pyplot as plt
 from matplotlib.lines import Line2D
 from typing import Set, Tuple, Optional, Dict
+from urllib.parse import urlparse
+import boto3
 
 # Controls how tall (vertically) the shift plots appear
 INDEX_RANGE_MULTIPLIER = 5.0  # bump this up/down to taste
@@ -459,7 +461,6 @@ def make_corr_and_shift_plots(
     print("ShiftY min/max:", float(sy.min()))
     print("ShiftZ min/max:", float(sz.min()))
 
-
 def make_bad_links_grid_plot(
     rows,
     setup_to_grid,
@@ -468,85 +469,210 @@ def make_bad_links_grid_plot(
     dropped_pairs: Optional[Set[Tuple[int, int]]] = None,
 ):
     """
-    Draw tiles at their nominal grid indices, and connect tiles with
-    correlation < bad_corr_thresh.
+    Draw ONE stretched grid map of all pairwise links.
 
-    Bad links are color-coded by severity:
-      - green : 0.80 <= corr < 0.90
-      - yellow: 0.70 <= corr < 0.80
-      - red   : corr < 0.70
-
-    If dropped_pairs is provided, dropped links are overdrawn as dotted
-    lines, using the same color band as their correlation.
+    - Each tile is drawn as a square marker
+    - All pairwise links are drawn on one grid
+    - Link color is based on correlation band
+    - For skinny layouts like 2 cols x many rows, X is stretched for display
+    - Legend/title layout is tightened so there is less empty space above the grid
     """
     if not setup_to_grid:
         return
 
     all_gx = [g[0] for g in setup_to_grid.values()]
     all_gy = [g[1] for g in setup_to_grid.values()]
-    max_gy = max(all_gy) if all_gy else 0
 
-    # Fixed-size figure so width stays consistent
-    fig, ax = plt.subplots(figsize=(8, 6))
+    min_gx = min(all_gx)
+    max_gx = max(all_gx)
+    min_gy = min(all_gy)
+    max_gy = max(all_gy)
 
-    # Draw tile nodes (black circles with labels)
-    for setup, (gx, gy, gz) in setup_to_grid.items():
-        y_plot = max_gy - gy
-        ax.scatter(gx, y_plot, s=70, color="black")
-        ax.text(gx + 0.03, y_plot + 0.03, str(setup), fontsize=7, color="black")
+    grid_w = max_gx - min_gx + 1
+    grid_h = max_gy - min_gy + 1
 
-    # Helper to pick edge color based on correlation
+    print("[grid-debug] x index min/max:", min_gx, max_gx, "unique:", sorted(set(all_gx)))
+    print("[grid-debug] y index min/max:", min_gy, max_gy, "unique:", sorted(set(all_gy)))
+    print("[grid-debug] grid_w/grid_h:", grid_w, grid_h)
+
+    # Display-only X stretch for skinny maps.
+    # Reduced from the earlier wider stretch so tiles look less wide / more square.
+    if grid_w <= 3 and grid_h >= 8:
+        x_stretch = 2.75
+    elif grid_w <= 5 and grid_h >= 12:
+        x_stretch = 2.0
+    else:
+        x_stretch = 1.0
+
+    print("[grid-debug] display x_stretch:", x_stretch)
+
+    def x_plot(gx: int) -> float:
+        return (gx - min_gx) * x_stretch + min_gx
+
     def edge_color(corr: float) -> str:
-        if corr >= 0.80:
-            return "tab:green"   # least bad within the "bad" set
+        if corr >= 0.90:
+            return "tab:blue"
+        elif corr >= 0.80:
+            return "tab:green"
         elif corr >= 0.70:
-            return "gold"        # medium bad
+            return "gold"
         else:
-            return "red"         # worst
+            return "red"
 
-    # Draw edges for "bad" links, color-coded by correlation
-    bad_rows = [r for r in rows if r[5] < bad_corr_thresh]  # r[5] = corr
-    for r in bad_rows:
-        a, b, corr = int(r[0]), int(r[1]), float(r[5])
+    # Build pair -> best row by max corr.
+    best_row_by_pair: Dict[Tuple[int, int], list] = {}
+    for r in rows:
+        a = int(r[0])
+        b = int(r[1])
+        corr = float(r[5])
+        key = (min(a, b), max(a, b))
+
+        if key not in best_row_by_pair or corr > float(best_row_by_pair[key][5]):
+            best_row_by_pair[key] = r
+
+    dropped_rows = []
+    dropped_missing_from_xml = []
+    dropped_missing_from_grid = []
+
+    if dropped_pairs:
+        for key in sorted(dropped_pairs):
+            r = best_row_by_pair.get(key)
+            if r is None:
+                dropped_missing_from_xml.append(key)
+                continue
+
+            a = int(r[0])
+            b = int(r[1])
+
+            if a not in setup_to_grid or b not in setup_to_grid:
+                dropped_missing_from_grid.append(key)
+                continue
+
+            dropped_rows.append(r)
+
+    # Figure sizing.
+    # Slightly narrower and a bit taller so the map feels more square overall.
+    display_w = (grid_w - 1) * x_stretch + 1
+    fig_w = max(7.0, min(14.0, display_w * 1.6))
+    fig_h = max(14.0, min(38.0, grid_h * 0.50))
+
+    fig, ax = plt.subplots(figsize=(fig_w, fig_h))
+
+    tile_fontsize = 8 if grid_h <= 30 else 6 if grid_h <= 60 else 5
+    tile_marker_size = 180 if grid_h <= 30 else 120 if grid_h <= 60 else 80
+
+    def draw_nodes():
+        for setup, (gx, gy, gz) in setup_to_grid.items():
+            y_plot = max_gy - gy
+            px = x_plot(gx)
+
+            ax.scatter(
+                px,
+                y_plot,
+                s=tile_marker_size,
+                color="white",
+                edgecolors="black",
+                marker="s",
+                linewidths=1.0,
+                zorder=5,
+            )
+
+            ax.text(
+                px,
+                y_plot,
+                str(setup),
+                fontsize=tile_fontsize,
+                color="black",
+                ha="center",
+                va="center",
+                zorder=6,
+            )
+
+    def draw_edge(
+        a: int,
+        b: int,
+        corr: float,
+        *,
+        linestyle: str,
+        linewidth: float,
+        zorder: int,
+        color_override=None,
+        alpha: float = 0.9,
+    ):
         if a not in setup_to_grid or b not in setup_to_grid:
-            continue
+            return False
 
         gx_a, gy_a, _ = setup_to_grid[a]
         gx_b, gy_b, _ = setup_to_grid[b]
+
         ay = max_gy - gy_a
         by = max_gy - gy_b
 
-        ax.plot([gx_a, gx_b], [ay, by], linewidth=1, color=edge_color(corr))
+        ax.plot(
+            [x_plot(gx_a), x_plot(gx_b)],
+            [ay, by],
+            linewidth=linewidth,
+            linestyle=linestyle,
+            color=edge_color(corr) if color_override is None else color_override,
+            alpha=alpha,
+            zorder=zorder,
+        )
+        return True
 
-    # Overdraw dropped links as dotted, same color band
-    if dropped_pairs:
-        for r in bad_rows:
-            a, b, corr = int(r[0]), int(r[1]), float(r[5])
-            key = (min(a, b), max(a, b))
-            if key not in dropped_pairs:
-                continue
-            if a not in setup_to_grid or b not in setup_to_grid:
-                continue
+    drawn_all = 0
+    skipped_all = 0
 
-            gx_a, gy_a, _ = setup_to_grid[a]
-            gx_b, gy_b, _ = setup_to_grid[b]
-            ay = max_gy - gy_a
-            by = max_gy - gy_b
+    for r in rows:
+        a = int(r[0])
+        b = int(r[1])
+        corr = float(r[5])
 
-            ax.plot(
-                [gx_a, gx_b],
-                [ay, by],
-                linewidth=2,
+        ok = draw_edge(
+            a,
+            b,
+            corr,
+            linestyle="-",
+            linewidth=1.2,
+            zorder=2,
+        )
+
+        if ok:
+            drawn_all += 1
+        else:
+            skipped_all += 1
+
+    drawn_dropped = 0
+
+    if dropped_rows:
+        for r in dropped_rows:
+            a = int(r[0])
+            b = int(r[1])
+            corr = float(r[5])
+
+            ok = draw_edge(
+                a,
+                b,
+                corr,
                 linestyle=":",
-                color=edge_color(corr),
+                linewidth=2.5,
+                zorder=4,
+                color_override="black",
+                alpha=1.0,
             )
 
-    # Legend handles (STACKED: green, yellow, red, dropped?)
+            if ok:
+                drawn_dropped += 1
+
+    # Draw tiles last so squares/labels stay above links.
+    draw_nodes()
+
     legend_handles = [
+        Line2D([0], [0], color="tab:blue", lw=2, label="corr ≥ 0.90"),
         Line2D([0], [0], color="tab:green", lw=2, label="0.80 ≤ corr < 0.90"),
-        Line2D([0], [0], color="gold",      lw=2, label="0.70 ≤ corr < 0.80"),
-        Line2D([0], [0], color="red",       lw=2, label="corr < 0.70"),
+        Line2D([0], [0], color="gold", lw=2, label="0.70 ≤ corr < 0.80"),
+        Line2D([0], [0], color="red", lw=2, label="corr < 0.70"),
     ]
+
     if dropped_pairs:
         legend_handles.append(
             Line2D(
@@ -555,34 +681,267 @@ def make_bad_links_grid_plot(
                 color="black",
                 lw=2,
                 linestyle=":",
-                label="Dropped by solver (dotted; color by corr)",
+                label="Dropped by solver",
             )
         )
 
-    # Leave room at the top for stacked legend + title
-    fig.subplots_adjust(top=0.78)
-
-    # Figure-level legend ABOVE the grid, stacked vertically
+    # Pull legend closer to the title/grid.
     fig.legend(
         handles=legend_handles,
-        title="Bad link bands",
+        title="Link bands",
         loc="upper center",
         ncol=1,
-        bbox_to_anchor=(0.5, 0.95),
-        borderaxespad=0.2,
+        bbox_to_anchor=(0.5, 0.945),
+        borderaxespad=0.1,
+        frameon=True,
     )
 
-    ax.set_title(f"Low-correlation links on grid (corr < {bad_corr_thresh})")
+    ax.set_title(
+        "All pairwise links on grid (colored by corr band)",
+        fontsize=12,
+        pad=4,
+    )
     ax.set_xlabel("Grid X index")
     ax.set_ylabel("Grid Y index")
     ax.set_aspect("equal", adjustable="box")
 
-    # Layout only for the axes region (below ~0.78)
-    fig.tight_layout(rect=[0.0, 0.0, 1.0, 0.78])
+    pad = 0.75
+    ax.set_xlim(x_plot(min_gx) - pad, x_plot(max_gx) + pad)
+    ax.set_ylim(-pad, max_gy + pad)
 
-    out_png = os.path.join(out_dir, "05_bad_links_grid.png")
-    fig.savefig(out_png, dpi=200)
+    x_ticks = [x_plot(gx) for gx in range(min_gx, max_gx + 1)]
+    x_labels = [str(gx) for gx in range(min_gx, max_gx + 1)]
+
+    ax.set_xticks(x_ticks)
+    ax.set_xticklabels(x_labels)
+    ax.set_yticks(range(0, max_gy + 1))
+
+    ax.tick_params(axis="x", labelsize=9, rotation=0)
+    ax.tick_params(axis="y", labelsize=8)
+
+    ax.grid(True, alpha=0.25)
+
+    # Reserve less top space so the gap is much smaller.
+    fig.tight_layout(rect=[0.0, 0.0, 1.0, 0.905])
+
+    out_png = os.path.join(out_dir, "05_all_pairwise_links_on_grid.png")
+    fig.savefig(out_png, dpi=250, bbox_inches="tight", pad_inches=0.20)
     plt.close(fig)
+
+    print("[grid-debug] total pairwise rows:", len(rows))
+    print("[grid-debug] drawn all links:", drawn_all)
+    print("[grid-debug] skipped all links:", skipped_all)
+
+    if dropped_pairs:
+        print("[grid-debug] dropped pairs from CSV:", len(dropped_pairs))
+        print("[grid-debug] drawn dropped links:", drawn_dropped)
+        print("[grid-debug] dropped missing from XML pairwise rows:", len(dropped_missing_from_xml))
+        print("[grid-debug] dropped missing grid coords:", len(dropped_missing_from_grid))
+
+        if dropped_missing_from_xml:
+            print("[grid-debug] first dropped missing from XML:", dropped_missing_from_xml[:25])
+        if dropped_missing_from_grid:
+            print("[grid-debug] first dropped missing grid coords:", dropped_missing_from_grid[:25])
+
+    print("[grid-debug] wrote grid map:", out_png)
+
+# def make_bad_links_grid_plot(
+#     rows,
+#     setup_to_grid,
+#     bad_corr_thresh: float,
+#     out_dir: str,
+#     dropped_pairs: Optional[Set[Tuple[int, int]]] = None,
+# ):
+#     """
+#     Draw tiles at their nominal grid indices.
+
+#     Solid lines:
+#       - pairwise links with corr < bad_corr_thresh
+
+#     Dotted lines:
+#       - all solver-dropped links found in XML pairwise rows,
+#         even if corr >= bad_corr_thresh
+
+#     Notes:
+#       - Explicit axis limits/ticks prevent edge rows/columns from getting clipped.
+#       - Figure size only changes rendering size; x/y limits determine visible grid range.
+#     """
+#     if not setup_to_grid:
+#         return
+
+#     all_gx = [g[0] for g in setup_to_grid.values()]
+#     all_gy = [g[1] for g in setup_to_grid.values()]
+
+#     min_gx = min(all_gx)
+#     max_gx = max(all_gx)
+#     min_gy = min(all_gy)
+#     max_gy = max(all_gy)
+
+#     print("[grid-debug] x index min/max:", min_gx, max_gx, "unique:", sorted(set(all_gx)))
+#     print("[grid-debug] y index min/max:", min_gy, max_gy, "unique:", sorted(set(all_gy)))
+
+#     fig, ax = plt.subplots(figsize=(20, 20))
+
+#     # Draw tile nodes
+#     for setup, (gx, gy, gz) in setup_to_grid.items():
+#         y_plot = max_gy - gy
+#         ax.scatter(gx, y_plot, s=70, color="black", zorder=5)
+#         ax.text(
+#             gx + 0.05,
+#             y_plot + 0.05,
+#             str(setup),
+#             fontsize=7,
+#             color="black",
+#             zorder=6,
+#         )
+
+#     def edge_color(corr: float) -> str:
+#         if corr >= 0.90:
+#             return "tab:blue"
+#         elif corr >= 0.80:
+#             return "tab:green"
+#         elif corr >= 0.70:
+#             return "gold"
+#         else:
+#             return "red"
+
+#     def draw_edge(a: int, b: int, corr: float, *, linestyle: str, linewidth: float, zorder: int):
+#         if a not in setup_to_grid or b not in setup_to_grid:
+#             return False
+
+#         gx_a, gy_a, _ = setup_to_grid[a]
+#         gx_b, gy_b, _ = setup_to_grid[b]
+
+#         ay = max_gy - gy_a
+#         by = max_gy - gy_b
+
+#         ax.plot(
+#             [gx_a, gx_b],
+#             [ay, by],
+#             linewidth=linewidth,
+#             linestyle=linestyle,
+#             color=edge_color(corr),
+#             alpha=0.9,
+#             zorder=zorder,
+#         )
+#         return True
+
+#     # Build pair -> best row by max corr.
+#     # Used so dropped links can be drawn even if corr >= bad_corr_thresh.
+#     best_row_by_pair: Dict[Tuple[int, int], list] = {}
+#     for r in rows:
+#         a = int(r[0])
+#         b = int(r[1])
+#         corr = float(r[5])
+#         key = (min(a, b), max(a, b))
+
+#         if key not in best_row_by_pair or corr > float(best_row_by_pair[key][5]):
+#             best_row_by_pair[key] = r
+
+#     # Draw solid bad-correlation links
+#     bad_rows = [r for r in rows if float(r[5]) < bad_corr_thresh]
+
+#     drawn_bad = 0
+#     skipped_bad = 0
+
+#     for r in bad_rows:
+#         a = int(r[0])
+#         b = int(r[1])
+#         corr = float(r[5])
+
+#         if draw_edge(a, b, corr, linestyle="-", linewidth=1.0, zorder=2):
+#             drawn_bad += 1
+#         else:
+#             skipped_bad += 1
+
+#     # Draw all dropped links as dotted, not only bad_rows
+#     drawn_dropped = 0
+#     dropped_missing_from_xml = []
+#     dropped_missing_from_grid = []
+
+#     if dropped_pairs:
+#         for key in sorted(dropped_pairs):
+#             r = best_row_by_pair.get(key)
+#             if r is None:
+#                 dropped_missing_from_xml.append(key)
+#                 continue
+
+#             a = int(r[0])
+#             b = int(r[1])
+#             corr = float(r[5])
+
+#             if draw_edge(a, b, corr, linestyle=":", linewidth=2.5, zorder=4):
+#                 drawn_dropped += 1
+#             else:
+#                 dropped_missing_from_grid.append(key)
+
+#     print("[grid-debug] total pairwise rows:", len(rows))
+#     print("[grid-debug] bad rows corr<thresh:", len(bad_rows))
+#     print("[grid-debug] drawn bad links:", drawn_bad)
+#     print("[grid-debug] skipped bad links missing grid coords:", skipped_bad)
+
+#     if dropped_pairs:
+#         print("[grid-debug] dropped pairs from CSV:", len(dropped_pairs))
+#         print("[grid-debug] drawn dropped links:", drawn_dropped)
+#         print("[grid-debug] dropped missing from XML pairwise rows:", len(dropped_missing_from_xml))
+#         print("[grid-debug] dropped missing grid coords:", len(dropped_missing_from_grid))
+
+#         if dropped_missing_from_xml:
+#             print("[grid-debug] first dropped missing from XML:", dropped_missing_from_xml[:25])
+#         if dropped_missing_from_grid:
+#             print("[grid-debug] first dropped missing grid coords:", dropped_missing_from_grid[:25])
+
+#     legend_handles = [
+#         Line2D([0], [0], color="tab:blue", lw=2, label="corr ≥ 0.90"),
+#         Line2D([0], [0], color="tab:green", lw=2, label="0.80 ≤ corr < 0.90"),
+#         Line2D([0], [0], color="gold", lw=2, label="0.70 ≤ corr < 0.80"),
+#         Line2D([0], [0], color="red", lw=2, label="corr < 0.70"),
+#     ]
+
+#     if dropped_pairs:
+#         legend_handles.append(
+#             Line2D(
+#                 [0],
+#                 [0],
+#                 color="black",
+#                 lw=2,
+#                 linestyle=":",
+#                 label="Dropped by solver",
+#             )
+#         )
+
+#     fig.legend(
+#         handles=legend_handles,
+#         title="Link bands",
+#         loc="upper center",
+#         ncol=1,
+#         bbox_to_anchor=(0.5, 0.97),
+#         borderaxespad=0.2,
+#     )
+
+#     ax.set_title(
+#         f"Low-corr links + solver-dropped links "
+#         f"(solid corr < {bad_corr_thresh}, dotted dropped)"
+#     )
+#     ax.set_xlabel("Grid X index")
+#     ax.set_ylabel("Grid Y index")
+#     ax.set_aspect("equal", adjustable="box")
+
+#     # Critical: explicitly show every grid index, including 11+
+#     pad = 0.75
+#     ax.set_xlim(min_gx - pad, max_gx + pad)
+#     ax.set_ylim(-pad, max_gy + pad)
+
+#     ax.set_xticks(range(min_gx, max_gx + 1))
+#     ax.set_yticks(range(0, max_gy + 1))
+
+#     ax.grid(True, alpha=0.25)
+
+#     fig.tight_layout(rect=[0.0, 0.0, 1.0, 0.84])
+
+#     out_png = os.path.join(out_dir, "05_bad_links_grid.png")
+#     fig.savefig(out_png, dpi=200, bbox_inches="tight", pad_inches=0.25)
+#     plt.close(fig)
 
 
 def write_dropped_links_report(
@@ -663,7 +1022,18 @@ def run_qc(
     """
     ensure_dir(out_dir)
 
-    root = ET.parse(xml_path).getroot()
+    if xml_path.startswith("s3://"):
+        parsed = urlparse(xml_path)
+        bucket = parsed.netloc
+        key = parsed.path.lstrip("/")
+
+        s3 = boto3.client("s3")
+        obj = s3.get_object(Bucket=bucket, Key=key)
+        xml_bytes = obj["Body"].read()
+
+        root = ET.fromstring(xml_bytes)
+    else:
+        root = ET.parse(xml_path).getroot()
 
     # grid layout (for mapping bad links)
     setup_to_grid = get_nominal_grid(root)
@@ -706,11 +1076,15 @@ def run_qc(
 
 if __name__ == "__main__":
     # 🔒 Edit these and run the script
-    XML_PATH = "/Users/sean.fite/Desktop/bigstitcher.xml"
-    DROPPED_CSV_PATH = "/Users/sean.fite/Desktop/solver_removed_links.csv"
+    # XML_PATH = "/Users/sean.fite/Desktop/bigstitcher.xml"
+    # DROPPED_CSV_PATH = "/Users/sean.fite/Desktop/solver_removed_links.csv"
+    # OUT_DIR  = "/Users/sean.fite/Desktop/pairwise_qc_out"
+
+    XML_PATH = "s3://aind-open-data/HCR_831988-s1-ls2_2026-05-27_00-00-00_processed_2026-05-28_01-30-18/image_tile_alignment/bigstitcher.xml"
+    DROPPED_CSV_PATH = "s3://aind-open-data/HCR_831988-s1-ls2_2026-05-27_00-00-00_processed_2026-05-28_01-30-18/image_tile_alignment/solver_removed_links.csv"
     OUT_DIR  = "/Users/sean.fite/Desktop/pairwise_qc_out"
 
     XY_THRESH_LOG2  = 2.0   # same meaning as your original xy_thresh
-    BAD_CORR_THRESH = 0.90  # links below this are drawn as 'bad' on the grid
+    BAD_CORR_THRESH = 0.99  # links below this are drawn as 'bad' on the grid
 
     run_qc(XML_PATH, OUT_DIR, XY_THRESH_LOG2, BAD_CORR_THRESH, DROPPED_CSV_PATH)

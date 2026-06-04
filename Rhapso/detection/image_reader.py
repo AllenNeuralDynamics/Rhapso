@@ -88,6 +88,7 @@ class ImageReader:
             zarr_array = zarr.open(store, mode='r')
             dask_array = da.from_zarr(zarr_array)[0, 0, :, :, :]
 
+        # Transpose from zyx to xyz
         dask_array = dask_array.astype(np.float32)
         dask_array = dask_array.transpose()
 

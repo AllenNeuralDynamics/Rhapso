@@ -39,4 +39,4 @@ ng_link_gen = NeuroglancerLinkGeneratorZ1(
 # Run pipeline
 fusion.run()
 multiscale.run()
-# ng_link_gen.run()
+ng_link_gen.run()
