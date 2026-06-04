@@ -41,6 +41,9 @@ class ViewTransformModels:
         m[:3, :4] = vals.reshape(3, 4)
         return m
 
+    def _view_id(self, timepoint: Any, setup: Any) -> str:
+        return f"timepoint: {timepoint}, setup: {setup}"
+
     def compose_all_view_transforms(self) -> None:
         """
         Compose a per-view 4x4 by chaining all affine transforms in order.
