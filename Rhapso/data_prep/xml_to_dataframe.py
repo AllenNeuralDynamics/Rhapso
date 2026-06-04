@@ -16,10 +16,7 @@ class XMLToDataFrame:
 
         for il in root.findall(".//ImageLoader/zgroups/zgroup"):
             view_setup = il.get("setup")
-
-            # Support both old and new XML styles
             timepoint = il.get("timepoint") or il.get("tp")
-
             path_node = il.find("path")
             file_path = (
                 il.get("path")
@@ -174,10 +171,6 @@ class XMLToDataFrame:
         """
         view_interest_points_data = []
 
-        # if self.key == "detection":
-        #     if len(root.findall(".//ViewInterestPointsFile")) != 0:
-        #         raise Exception("There should be no interest points in this file yet.")
-
         for vip in root.findall(".//ViewInterestPointsFile"):
             timepoint = vip.get("timepoint")
             setup = vip.get("setup")
@@ -220,7 +213,7 @@ class XMLToDataFrame:
         length = True
         if len(root.findall(".//ImageLoader/files/FileMapping")) != len(root.findall(".//ViewRegistration")) or \
             len(root.findall(".//ViewSetup")) != len(root.findall(".//ViewRegistration")) * (1 / 2):
-            length = False  # Set to False if the relationships do not match expected counts
+            length = False  # relationships do not match expected counts
         return length
 
     def run(self):

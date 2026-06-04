@@ -29,7 +29,6 @@ class SaveInterestPoints:
         self.overlappingOnly = "true"
         self.findMin = "true"
         self.findMax = "true"
-        self.default_block_size = 300000
     
     def load_xml_file(self, file_path):
         tree = ET.parse(file_path)
@@ -113,56 +112,93 @@ class SaveInterestPoints:
         json_bytes = json.dumps(attributes).encode('utf-8')
         s3 = boto3.client('s3')
         s3.put_object(Bucket=bucket, Key=json_path, Body=json_bytes)
+    
+    def write_one_block_dataset(self, root, name, data, dtype, attrs):
+        """
+        Write a dataset as exactly one block/chunk.
+        Rewrites metadata and overwrites chunk 0 without deleting.
+        """
+        data = np.asarray(data, dtype=dtype)
 
+        # Empty datasets can have shape 0, but chunk dims cannot be 0.
+        chunks = tuple(max(1, dim) for dim in data.shape)
+
+        if name in root:
+            arr = zarr.creation.create(
+                shape=data.shape,
+                chunks=chunks,
+                dtype=dtype,
+                compressor=zarr.GZip(),
+                store=root.store,
+                path=f"{root.path}/{name}" if root.path else name,
+                overwrite=True,
+            )
+
+            if data.size > 0:
+                arr[...] = data
+
+        else:
+            arr = root.create_dataset(
+                name,
+                data=data,
+                dtype=dtype,
+                chunks=chunks,
+                compressor=zarr.GZip(),
+            )
+
+        for k, v in attrs.items():
+            arr.attrs[k] = v
+
+        return arr
+    
     def save_intensities_to_n5(self, view_id, n5_path):
         """
-        Write intensities into an N5 group
+        Write intensities into an N5 group.
         """
         if self.n5_output_file_prefix.startswith("s3://"):
             output_path = self.n5_output_file_prefix + n5_path + "/interestpoints"
             store = s3fs.S3Map(root=output_path, s3=self.s3_filesystem, check=False)
             root = zarr.group(store=store, overwrite=False)
-            root.attrs['n5'] = '4.0.0'
+            root.attrs["n5"] = "4.0.0"
         
         else:
             store = zarr.N5Store(self.n5_output_file_prefix + n5_path + "/interestpoints")
             root = zarr.group(store, overwrite=False)
-            root.attrs['n5'] =  '4.0.0'
-        
-        intensities_path = 'intensities'
+            root.attrs["n5"] = "4.0.0"
 
-        if intensities_path in root:
-            try:
-                del root[intensities_path]
-            except Exception as e:
-                print(f"Warning: failed to delete existing dataset at {intensities_path}: {e}")
+        intensities_path = "intensities"
 
-        try: 
-            if view_id in self.consolidated_data:
-                intensities = [point[1] for point in self.consolidated_data[view_id]] 
-                dataset = root.create_dataset(
-                    intensities_path,
-                    data=intensities,
-                    dtype='f4',  
-                    chunks=(self.default_block_size,),  
-                    compressor=zarr.GZip()
+        try:
+            points_for_view = self.consolidated_data.get(view_id, [])
+
+            if len(points_for_view) > 0:
+                intensities = np.asarray(
+                    [point[1] for point in points_for_view],
+                    dtype=np.float32,
                 )
-                dataset.attrs["dimensions"] = [1, len(intensities)]
-                dataset.attrs["blockSize"] = [1, self.default_block_size]
-            else: 
-                root.create_dataset(
-                    intensities_path,
-                    shape=(0,), 
-                    dtype='f4', 
-                    chunks=(1,),  
-                    compressor=zarr.GZip()  
-                )
+            else:
+                intensities = np.empty((0,), dtype=np.float32)
+
+            num_intensities = intensities.shape[0]
+
+            self.write_one_block_dataset(
+                root=root,
+                name=intensities_path,
+                data=intensities,
+                dtype="f4",
+                attrs={
+                    "dimensions": [num_intensities],
+                    "blockSize": [max(num_intensities, 1)],
+                },
+            )
+
         except Exception as e:
-            print(f"Error creating intensities dataset at {intensities_path}: {e}")
-
+            print(f"Error writing intensities dataset at {intensities_path}: {e}")
+            raise
+    
     def save_interest_points_to_n5(self, view_id, n5_path): 
         """
-        Write interest point IDs and 3D locations into an N5 group
+        Write interest point IDs and 3D locations into an N5 group.
         """
         if self.n5_output_file_prefix.startswith("s3://"):
             output_path = self.n5_output_file_prefix + n5_path + "/interestpoints"
@@ -188,52 +224,47 @@ class SaveInterestPoints:
             attrs_dict = dict(root.attrs)
             self.write_json_to_s3(id_path, loc_path, attrs_dict)
 
-        if (view_id in self.consolidated_data) and (len(self.consolidated_data[view_id]) > 0):
-            interest_points = [point[0] for point in self.consolidated_data[view_id]]
-            interest_point_ids = np.arange(len(interest_points), dtype=np.uint64).reshape(-1, 1)
-            n = 3
+        points_for_view = self.consolidated_data.get(view_id, [])
 
-            if id_dataset in root:
-                del root[id_dataset]
-            root.create_dataset(
-                id_dataset,
-                data=interest_point_ids,
-                dtype='u8',
-                chunks=(self.default_block_size,),
-                compressor=zarr.GZip()
-            )
+        if len(points_for_view) > 0:
+            interest_points = np.asarray(
+                [point[0] for point in points_for_view],
+                dtype=np.float64,
+            ).reshape(-1, 3)
 
-            if loc_dataset in root:
-                del root[loc_dataset]
-            root.create_dataset(
-                loc_dataset,
-                data=interest_points,
-                dtype='f8',
-                chunks=(self.default_block_size, n),
-                compressor=zarr.GZip()
-            )
-        
-        # save as empty lists
+            num_points = interest_points.shape[0]
+
+            interest_point_ids = np.arange(
+                num_points,
+                dtype=np.uint64,
+            ).reshape(-1, 1)
+
         else:
-            if id_dataset in root:
-                del root[id_dataset]
-            root.create_dataset(
-                id_dataset,
-                shape=(0,),
-                dtype='u8',
-                chunks=(1,),
-                compressor=zarr.GZip()
-            )
+            interest_points = np.empty((0, 3), dtype=np.float64)
+            interest_point_ids = np.empty((0, 1), dtype=np.uint64)
+            num_points = 0
 
-            if loc_dataset in root:
-                del root[loc_dataset]
-            root.create_dataset(
-                loc_dataset,
-                shape=(0,),
-                dtype='f8',
-                chunks=(1,),
-                compressor=zarr.GZip()
-            )
+        self.write_one_block_dataset(
+            root=root,
+            name=id_dataset,
+            data=interest_point_ids,
+            dtype="u8",
+            attrs={
+                "dimensions": [num_points, 1],
+                "blockSize": [max(num_points, 1), 1],
+            },
+        )
+
+        self.write_one_block_dataset(
+            root=root,
+            name=loc_dataset,
+            data=interest_points,
+            dtype="f8",
+            attrs={
+                "dimensions": [num_points, 3],
+                "blockSize": [max(num_points, 1), 3],
+            },
+        )
 
     def save_points(self):
         """

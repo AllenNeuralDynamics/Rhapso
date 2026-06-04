@@ -98,7 +98,7 @@ xml_file_path_matching_affine: *rigid_solver_xml_output
 num_neighbors_affine: 3
 redundancy_affine: 0
 significance_affine: 3               
-search_radius_affine: 100
+search_radius_affine: 300
 num_required_neighbors_affine: 3
 
 # Ransac     
