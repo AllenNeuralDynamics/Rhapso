@@ -89,8 +89,12 @@ class AdvancedRefinement:
         Boolean check if the 3D interval `contained` lies fully inside the 3D interval `containing`
         """
         lc, uc = containing[0], containing[1]
-        li, ui = contained[0],  contained[1]
-        return all(lc[d] <= li[d] and uc[d] >= ui[d] for d in range(3))
+        li, ui = contained[0], contained[1]
+
+        return all(
+            lc[d] <= li[d] and uc[d] >= ui[d]
+            for d in range(3)
+        )
     
     def filter_lists(self, ips, intensities, my_max_spots):
         """

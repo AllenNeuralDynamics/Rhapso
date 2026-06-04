@@ -66,29 +66,6 @@ class OverlapDetection():
         
         return shape
     
-    # def open_and_downsample(self, shape):
-    #     X = int(shape[5])
-    #     Y = int(shape[4])
-    #     Z = int(shape[3])
-
-    #     dsx = int(self.dsxy)
-    #     dsy = int(self.dsxy)
-    #     dsz = int(self.dsz)
-
-    #     def ceil_half_chain(n, f):
-    #         out = int(n)
-    #         while f >= 2:
-    #             out = (out + 1) // 2  # ceil(n/2)
-    #             f //= 2
-    #         return out
-
-    #     x_new = ceil_half_chain(X, dsx)
-    #     y_new = ceil_half_chain(Y, dsy)
-    #     z_new = ceil_half_chain(Z, dsz)
-
-    #     mipmap_transform = self.create_mipmap_transform()
-    #     return ((0, 0, 0), (x_new, y_new, z_new)), mipmap_transform
-    
     def open_and_downsample(self, shape, dsxy, dsz):
         """
         Downsample a 3D volume by powers of two by repeatedly halving along each axis

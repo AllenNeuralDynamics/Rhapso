@@ -23,8 +23,6 @@ class AffineFusion:
     def affine_fusion(self):
         ray.init()
 
-        print("Newest approach")
-
         # Compute bounding box for fused volume based on alignment xml
         compute_bbox = ComputeBBox(self.aligned_xml_path, self.zarr_input_prefix)
         bb_min, bb_max, per_view_transforms = compute_bbox.run() 

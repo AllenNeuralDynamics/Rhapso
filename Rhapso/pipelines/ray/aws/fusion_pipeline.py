@@ -62,7 +62,7 @@ print("$", " ".join(["ray", "up", unified_yml, "-y"]))
 subprocess.run(["ray", "up", unified_yml, "-y"], check=True, cwd=prefix)
 
 try:
-    # exec_on_cluster("Affine Fusion", unified_yml, fusion_cmd, prefix)
+    exec_on_cluster("Affine Fusion", unified_yml, fusion_cmd, prefix)
     exec_on_cluster("Multiscale", unified_yml, multiscale_cmd, prefix)
     print("\n✅ Fusion + Multiscale pipeline complete.")
 

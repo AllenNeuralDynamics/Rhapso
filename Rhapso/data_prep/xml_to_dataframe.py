@@ -10,16 +10,42 @@ class XMLToDataFrame:
 
     def parse_image_loader_zarr(self, root):
         """
-        Parses image loader configuration from a Zarr file's XML structure and constructs a DataFrame containing the 
-        metadata for each image group.
+        Parses image loader configuration from a Zarr file's XML 
         """
         image_loader_data = []
 
         for il in root.findall(".//ImageLoader/zgroups/zgroup"):
             view_setup = il.get("setup")
-            timepoint = il.get("timepoint")
-            file_path = il.find("path").text if il.find("path") is not None else None
-            channel = file_path.split("_ch_", 1)[1].split(".ome.zarr", 1)[0]
+
+            # Support both old and new XML styles
+            timepoint = il.get("timepoint") or il.get("tp")
+
+            path_node = il.find("path")
+            file_path = (
+                il.get("path")
+                or (path_node.text if path_node is not None else None)
+            )
+
+            if not file_path:
+                raise ValueError(
+                    "[XMLToDataFrame] Missing zgroup path. Expected either "
+                    "<zgroup path='...'> or <zgroup><path>...</path></zgroup>. "
+                    f"zgroup attributes={il.attrib}"
+                )
+
+            if "_ch_" not in file_path:
+                raise ValueError(
+                    f"[XMLToDataFrame] Could not parse channel from zgroup path: {file_path!r}. "
+                    "Expected path to contain '_ch_'."
+                )
+
+            channel_part = file_path.split("_ch_", 1)[1]
+            channel = (
+                channel_part
+                .replace(".ome.zarr", "")
+                .replace(".zarr", "")
+                .split("/", 1)[0]
+            )
 
             image_loader_data.append(
                 {
