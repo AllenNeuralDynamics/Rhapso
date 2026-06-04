@@ -1,16 +1,15 @@
 #!/usr/bin/env python3
-"""Generate AIND processing metadata for the fusion capsule run."""
+"""Generate AIND processing metadata for Rhapso affine fusion."""
 
 from __future__ import annotations
 
-import argparse
-import json
 import subprocess
-from datetime import datetime
+from datetime import datetime, timezone
 from pathlib import Path
-from typing import Any
-from urllib.error import HTTPError, URLError
-from urllib.request import Request, urlopen
+from urllib.parse import urlparse
+
+import boto3
+import yaml
 
 from aind_data_schema.base import _GenericModel
 from aind_data_schema.components.identifiers import Code
@@ -18,98 +17,87 @@ from aind_data_schema.core.processing import DataProcess, Processing, ProcessSta
 from aind_data_schema_models.process_names import ProcessName
 
 
-REPO_URL = "https://github.com/AllenNeuralDynamics/exaspim-bigstitcher-fusion-capsule"
+# --------------------------------------------------
+# Hardcoded metadata
+# --------------------------------------------------
+
+REPO_URL = "https://github.com/AllenNeuralDynamics/Rhapso"
 GIT_URL = f"{REPO_URL}.git"
-GITHUB_API_URL = (
-    "https://api.github.com/repos/"
-    "AllenNeuralDynamics/exaspim-bigstitcher-fusion-capsule/commits/main"
-)
-EXPERIMENTERS = ["Cameron Arshadi"]
+
+CODE_NAME = "rhapso-affine-fusion"
+RUN_SCRIPT = "/code/run"
+LANGUAGE = "Python"
+EXPERIMENTERS = ["Sean Fite"]
+
+CONFIG_YML = Path("/code/config/config.yml")
+LOCAL_PROCESSING_JSON = Path("/results/processing.json")
+
+S3_XML_PATH = "s3://aind-open-data/exaSPIM_720164_2025-07-07_17-55-45_processed_2025-07-15_16-22-02/tile_alignment/rhapso/rhapso-solver-split-affine.xml"
+ZARR_LOCATION = "s3://aind-open-data/exaSPIM_720164_2025-07-07_17-55-45_processed_2025-07-15_16-22-02/fusion/fused.zarr"
+PROCESSING_JSON_S3 = "s3://aind-scratch-data/sean.fite/processing-json-test/exaSPIM-fusion/processing.json"
 
 
-def parse_args() -> argparse.Namespace:
-    parser = argparse.ArgumentParser(
-        description="Write AIND processing.json metadata for an ExaSPIM fusion run."
-    )
-    parser.add_argument("--s3-xml-path", required=True)
-    parser.add_argument("--zarr-location", required=True)
-    parser.add_argument("--spark-jar", required=True)
-    parser.add_argument("--local-spark-jar", required=True)
-    parser.add_argument("--block-size", required=True)
-    parser.add_argument("--compression", required=True)
-    parser.add_argument("--data-type", required=True)
-    parser.add_argument("--storage-format", required=True)
-    parser.add_argument("--s3-region", required=True)
-    parser.add_argument("--downsample", action="append", default=[])
-    parser.add_argument("--emr-arg", action="append", default=[])
-    parser.add_argument("--start-date-time", required=True)
-    parser.add_argument("--end-date-time", required=True)
-    parser.add_argument(
-        "--output-file",
-        default="/results/processing.json",
-        type=Path,
-        help="Path where processing.json should be written.",
-    )
-    return parser.parse_args()
-
+# --------------------------------------------------
+# Helpers
+# --------------------------------------------------
 
 def fetch_main_commit_sha() -> str:
-    try:
-        result = subprocess.run(
-            ["git", "ls-remote", GIT_URL, "refs/heads/main"],
-            check=True,
-            capture_output=True,
-            text=True,
-            timeout=30,
-        )
-        sha = result.stdout.split()[0]
-        if sha:
-            return sha
-    except (FileNotFoundError, subprocess.SubprocessError, IndexError):
-        pass
-
-    request = Request(
-        GITHUB_API_URL,
-        headers={
-            "Accept": "application/vnd.github+json",
-            "User-Agent": "exaspim-bigstitcher-fusion-capsule",
-        },
+    result = subprocess.run(
+        ["git", "ls-remote", GIT_URL, "refs/heads/main"],
+        check=True,
+        capture_output=True,
+        text=True,
+        timeout=30,
     )
-    try:
-        with urlopen(request, timeout=30) as response:
-            payload = json.loads(response.read().decode("utf-8"))
-    except (HTTPError, URLError, TimeoutError) as exc:
-        raise RuntimeError(f"Failed to fetch code version from {GITHUB_API_URL}") from exc
 
-    sha = payload.get("sha")
-    if not isinstance(sha, str) or not sha:
-        raise RuntimeError(f"GitHub response did not include a commit SHA: {payload}")
-    return sha
+    return result.stdout.split()[0]
 
 
-def parse_datetime(value: str) -> datetime:
-    normalized = value.replace("Z", "+00:00")
-    return datetime.fromisoformat(normalized)
+def load_config(path: Path) -> dict:
+    with path.open("r") as f:
+        return yaml.safe_load(f)
 
 
-def build_parameters(args: argparse.Namespace) -> _GenericModel:
-    parameters: dict[str, Any] = {
-        "s3_xml_path": args.s3_xml_path,
-        "zarr_location": args.zarr_location,
-        "spark_jar": args.spark_jar,
-        "local_spark_jar": args.local_spark_jar,
-        "block_size": args.block_size,
-        "compression": args.compression,
-        "data_type": args.data_type,
-        "storage_format": args.storage_format,
-        "s3_region": args.s3_region,
-        "downsamples": args.downsample,
-        "emr_args": args.emr_arg,
+def upload_file_to_s3(local_path: Path, s3_uri: str) -> None:
+    parsed = urlparse(s3_uri)
+
+    bucket = parsed.netloc
+    key = parsed.path.lstrip("/")
+
+    s3 = boto3.client("s3")
+    s3.upload_file(str(local_path), bucket, key)
+
+    print(f"[processing-metadata] Uploaded {local_path} -> {s3_uri}")
+
+
+def build_parameters(config: dict) -> _GenericModel:
+    parameters = {
+        "s3_xml_path": S3_XML_PATH,
+        "zarr_location": ZARR_LOCATION,
+
+        # AFFINE FUSION
+        "s3_xml_path": S3_XML_PATH,
+        "zarr_location": ZARR_LOCATION,
+        "block_size_xyz": config["block_size"],
+        "intensity_range": config["intensity_range"],
+        "block_scale_xyz": config["block_scale"],
+        "overlap_strategy": config["overlap_strategy"],
+
+        # MULTISCALE
+        "zarr_location": ZARR_LOCATION,
+        "multiscale_chunk_size": config["multiscale_chunk_size"],
+        "n_lvls": config["n_lvls"],
+        "scale_factor_zyx": config["scale_factor"],
+        "target_block_size_mb": config["target_block_size_mb"],
+        "base_level": config["base_level"],
     }
+
     return _GenericModel(**parameters)
 
 
-def build_processing_metadata(args: argparse.Namespace) -> Processing:
+def build_processing_metadata(config: dict) -> Processing:
+    timestamp = datetime.now(timezone.utc)
+
     return Processing(
         data_processes=[
             DataProcess(
@@ -117,25 +105,36 @@ def build_processing_metadata(args: argparse.Namespace) -> Processing:
                 stage=ProcessStage.PROCESSING,
                 code=Code(
                     url=REPO_URL,
-                    name="exaspim-bigstitcher-fusion-capsule",
+                    name=CODE_NAME,
                     version=fetch_main_commit_sha(),
-                    run_script="/code/run",
-                    language="Python",
-                    parameters=build_parameters(args),
+                    run_script=RUN_SCRIPT,
+                    language=LANGUAGE,
+                    parameters=build_parameters(config),
                 ),
                 experimenters=EXPERIMENTERS,
-                start_date_time=parse_datetime(args.start_date_time),
-                end_date_time=parse_datetime(args.end_date_time),
+                start_date_time=timestamp,
+                end_date_time=timestamp,
             )
         ]
     )
 
 
 def main() -> int:
-    args = parse_args()
-    processing = build_processing_metadata(args)
-    args.output_file.parent.mkdir(parents=True, exist_ok=True)
-    args.output_file.write_text(processing.model_dump_json(indent=3), encoding="utf-8")
+    config = load_config(CONFIG_YML)
+
+    processing = build_processing_metadata(config)
+
+    LOCAL_PROCESSING_JSON.parent.mkdir(parents=True, exist_ok=True)
+
+    LOCAL_PROCESSING_JSON.write_text(
+        processing.model_dump_json(indent=3),
+        encoding="utf-8",
+    )
+
+    print(f"[processing-metadata] Wrote local file: {LOCAL_PROCESSING_JSON}")
+
+    upload_file_to_s3(LOCAL_PROCESSING_JSON, PROCESSING_JSON_S3)
+
     return 0
 
 

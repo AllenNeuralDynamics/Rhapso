@@ -4,8 +4,8 @@
 
 xml_file_path_detection: 's3://aind-scratch-data/sean.fite/831986-2tile-test.xml'
 image_file_prefix: 's3://aind-open-data/HCR_831986-s1-ls1_2026-05-20_00-00-00_processed_2026-05-22_04-36-30/image_radial_correction/' 
-xml_output_file_path: &detection_xml_output_file_path 's3://aind-scratch-data/sean.fite/alignment-testing/rhapso-detection.xml'
-n5_output_file_prefix: &n5_output_file_prefix 's3://aind-scratch-data/sean.fite/alignment-testing/' 
+xml_output_file_path: &detection_xml_output_file_path 's3://aind-scratch-data/sean.fite/alignment-testing-5/rhapso-detection.xml'
+n5_output_file_prefix: &n5_output_file_prefix 's3://aind-scratch-data/sean.fite/alignment-testing-5/' 
 detection_run_type: 'ray' 
 file_type: 'zarr' 
 dsxy: 4
