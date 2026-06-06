@@ -4,12 +4,7 @@ import math
 """
 GlobalOptimization iteratively refines per-tile transforms to achieve sub-pixel alignment
 using matched point correspondences.
-
-This optimized version keeps the NumPy hot path, but preserves the original global
-optimization behavior by syncing source-side world points back into the match graph
-and refreshing target-side world points from the live match graph each iteration.
 """
-
 
 class GlobalOptimization:
     def __init__(
@@ -69,13 +64,11 @@ class GlobalOptimization:
 
     def prepare_tile_arrays(self):
         """
-        Convert match dictionaries into NumPy arrays once.
-
-        The important part:
-          _p1_l is static local source points.
-          _p1_w is this tile's current optimized world source points.
-          _p2_w is only a cache and must be refreshed from live matches.
-          _weights is static match weights.
+        Convert match dictionaries into NumPy arrays 
+        _p1_l is static local source points.
+        _p1_w is this tile's current optimized world source points.
+        _p2_w is only a cache and must be refreshed from live matches.
+        _weights is static match weights.
         """
         for tile in self.tiles:
             matches = tile.get("matches", [])
@@ -111,10 +104,6 @@ class GlobalOptimization:
     def refresh_target_arrays_from_matches(self):
         """
         Refresh cached target-side world coordinates from the live match graph.
-
-        This is the critical fix. The old optimized version froze _p2_w once.
-        That changed the global optimization because tiles no longer fit against
-        currently updated neighbor positions.
         """
         for tile in self.tiles:
             matches = tile.get("matches", [])
@@ -130,10 +119,6 @@ class GlobalOptimization:
     def sync_tile_array_to_matches(self, tile):
         """
         Sync one tile's optimized source-side world coordinates back into matches.
-
-        This preserves the original solver behavior where match["p1"]["w"] is
-        updated during optimization and can be seen by neighboring tiles through
-        their match["p2"]["w"] references.
         """
         if "_p1_w" not in tile:
             return
@@ -266,7 +251,6 @@ class GlobalOptimization:
     def update_cost(self, tile):
         """
         Computes and stores average distance and weighted cost for one tile.
-
         Assumes _p2_w has already been refreshed from the live match graph.
         """
         p1_w = tile["_p1_w"]
@@ -487,14 +471,12 @@ class GlobalOptimization:
     def optimize_silently(self):
         """
         Iteratively refines tile alignments until convergence or max iterations.
-
-        The critical global behavior is:
-          1. refresh target arrays from the live match graph,
-          2. fit each tile against current target positions,
-          3. damp source positions,
-          4. sync source positions back into the live match graph,
-          5. average current global error,
-          6. repeat.
+        1. refresh target arrays from the live match graph,
+        2. fit each tile against current target positions,
+        3. damp source positions,
+        4. sync source positions back into the live match graph,
+        5. average current global error,
+        6. repeat.
         """
         if not self.tiles:
             return
