@@ -4,8 +4,8 @@
 
 xml_file_path_detection: 's3://aind-open-data/exaSPIM_822174_2026-04-28_17-04-08_processed_2026-05-04_15-41-37/tile_alignment/dataset.xml'
 image_file_prefix: 's3://aind-open-data/exaSPIM_822174_2026-04-28_17-04-08_processed_2026-05-04_15-41-37/flatfield_correction/SPIM.ome.zarr/' 
-xml_output_file_path: &detection_xml_output_file_path 's3://aind-scratch-data/sean.fite/alignment-test/exaSPIM/822174/rhapso-detection.xml'
-n5_output_file_prefix: &n5_output_file_prefix 's3://aind-scratch-data/sean.fite/alignment-test/exaSPIM/822174/' 
+xml_output_file_path: &detection_xml_output_file_path 's3://aind-scratch-data/sean.fite/alignment-test-1/exaSPIM/822174/rhapso-detection.xml'
+n5_output_file_prefix: &n5_output_file_prefix 's3://aind-scratch-data/sean.fite/alignment-test-1/exaSPIM/822174/' 
 detection_run_type: 'ray' 
 file_type: 'zarr' 
 dsxy: 16
@@ -36,26 +36,26 @@ fixed_tile: False
 # -- RIGID --
 run_type_solver_rigid: 'rigid'
 xml_file_path_solver_rigid: *detection_xml_output_file_path
-xml_file_path_output_rigid: &rigid_solver_xml_output 's3://aind-scratch-data/sean.fite/alignment-test/exaSPIM/822174/rhapso-solver-rigid.xml'
+xml_file_path_output_rigid: &rigid_solver_xml_output 's3://aind-scratch-data/sean.fite/alignment-test-1/exaSPIM/822174/rhapso-solver-rigid.xml'
 regularization_weight_solver_rigid: 1.0
 
 # -- AFFINE --
 run_type_solver_affine: 'affine'
 xml_file_path_solver_affine: *rigid_solver_xml_output
-xml_file_path_output_affine: &affine_solver_xml_output 's3://aind-scratch-data/sean.fite/alignment-test/exaSPIM/822174/rhapso-solver-affine.xml'
+xml_file_path_output_affine: &affine_solver_xml_output 's3://aind-scratch-data/sean.fite/alignment-test-1/exaSPIM/822174/rhapso-solver-affine.xml'
 regularization_weight_solver_affine: 0.05
 
 # -- SPLIT AFFINE --
 run_type_solver_split_affine: 'split-affine'
-xml_file_path_solver_split_affine: 's3://aind-scratch-data/sean.fite/alignment-test/exaSPIM/822174/rhapso-split.xml'
-xml_file_path_output_split_affine: &split_affine_solver_xml_output 's3://aind-scratch-data/sean.fite/alignment-test/exaSPIM/822174/rhapso-solver-split-affine.xml'
+xml_file_path_solver_split_affine: 's3://aind-scratch-data/sean.fite/alignment-test-1/exaSPIM/822174/rhapso-split.xml'
+xml_file_path_output_split_affine: &split_affine_solver_xml_output 's3://aind-scratch-data/sean.fite/alignment-test-1/exaSPIM/822174/rhapso-solver-split-affine.xml'
 regularization_weight_solver_split_affine: 0.05
 
 # SPLIT DATASET
 # -----------------------------------
 
 xml_file_path_split: *affine_solver_xml_output
-xml_output_file_path_split: &affine_split_xml_output 's3://aind-scratch-data/sean.fite/alignment-test/exaSPIM/822174/rhapso-split.xml'
+xml_output_file_path_split: &affine_split_xml_output 's3://aind-scratch-data/sean.fite/alignment-test-1/exaSPIM/822174/rhapso-split.xml'
 n5_path_split: *n5_output_file_prefix
 point_density: 100.0 
 min_points: 20

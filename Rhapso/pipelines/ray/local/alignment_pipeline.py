@@ -160,11 +160,11 @@ split_dataset = SplitDataset(
 )
 
 # -- ALIGNMENT PIPELINE --
-interest_point_detection.run()
-interest_point_matching_rigid.run()
-solver_rigid.run()
-interest_point_matching_affine.run()
-solver_affine.run()
-split_dataset.run()
-interest_point_matching_split_affine.run()
+# interest_point_detection.run()
+# interest_point_matching_rigid.run()
+# solver_rigid.run()
+# interest_point_matching_affine.run()
+# solver_affine.run()
+# split_dataset.run()
+# interest_point_matching_split_affine.run()
 solver_split_affine.run()

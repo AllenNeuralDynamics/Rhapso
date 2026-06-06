@@ -203,22 +203,6 @@ There is a special case in some datasets where the z-stack is very large. In thi
 
 <br>
 
-## Performance
-
-**Interest Point Detection Performance Example (130TB Zarr dataset)**
-
-| Environment           | Resources            | Avg runtime |
-|:----------------------|:---------------------|:-----------:|
-| Local single machine  | 10 CPU,  10 GB RAM   | ~120 min    |
-| AWS Ray cluster       | 560 CPU, 4.4 TB RAM  | ~10 min     |
-
-<br>
-*Actual times vary by pipeline components, dataset size, tiling, and parameter choices.*
-
----
-
-<br>
-
 ## Ray
 
 **Ray** is a Python framework for parallel and distributed computing. It lets you run regular Python functions in parallel on a single machine **or** scale them out to a cluster (e.g., AWS) with minimal code changes. In Rhapso, we use Ray to process large scale datasets.
