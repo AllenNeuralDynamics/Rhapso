@@ -307,30 +307,21 @@ def write_pairwise_csv(
                 is_dropped = key in dropped_pairs
                 w.writerow(list(r) + ["yes" if is_dropped else "no"])
 
-
 def make_corr_and_shift_plots(
     rows_sorted,
     out_dir: str,
     dropped_pairs: Optional[Set[Tuple[int, int]]] = None,
 ):
-    """
-    Plots:
-      - corr vs rank (all) -> 01_corr_rank.png
-      - three stacked subplots for ShiftX / ShiftY / ShiftZ with
-        orientation groups along X (Top/Bottom, Left/Right, Corner),
-        and points spread horizontally within each group -> 02_shifts_all.png
+    if not rows_sorted:
+        return None, None, None
 
-      If dropped_pairs is provided, dropped links are highlighted.
-    """
-    # ----- pull arrays out of rows -----
     corr = np.array([r[5] for r in rows_sorted], dtype=float)
-    sx   = np.array([r[2] for r in rows_sorted], dtype=float)
-    sy   = np.array([r[3] for r in rows_sorted], dtype=float)
-    sz   = np.array([r[4] for r in rows_sorted], dtype=float)
-    rank = np.arange(1, len(rows_sorted) + 1)      # 1..N for corr plot
-    aligns = [r[9] for r in rows_sorted]           # "top_bottom", "left_right", "corner"
+    sx = np.array([r[2] for r in rows_sorted], dtype=float)
+    sy = np.array([r[3] for r in rows_sorted], dtype=float)
+    sz = np.array([r[4] for r in rows_sorted], dtype=float)
+    rank = np.arange(1, len(rows_sorted) + 1)
+    aligns = [r[9] for r in rows_sorted]
 
-    # ----- dropped flags -----
     dropped_flags = None
     if dropped_pairs is not None:
         dropped_flags = np.array(
@@ -341,60 +332,173 @@ def make_corr_and_shift_plots(
             dtype=bool,
         )
 
-    # ----- correlation vs rank -----
-    fig = plt.figure()
-    ax = fig.add_subplot(111)
-
-    if dropped_flags is None or not dropped_flags.any():
-        ax.scatter(rank, corr, s=10)
-    else:
-        kept = ~dropped_flags
-        ax.scatter(rank[kept], corr[kept], s=10, label="Kept")
-        ax.scatter(
-            rank[dropped_flags],
-            corr[dropped_flags],
-            s=30,
-            color="red",
-            marker="x",
-            label="Dropped by solver",
-        )
-        ax.legend()
-
-    ax.set_xlabel("Pair rank (corr desc)")
-    ax.set_ylabel("Correlation")
-    ax.set_title("Pairwise correlation (ranked)")
-    fig.tight_layout()
-    out_corr = os.path.join(out_dir, "01_corr_rank.png")
-    fig.savefig(out_corr, dpi=200)
-    plt.close(fig)
-
-    # ----- helper for min/max with a tiny pad -----
-    def axis_min_max(arr: np.ndarray):
-        """Return (ymin, ymax) that span full data with a small padding."""
-        if arr.size == 0:
-            return (-1.0, 1.0)
-        vmin = float(arr.min())
-        vmax = float(arr.max())
-        if vmin == vmax:
-            eps = 1.0 if vmin == 0 else abs(vmin) * 0.1
-            return (vmin - eps, vmax + eps)
-        pad = 0.05 * (vmax - vmin)
-        return (vmin - pad, vmax + pad)
-
-    # ----- grouped / jittered shift plots -----
-    fig, axes = plt.subplots(3, 1, figsize=(8, 10), sharex=True)
-
-    shift_arrays = [sx, sy, sz]
-    axis_labels  = ["X", "Y", "Z"]
-
     cat_order = ["top_bottom", "left_right", "corner"]
     cat_labels = {
         "top_bottom": "Top / Bottom",
         "left_right": "Left / Right",
-        "corner":     "Corner",
+        "corner": "Corner",
     }
-    # base x positions for each category group
+    cat_colors = {
+        "top_bottom": "tab:blue",
+        "left_right": "tab:orange",
+        "corner": "tab:green",
+    }
+
+    def axis_min_max(arr: np.ndarray):
+        if arr.size == 0:
+            return (-1.0, 1.0)
+
+        vmin = float(arr.min())
+        vmax = float(arr.max())
+
+        if vmin == vmax:
+            eps = 1.0 if vmin == 0 else abs(vmin) * 0.1
+            return (vmin - eps, vmax + eps)
+
+        pad = 0.05 * (vmax - vmin)
+        return (vmin - pad, vmax + pad)
+
+    # -------- Corr vs rank, split by category --------
+    corr_png = os.path.join(out_dir, "corr_rank.png")
+
+    fig, axes = plt.subplots(
+        1,
+        len(cat_order),
+        figsize=(15, 4.5),
+        sharey=True,
+    )
+
+    if len(cat_order) == 1:
+        axes = [axes]
+
+    for ax, cat in zip(axes, cat_order):
+        idxs_cat = np.array(
+            [i for i, a in enumerate(aligns) if a == cat],
+            dtype=int,
+        )
+
+        ax.set_title(cat_labels[cat])
+        ax.set_xlabel("Pair rank (corr desc)")
+        ax.grid(True, alpha=0.25)
+
+        if idxs_cat.size == 0:
+            ax.text(
+                0.5,
+                0.5,
+                "No pairs",
+                ha="center",
+                va="center",
+                transform=ax.transAxes,
+            )
+            continue
+
+        if dropped_flags is None:
+            ax.scatter(
+                rank[idxs_cat],
+                corr[idxs_cat],
+                s=10,
+                color=cat_colors[cat],
+                label=cat_labels[cat],
+            )
+        else:
+            local_dropped = dropped_flags[idxs_cat]
+            kept_idx = idxs_cat[~local_dropped]
+            drop_idx = idxs_cat[local_dropped]
+
+            if kept_idx.size > 0:
+                ax.scatter(
+                    rank[kept_idx],
+                    corr[kept_idx],
+                    s=10,
+                    color=cat_colors[cat],
+                    label=cat_labels[cat],
+                )
+
+            if drop_idx.size > 0:
+                ax.scatter(
+                    rank[drop_idx],
+                    corr[drop_idx],
+                    s=40,
+                    marker="x",
+                    color=cat_colors[cat],
+                )
+
+        ax.text(
+            0.02,
+            0.96,
+            f"n={idxs_cat.size}",
+            ha="left",
+            va="top",
+            transform=ax.transAxes,
+            fontsize=9,
+            bbox={
+                "facecolor": "white",
+                "edgecolor": "black",
+                "boxstyle": "round,pad=0.25",
+                "alpha": 0.8,
+            },
+        )
+
+    axes[0].set_ylabel("Correlation")
+
+    legend_handles = [
+        Line2D(
+            [0],
+            [0],
+            marker="o",
+            linestyle="None",
+            color=cat_colors["top_bottom"],
+            label=cat_labels["top_bottom"],
+        ),
+        Line2D(
+            [0],
+            [0],
+            marker="o",
+            linestyle="None",
+            color=cat_colors["left_right"],
+            label=cat_labels["left_right"],
+        ),
+        Line2D(
+            [0],
+            [0],
+            marker="o",
+            linestyle="None",
+            color=cat_colors["corner"],
+            label=cat_labels["corner"],
+        ),
+    ]
+
+    if dropped_flags is not None and dropped_flags.any():
+        legend_handles.append(
+            Line2D(
+                [0],
+                [0],
+                marker="x",
+                linestyle="None",
+                color="black",
+                label="Dropped by solver",
+            )
+        )
+
+    fig.legend(
+        handles=legend_handles,
+        loc="upper center",
+        ncol=4,
+        bbox_to_anchor=(0.5, 1.03),
+    )
+
+    fig.suptitle("Pairwise correlation ranked by orientation group", y=1.08)
+    fig.tight_layout()
+    fig.savefig(corr_png, dpi=200)
+    plt.close(fig)
+
+    # -------- Shifts plots, all links --------
+    shift_arrays = [sx, sy, sz]
+    axis_labels = ["X", "Y", "Z"]
     x_base = {cat: i for i, cat in enumerate(cat_order)}
+
+    shifts_all_png = os.path.join(out_dir, "shifts_all.png")
+    fig, axes = plt.subplots(3, 1, figsize=(8, 10), sharex=True)
 
     for ax, shifts, axis_label in zip(axes, shift_arrays, axis_labels):
         for cat in cat_order:
@@ -405,18 +509,22 @@ def make_corr_and_shift_plots(
             idxs_cat = np.array(idxs_cat, dtype=int)
             y_vals = shifts[idxs_cat]
 
-            # Spread points horizontally within the group using an index-based offset
             n_cat = len(idxs_cat)
             if n_cat == 1:
                 offsets = np.array([0.0])
             else:
-                # Evenly space in [-0.4, 0.4]
                 offsets = np.linspace(-0.4, 0.4, n_cat)
 
             x_vals = x_base[cat] + offsets
 
             if dropped_flags is None:
-                ax.scatter(x_vals, y_vals, s=10, label=cat_labels[cat])
+                ax.scatter(
+                    x_vals,
+                    y_vals,
+                    s=10,
+                    color=cat_colors[cat],
+                    label=cat_labels[cat],
+                )
             else:
                 local_dropped = dropped_flags[idxs_cat]
                 keep_idx = np.where(~local_dropped)[0]
@@ -427,6 +535,7 @@ def make_corr_and_shift_plots(
                         x_vals[keep_idx],
                         y_vals[keep_idx],
                         s=10,
+                        color=cat_colors[cat],
                         label=cat_labels[cat],
                     )
 
@@ -439,510 +548,106 @@ def make_corr_and_shift_plots(
                         marker="x",
                     )
 
-        # Y limits = full min/max of this shift axis (with small pad)
         ymin, ymax = axis_min_max(shifts)
         ax.set_ylim(ymin, ymax)
-
         ax.set_ylabel(f"Shift{axis_label} (pixels)")
         ax.set_title(f"Shift{axis_label} by orientation group")
 
-    # Shared X axis: group labels at integer positions
     axes[-1].set_xticks(list(x_base.values()))
-    axes[-1].set_xticklabels([cat_labels[c] for c in cat_order], rotation=15)
+    axes[-1].set_xticklabels(
+        [cat_labels[c] for c in cat_order],
+        rotation=15,
+    )
     axes[-1].set_xlabel("Link orientation group")
 
-    plt.tight_layout()
-    out_png = os.path.join(out_dir, "02_shifts_all.png")
-    plt.savefig(out_png, dpi=200)
+    fig.tight_layout()
+    fig.savefig(shifts_all_png, dpi=200)
     plt.close(fig)
 
-    # Optional console stats
-    print("ShiftX min/max:", float(sx.min()))
-    print("ShiftY min/max:", float(sy.min()))
-    print("ShiftZ min/max:", float(sz.min()))
+    # -------- Shifts kept only, one chart per orientation category --------
+    if dropped_flags is not None and dropped_flags.any():
+        kept_flags = ~dropped_flags
+        shifts_kept_png = None
 
-def make_bad_links_grid_plot(
-    rows,
-    setup_to_grid,
-    bad_corr_thresh: float,
-    out_dir: str,
-    dropped_pairs: Optional[Set[Tuple[int, int]]] = None,
-):
-    """
-    Draw ONE stretched grid map of all pairwise links.
+        if kept_flags.any():
+            for cat in cat_order:
+                kept_cat_idxs = [
+                    i
+                    for i in range(len(aligns))
+                    if kept_flags[i] and aligns[i] == cat
+                ]
 
-    - Each tile is drawn as a square marker
-    - All pairwise links are drawn on one grid
-    - Link color is based on correlation band
-    - For skinny layouts like 2 cols x many rows, X is stretched for display
-    - Legend/title layout is tightened so there is less empty space above the grid
-    """
-    if not setup_to_grid:
-        return
+                if not kept_cat_idxs:
+                    print(f"No kept pairs for {cat_labels[cat]}")
+                    continue
 
-    all_gx = [g[0] for g in setup_to_grid.values()]
-    all_gy = [g[1] for g in setup_to_grid.values()]
+                kept_cat_idxs = np.array(kept_cat_idxs, dtype=int)
 
-    min_gx = min(all_gx)
-    max_gx = max(all_gx)
-    min_gy = min(all_gy)
-    max_gy = max(all_gy)
+                kept_cat_png = os.path.join(out_dir, f"shifts_kept_{cat}.png")
 
-    grid_w = max_gx - min_gx + 1
-    grid_h = max_gy - min_gy + 1
+                fig, axes = plt.subplots(3, 1, figsize=(8, 10), sharex=True)
 
-    print("[grid-debug] x index min/max:", min_gx, max_gx, "unique:", sorted(set(all_gx)))
-    print("[grid-debug] y index min/max:", min_gy, max_gy, "unique:", sorted(set(all_gy)))
-    print("[grid-debug] grid_w/grid_h:", grid_w, grid_h)
+                for ax, shifts, axis_label in zip(axes, shift_arrays, axis_labels):
+                    y_vals = shifts[kept_cat_idxs]
 
-    # Display-only X stretch for skinny maps.
-    # Reduced from the earlier wider stretch so tiles look less wide / more square.
-    if grid_w <= 3 and grid_h >= 8:
-        x_stretch = 2.75
-    elif grid_w <= 5 and grid_h >= 12:
-        x_stretch = 2.0
+                    n_cat = len(kept_cat_idxs)
+                    if n_cat == 1:
+                        x_vals = np.array([0.0])
+                    else:
+                        x_vals = np.linspace(-0.4, 0.4, n_cat)
+
+                    ax.scatter(
+                        x_vals,
+                        y_vals,
+                        s=10,
+                        color=cat_colors[cat],
+                        label=cat_labels[cat],
+                    )
+
+                    ymin, ymax = axis_min_max(y_vals)
+                    ax.set_ylim(ymin, ymax)
+                    ax.set_ylabel(f"Shift{axis_label} (pixels)")
+                    ax.set_title(f"Shift{axis_label} for {cat_labels[cat]} kept only")
+                    ax.grid(True, alpha=0.25)
+
+                axes[-1].set_xticks([0.0])
+                axes[-1].set_xticklabels([cat_labels[cat]], rotation=15)
+                axes[-1].set_xlabel("Link orientation group")
+
+                fig.suptitle(
+                    f"Pairwise shifts for {cat_labels[cat]} kept only",
+                    y=1.02,
+                )
+
+                fig.tight_layout()
+                fig.savefig(kept_cat_png, dpi=200)
+                plt.close(fig)
+
+                print(f"Kept shift plot for {cat_labels[cat]}:", kept_cat_png)
+
+                if shifts_kept_png is None:
+                    shifts_kept_png = kept_cat_png
+
+            if shifts_kept_png is None:
+                shifts_kept_png = shifts_all_png
+        else:
+            shifts_kept_png = shifts_all_png
     else:
-        x_stretch = 1.0
+        shifts_kept_png = shifts_all_png
 
-    print("[grid-debug] display x_stretch:", x_stretch)
+    print("Pair counts by orientation:")
+    for cat in cat_order:
+        n_cat = sum(1 for a in aligns if a == cat)
+        print(f"  {cat_labels[cat]}: {n_cat}")
 
-    def x_plot(gx: int) -> float:
-        return (gx - min_gx) * x_stretch + min_gx
+    if dropped_flags is not None:
+        print("Dropped pair count:", int(dropped_flags.sum()))
 
-    def edge_color(corr: float) -> str:
-        if corr >= 0.90:
-            return "tab:blue"
-        elif corr >= 0.80:
-            return "tab:green"
-        elif corr >= 0.70:
-            return "gold"
-        else:
-            return "red"
+    print("ShiftX min/max:", float(sx.min()), float(sx.max()))
+    print("ShiftY min/max:", float(sy.min()), float(sy.max()))
+    print("ShiftZ min/max:", float(sz.min()), float(sz.max()))
 
-    # Build pair -> best row by max corr.
-    best_row_by_pair: Dict[Tuple[int, int], list] = {}
-    for r in rows:
-        a = int(r[0])
-        b = int(r[1])
-        corr = float(r[5])
-        key = (min(a, b), max(a, b))
-
-        if key not in best_row_by_pair or corr > float(best_row_by_pair[key][5]):
-            best_row_by_pair[key] = r
-
-    dropped_rows = []
-    dropped_missing_from_xml = []
-    dropped_missing_from_grid = []
-
-    if dropped_pairs:
-        for key in sorted(dropped_pairs):
-            r = best_row_by_pair.get(key)
-            if r is None:
-                dropped_missing_from_xml.append(key)
-                continue
-
-            a = int(r[0])
-            b = int(r[1])
-
-            if a not in setup_to_grid or b not in setup_to_grid:
-                dropped_missing_from_grid.append(key)
-                continue
-
-            dropped_rows.append(r)
-
-    # Figure sizing.
-    # Slightly narrower and a bit taller so the map feels more square overall.
-    display_w = (grid_w - 1) * x_stretch + 1
-    fig_w = max(7.0, min(14.0, display_w * 1.6))
-    fig_h = max(14.0, min(38.0, grid_h * 0.50))
-
-    fig, ax = plt.subplots(figsize=(fig_w, fig_h))
-
-    tile_fontsize = 8 if grid_h <= 30 else 6 if grid_h <= 60 else 5
-    tile_marker_size = 180 if grid_h <= 30 else 120 if grid_h <= 60 else 80
-
-    def draw_nodes():
-        for setup, (gx, gy, gz) in setup_to_grid.items():
-            y_plot = max_gy - gy
-            px = x_plot(gx)
-
-            ax.scatter(
-                px,
-                y_plot,
-                s=tile_marker_size,
-                color="white",
-                edgecolors="black",
-                marker="s",
-                linewidths=1.0,
-                zorder=5,
-            )
-
-            ax.text(
-                px,
-                y_plot,
-                str(setup),
-                fontsize=tile_fontsize,
-                color="black",
-                ha="center",
-                va="center",
-                zorder=6,
-            )
-
-    def draw_edge(
-        a: int,
-        b: int,
-        corr: float,
-        *,
-        linestyle: str,
-        linewidth: float,
-        zorder: int,
-        color_override=None,
-        alpha: float = 0.9,
-    ):
-        if a not in setup_to_grid or b not in setup_to_grid:
-            return False
-
-        gx_a, gy_a, _ = setup_to_grid[a]
-        gx_b, gy_b, _ = setup_to_grid[b]
-
-        ay = max_gy - gy_a
-        by = max_gy - gy_b
-
-        ax.plot(
-            [x_plot(gx_a), x_plot(gx_b)],
-            [ay, by],
-            linewidth=linewidth,
-            linestyle=linestyle,
-            color=edge_color(corr) if color_override is None else color_override,
-            alpha=alpha,
-            zorder=zorder,
-        )
-        return True
-
-    drawn_all = 0
-    skipped_all = 0
-
-    for r in rows:
-        a = int(r[0])
-        b = int(r[1])
-        corr = float(r[5])
-
-        ok = draw_edge(
-            a,
-            b,
-            corr,
-            linestyle="-",
-            linewidth=1.2,
-            zorder=2,
-        )
-
-        if ok:
-            drawn_all += 1
-        else:
-            skipped_all += 1
-
-    drawn_dropped = 0
-
-    if dropped_rows:
-        for r in dropped_rows:
-            a = int(r[0])
-            b = int(r[1])
-            corr = float(r[5])
-
-            ok = draw_edge(
-                a,
-                b,
-                corr,
-                linestyle=":",
-                linewidth=2.5,
-                zorder=4,
-                color_override="black",
-                alpha=1.0,
-            )
-
-            if ok:
-                drawn_dropped += 1
-
-    # Draw tiles last so squares/labels stay above links.
-    draw_nodes()
-
-    legend_handles = [
-        Line2D([0], [0], color="tab:blue", lw=2, label="corr ≥ 0.90"),
-        Line2D([0], [0], color="tab:green", lw=2, label="0.80 ≤ corr < 0.90"),
-        Line2D([0], [0], color="gold", lw=2, label="0.70 ≤ corr < 0.80"),
-        Line2D([0], [0], color="red", lw=2, label="corr < 0.70"),
-    ]
-
-    if dropped_pairs:
-        legend_handles.append(
-            Line2D(
-                [0],
-                [0],
-                color="black",
-                lw=2,
-                linestyle=":",
-                label="Dropped by solver",
-            )
-        )
-
-    # Pull legend closer to the title/grid.
-    fig.legend(
-        handles=legend_handles,
-        title="Link bands",
-        loc="upper center",
-        ncol=1,
-        bbox_to_anchor=(0.5, 0.945),
-        borderaxespad=0.1,
-        frameon=True,
-    )
-
-    ax.set_title(
-        "All pairwise links on grid (colored by corr band)",
-        fontsize=12,
-        pad=4,
-    )
-    ax.set_xlabel("Grid X index")
-    ax.set_ylabel("Grid Y index")
-    ax.set_aspect("equal", adjustable="box")
-
-    pad = 0.75
-    ax.set_xlim(x_plot(min_gx) - pad, x_plot(max_gx) + pad)
-    ax.set_ylim(-pad, max_gy + pad)
-
-    x_ticks = [x_plot(gx) for gx in range(min_gx, max_gx + 1)]
-    x_labels = [str(gx) for gx in range(min_gx, max_gx + 1)]
-
-    ax.set_xticks(x_ticks)
-    ax.set_xticklabels(x_labels)
-    ax.set_yticks(range(0, max_gy + 1))
-
-    ax.tick_params(axis="x", labelsize=9, rotation=0)
-    ax.tick_params(axis="y", labelsize=8)
-
-    ax.grid(True, alpha=0.25)
-
-    # Reserve less top space so the gap is much smaller.
-    fig.tight_layout(rect=[0.0, 0.0, 1.0, 0.905])
-
-    out_png = os.path.join(out_dir, "05_all_pairwise_links_on_grid.png")
-    fig.savefig(out_png, dpi=250, bbox_inches="tight", pad_inches=0.20)
-    plt.close(fig)
-
-    print("[grid-debug] total pairwise rows:", len(rows))
-    print("[grid-debug] drawn all links:", drawn_all)
-    print("[grid-debug] skipped all links:", skipped_all)
-
-    if dropped_pairs:
-        print("[grid-debug] dropped pairs from CSV:", len(dropped_pairs))
-        print("[grid-debug] drawn dropped links:", drawn_dropped)
-        print("[grid-debug] dropped missing from XML pairwise rows:", len(dropped_missing_from_xml))
-        print("[grid-debug] dropped missing grid coords:", len(dropped_missing_from_grid))
-
-        if dropped_missing_from_xml:
-            print("[grid-debug] first dropped missing from XML:", dropped_missing_from_xml[:25])
-        if dropped_missing_from_grid:
-            print("[grid-debug] first dropped missing grid coords:", dropped_missing_from_grid[:25])
-
-    print("[grid-debug] wrote grid map:", out_png)
-
-# def make_bad_links_grid_plot(
-#     rows,
-#     setup_to_grid,
-#     bad_corr_thresh: float,
-#     out_dir: str,
-#     dropped_pairs: Optional[Set[Tuple[int, int]]] = None,
-# ):
-#     """
-#     Draw tiles at their nominal grid indices.
-
-#     Solid lines:
-#       - pairwise links with corr < bad_corr_thresh
-
-#     Dotted lines:
-#       - all solver-dropped links found in XML pairwise rows,
-#         even if corr >= bad_corr_thresh
-
-#     Notes:
-#       - Explicit axis limits/ticks prevent edge rows/columns from getting clipped.
-#       - Figure size only changes rendering size; x/y limits determine visible grid range.
-#     """
-#     if not setup_to_grid:
-#         return
-
-#     all_gx = [g[0] for g in setup_to_grid.values()]
-#     all_gy = [g[1] for g in setup_to_grid.values()]
-
-#     min_gx = min(all_gx)
-#     max_gx = max(all_gx)
-#     min_gy = min(all_gy)
-#     max_gy = max(all_gy)
-
-#     print("[grid-debug] x index min/max:", min_gx, max_gx, "unique:", sorted(set(all_gx)))
-#     print("[grid-debug] y index min/max:", min_gy, max_gy, "unique:", sorted(set(all_gy)))
-
-#     fig, ax = plt.subplots(figsize=(20, 20))
-
-#     # Draw tile nodes
-#     for setup, (gx, gy, gz) in setup_to_grid.items():
-#         y_plot = max_gy - gy
-#         ax.scatter(gx, y_plot, s=70, color="black", zorder=5)
-#         ax.text(
-#             gx + 0.05,
-#             y_plot + 0.05,
-#             str(setup),
-#             fontsize=7,
-#             color="black",
-#             zorder=6,
-#         )
-
-#     def edge_color(corr: float) -> str:
-#         if corr >= 0.90:
-#             return "tab:blue"
-#         elif corr >= 0.80:
-#             return "tab:green"
-#         elif corr >= 0.70:
-#             return "gold"
-#         else:
-#             return "red"
-
-#     def draw_edge(a: int, b: int, corr: float, *, linestyle: str, linewidth: float, zorder: int):
-#         if a not in setup_to_grid or b not in setup_to_grid:
-#             return False
-
-#         gx_a, gy_a, _ = setup_to_grid[a]
-#         gx_b, gy_b, _ = setup_to_grid[b]
-
-#         ay = max_gy - gy_a
-#         by = max_gy - gy_b
-
-#         ax.plot(
-#             [gx_a, gx_b],
-#             [ay, by],
-#             linewidth=linewidth,
-#             linestyle=linestyle,
-#             color=edge_color(corr),
-#             alpha=0.9,
-#             zorder=zorder,
-#         )
-#         return True
-
-#     # Build pair -> best row by max corr.
-#     # Used so dropped links can be drawn even if corr >= bad_corr_thresh.
-#     best_row_by_pair: Dict[Tuple[int, int], list] = {}
-#     for r in rows:
-#         a = int(r[0])
-#         b = int(r[1])
-#         corr = float(r[5])
-#         key = (min(a, b), max(a, b))
-
-#         if key not in best_row_by_pair or corr > float(best_row_by_pair[key][5]):
-#             best_row_by_pair[key] = r
-
-#     # Draw solid bad-correlation links
-#     bad_rows = [r for r in rows if float(r[5]) < bad_corr_thresh]
-
-#     drawn_bad = 0
-#     skipped_bad = 0
-
-#     for r in bad_rows:
-#         a = int(r[0])
-#         b = int(r[1])
-#         corr = float(r[5])
-
-#         if draw_edge(a, b, corr, linestyle="-", linewidth=1.0, zorder=2):
-#             drawn_bad += 1
-#         else:
-#             skipped_bad += 1
-
-#     # Draw all dropped links as dotted, not only bad_rows
-#     drawn_dropped = 0
-#     dropped_missing_from_xml = []
-#     dropped_missing_from_grid = []
-
-#     if dropped_pairs:
-#         for key in sorted(dropped_pairs):
-#             r = best_row_by_pair.get(key)
-#             if r is None:
-#                 dropped_missing_from_xml.append(key)
-#                 continue
-
-#             a = int(r[0])
-#             b = int(r[1])
-#             corr = float(r[5])
-
-#             if draw_edge(a, b, corr, linestyle=":", linewidth=2.5, zorder=4):
-#                 drawn_dropped += 1
-#             else:
-#                 dropped_missing_from_grid.append(key)
-
-#     print("[grid-debug] total pairwise rows:", len(rows))
-#     print("[grid-debug] bad rows corr<thresh:", len(bad_rows))
-#     print("[grid-debug] drawn bad links:", drawn_bad)
-#     print("[grid-debug] skipped bad links missing grid coords:", skipped_bad)
-
-#     if dropped_pairs:
-#         print("[grid-debug] dropped pairs from CSV:", len(dropped_pairs))
-#         print("[grid-debug] drawn dropped links:", drawn_dropped)
-#         print("[grid-debug] dropped missing from XML pairwise rows:", len(dropped_missing_from_xml))
-#         print("[grid-debug] dropped missing grid coords:", len(dropped_missing_from_grid))
-
-#         if dropped_missing_from_xml:
-#             print("[grid-debug] first dropped missing from XML:", dropped_missing_from_xml[:25])
-#         if dropped_missing_from_grid:
-#             print("[grid-debug] first dropped missing grid coords:", dropped_missing_from_grid[:25])
-
-#     legend_handles = [
-#         Line2D([0], [0], color="tab:blue", lw=2, label="corr ≥ 0.90"),
-#         Line2D([0], [0], color="tab:green", lw=2, label="0.80 ≤ corr < 0.90"),
-#         Line2D([0], [0], color="gold", lw=2, label="0.70 ≤ corr < 0.80"),
-#         Line2D([0], [0], color="red", lw=2, label="corr < 0.70"),
-#     ]
-
-#     if dropped_pairs:
-#         legend_handles.append(
-#             Line2D(
-#                 [0],
-#                 [0],
-#                 color="black",
-#                 lw=2,
-#                 linestyle=":",
-#                 label="Dropped by solver",
-#             )
-#         )
-
-#     fig.legend(
-#         handles=legend_handles,
-#         title="Link bands",
-#         loc="upper center",
-#         ncol=1,
-#         bbox_to_anchor=(0.5, 0.97),
-#         borderaxespad=0.2,
-#     )
-
-#     ax.set_title(
-#         f"Low-corr links + solver-dropped links "
-#         f"(solid corr < {bad_corr_thresh}, dotted dropped)"
-#     )
-#     ax.set_xlabel("Grid X index")
-#     ax.set_ylabel("Grid Y index")
-#     ax.set_aspect("equal", adjustable="box")
-
-#     # Critical: explicitly show every grid index, including 11+
-#     pad = 0.75
-#     ax.set_xlim(min_gx - pad, max_gx + pad)
-#     ax.set_ylim(-pad, max_gy + pad)
-
-#     ax.set_xticks(range(min_gx, max_gx + 1))
-#     ax.set_yticks(range(0, max_gy + 1))
-
-#     ax.grid(True, alpha=0.25)
-
-#     fig.tight_layout(rect=[0.0, 0.0, 1.0, 0.84])
-
-#     out_png = os.path.join(out_dir, "05_bad_links_grid.png")
-#     fig.savefig(out_png, dpi=200, bbox_inches="tight", pad_inches=0.25)
-#     plt.close(fig)
-
+    return corr_png, shifts_all_png, shifts_kept_png
 
 def write_dropped_links_report(
     rows_sorted,
@@ -1063,23 +768,12 @@ def run_qc(
 
     # plots
     make_corr_and_shift_plots(rows_sorted, out_dir, dropped_pairs)
-    make_bad_links_grid_plot(rows, setup_to_grid, bad_corr_thresh, out_dir, dropped_pairs)
 
     print("QC done.")
     print("  CSV :", csv_path)
     print("  PNGs:", out_dir)
 
-
-# ----------------------------
-# Tiny main: just hard-coded params
-# ----------------------------
-
 if __name__ == "__main__":
-    # 🔒 Edit these and run the script
-    # XML_PATH = "/Users/sean.fite/Desktop/bigstitcher.xml"
-    # DROPPED_CSV_PATH = "/Users/sean.fite/Desktop/solver_removed_links.csv"
-    # OUT_DIR  = "/Users/sean.fite/Desktop/pairwise_qc_out"
-
     XML_PATH = "s3://aind-open-data/HCR_831988-s1-ls2_2026-05-27_00-00-00_processed_2026-05-28_01-30-18/image_tile_alignment/bigstitcher.xml"
     DROPPED_CSV_PATH = "s3://aind-open-data/HCR_831988-s1-ls2_2026-05-27_00-00-00_processed_2026-05-28_01-30-18/image_tile_alignment/solver_removed_links.csv"
     OUT_DIR  = "/Users/sean.fite/Desktop/pairwise_qc_out"

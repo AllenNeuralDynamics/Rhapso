@@ -74,15 +74,15 @@ def filter_spimdata_xml(input_path: str, output_path: str) -> None:
 if __name__ == "__main__":
     # Hard-coded ranges (inclusive)
     KEEP_RANGES = [
-        (6,6),
-        (10,10),
-        (14,14),
-        (18,18),
+        (5,5),
+        (9,9),
+        # (14,14),
+        # (18,18),
         # (12,13)
     ]
 
-    INPUT_XML = "/Users/sean.fite/Desktop/bigstitcher_affine.xml"
-    OUTPUT_XML = "/Users/sean.fite/Desktop/bigstitcher_kept_4tile_row.xml"
+    INPUT_XML = "/Users/sean.fite/Desktop/dataset.xml"
+    OUTPUT_XML = "/Users/sean.fite/Desktop/dataset-kept-2-tiles.xml"
 
     filter_spimdata_xml(INPUT_XML, OUTPUT_XML)
 
