@@ -5,7 +5,7 @@ import json
 import base64, json
 from pathlib import Path
 
-with open("Rhapso/pipelines/ray/param/alignment/exaSPIM_822174.yml", "r") as file:
+with open("Rhapso/pipelines/ray/param/alignment/exaSPIM_730904.yml", "r") as file:
     config = yaml.safe_load(file)
 
 serialized_config = base64.b64encode(json.dumps(config).encode()).decode()
@@ -50,7 +50,8 @@ matching_cmd_rigid = (
     "    significance=cfg[\\\"significance_rigid\\\"],\n"
     "    search_radius=cfg[\\\"search_radius_rigid\\\"],\n"
     "    num_required_neighbors=cfg[\\\"num_required_neighbors_rigid\\\"],\n"
-    "    model_min_matches=cfg[\\\"model_min_matches_rigid\\\"],\n"
+    "    model_min_inliers=cfg[\\\"model_min_inliers_rigid\\\"],\n"
+    "    ransac_sample_size=cfg[\\\"ransac_sample_size_rigid\\\"],\n"
     "    inlier_threshold=cfg[\\\"inlier_threshold_rigid\\\"],\n"
     "    min_inlier_ratio=cfg[\\\"min_inlier_ratio_rigid\\\"],\n"
     "    num_iterations=cfg[\\\"num_iterations_rigid\\\"],\n"
@@ -79,7 +80,8 @@ matching_cmd_affine = (
     "    significance=cfg[\\\"significance_affine\\\"],\n"
     "    search_radius=cfg[\\\"search_radius_affine\\\"],\n"
     "    num_required_neighbors=cfg[\\\"num_required_neighbors_affine\\\"],\n"
-    "    model_min_matches=cfg[\\\"model_min_matches_affine\\\"],\n"
+    "    model_min_inliers=cfg[\\\"model_min_inliers_affine\\\"],\n"
+    "    ransac_sample_size=cfg[\\\"ransac_sample_size_affine\\\"],\n"
     "    inlier_threshold=cfg[\\\"inlier_threshold_affine\\\"],\n"
     "    min_inlier_ratio=cfg[\\\"min_inlier_ratio_affine\\\"],\n"
     "    num_iterations=cfg[\\\"num_iterations_affine\\\"],\n"
@@ -108,7 +110,8 @@ matching_cmd_split_affine = (
     "    significance=cfg[\\\"significance_split_affine\\\"],\n"
     "    search_radius=cfg[\\\"search_radius_split_affine\\\"],\n"
     "    num_required_neighbors=cfg[\\\"num_required_neighbors_split_affine\\\"],\n"
-    "    model_min_matches=cfg[\\\"model_min_matches_split_affine\\\"],\n"
+    "    model_min_inliers=cfg[\\\"model_min_inliers_split_affine\\\"],\n"
+    "    ransac_sample_size=cfg[\\\"ransac_sample_size_split_affine\\\"],\n"
     "    inlier_threshold=cfg[\\\"inlier_threshold_split_affine\\\"],\n"
     "    min_inlier_ratio=cfg[\\\"min_inlier_ratio_split_affine\\\"],\n"
     "    num_iterations=cfg[\\\"num_iterations_split_affine\\\"],\n"

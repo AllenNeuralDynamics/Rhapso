@@ -27,8 +27,8 @@ class CustomBioImage(BioImage):
 
 class RansacMatching:
     def __init__(self, data_global, num_neighbors, redundancy, significance, num_required_neighbors, match_type, 
-                 inlier_threshold, min_inlier_ratio, num_iterations, model_min_matches, regularization_weight, 
-                 search_radius, view_registrations, input_type, image_file_prefix):
+                 inlier_threshold, min_inlier_ratio, num_iterations, model_min_inliers, regularization_weight, 
+                 search_radius, view_registrations, input_type, image_file_prefix, ransac_sample_size):
         self.data_global = data_global
         self.num_neighbors = num_neighbors
         self.redundancy = redundancy
@@ -38,17 +38,18 @@ class RansacMatching:
         self.inlier_threshold = inlier_threshold
         self.min_inlier_ratio = min_inlier_ratio
         self.num_iterations = num_iterations
-        self.model_min_matches = model_min_matches
+        self.model_min_inliers = model_min_inliers
         self.regularization_weight = regularization_weight
         self.search_radius = search_radius
         self.view_registrations = view_registrations
         self.input_type = input_type
         self.image_file_prefix = image_file_prefix
+        self.ransac_sample_size = ransac_sample_size
     
     def filter_inliers(self, candidates, initial_model):
         max_trust = 4.0
             
-        if len(candidates) < self.model_min_matches:
+        if len(candidates) < self.model_min_inliers:
             return []
         
         model_copy = copy.deepcopy(initial_model)
@@ -81,7 +82,7 @@ class RansacMatching:
             if num_inliers <= len(inliers):
                 break
         
-        if num_inliers < self.model_min_matches:
+        if num_inliers < self.model_min_inliers:
             return []
 
         return inliers 
@@ -234,11 +235,12 @@ class RansacMatching:
         max_inliers = 0
         best_model = None
 
-        if len(candidates) < self.model_min_matches:
+        if len(candidates) < self.model_min_inliers:
             return [], None
         
         for _ in range(self.num_iterations):
-            indices = random.sample(range(len(candidates)), self.model_min_matches)
+            # indices = random.sample(range(len(candidates)), self.model_min_matches)
+            indices = random.sample(range(len(candidates)), self.ransac_sample_size)
             min_matches = [candidates[i] for i in indices]
 
             try:
@@ -249,13 +251,13 @@ class RansacMatching:
                 continue
 
             num_inliers = 0
-            is_good, tmp_inliers = self.test(candidates, regularized_model, self.inlier_threshold, self.min_inlier_ratio, self.model_min_matches)
+            is_good, tmp_inliers = self.test(candidates, regularized_model, self.inlier_threshold, self.min_inlier_ratio, self.model_min_inliers)
 
             while is_good and num_inliers < len(tmp_inliers):
                 num_inliers = len(tmp_inliers)
                 point_pairs = [(i[1], i[5]) for i in tmp_inliers]
                 regularized_model = self.model_regularization(point_pairs)
-                is_good, tmp_inliers = self.test(candidates, regularized_model, self.inlier_threshold, self.min_inlier_ratio, self.model_min_matches)
+                is_good, tmp_inliers = self.test(candidates, regularized_model, self.inlier_threshold, self.min_inlier_ratio, self.model_min_inliers)
 
             if len(tmp_inliers) > max_inliers:
                 best_inliers = tmp_inliers

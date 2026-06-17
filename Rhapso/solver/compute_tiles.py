@@ -553,10 +553,18 @@ class ComputeTiles:
             return None
         else:
             return tc, view_map
-
+        
     def run(self):
         """
         Executes the entry point of the script.
         """
-        tc, view_map = self.compute_tiles()
+        result = self.compute_tiles()
+
+        if result is None:
+            raise RuntimeError(
+                "Global optimization could not start because no connected tile graph was created; "
+                "re-run detection/matching with more or better interest points so enough valid inlier matches are produced."
+            )
+
+        tc, view_map = result
         return tc, view_map

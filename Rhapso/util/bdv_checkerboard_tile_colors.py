@@ -180,7 +180,7 @@ if __name__ == "__main__":
 
     vis_grid = True
     input_xml = "/Users/sean.fite/Desktop/bigstitcher.xml"
-    output_xml = "/Users/sean.fite/Desktop/round1-settings.xml"
+    output_xml = "/Users/sean.fite/Desktop/s6_ls2-settings.xml"
     
     generate_settings_file(input_xml, output_xml)
 

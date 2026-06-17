@@ -9,7 +9,7 @@ import ray
 ray.init()
 
 # Point to param file
-with open("Rhapso/pipelines/ray/param/alignment/exaSPIM_720164.yml", "r") as file:
+with open("Rhapso/pipelines/ray/param/alignment/exaSPIM_730904.yml", "r") as file:
     config = yaml.safe_load(file)
 
 # -- INITIALIZE EACH COMPONENT --
@@ -32,7 +32,7 @@ interest_point_detection = InterestPointDetection(
     run_type=config['detection_run_type'],
     max_spots=config['max_spots'],
     median_filter=config['median_filter'],
-)
+) 
 
 # INTEREST POINT MATCHING RIGID
 interest_point_matching_rigid = InterestPointMatching(
@@ -45,7 +45,8 @@ interest_point_matching_rigid = InterestPointMatching(
     significance=config['significance_rigid'],
     search_radius=config['search_radius_rigid'],
     num_required_neighbors=config['num_required_neighbors_rigid'],
-    model_min_matches=config['model_min_matches_rigid'],
+    ransac_sample_size=config['ransac_sample_size_rigid'],
+    model_min_inliers=config['model_min_inliers_rigid'],
     inlier_threshold=config['inlier_threshold_rigid'],
     min_inlier_ratio=config['min_inlier_ratio_rigid'],
     num_iterations=config['num_iterations_rigid'],
@@ -64,7 +65,8 @@ interest_point_matching_affine = InterestPointMatching(
     significance=config['significance_affine'],
     search_radius=config['search_radius_affine'],
     num_required_neighbors=config['num_required_neighbors_affine'],
-    model_min_matches=config['model_min_matches_affine'],
+    ransac_sample_size=config['ransac_sample_size_affine'],
+    model_min_inliers=config['model_min_inliers_affine'],
     inlier_threshold=config['inlier_threshold_affine'],
     min_inlier_ratio=config['min_inlier_ratio_affine'],
     num_iterations=config['num_iterations_affine'],
@@ -83,7 +85,8 @@ interest_point_matching_split_affine = InterestPointMatching(
     significance=config['significance_split_affine'],
     search_radius=config['search_radius_split_affine'],
     num_required_neighbors=config['num_required_neighbors_split_affine'],
-    model_min_matches=config['model_min_matches_split_affine'],
+    ransac_sample_size=config['ransac_sample_size_split_affine'],
+    model_min_inliers=config['model_min_inliers_split_affine'],
     inlier_threshold=config['inlier_threshold_split_affine'],
     min_inlier_ratio=config['min_inlier_ratio_split_affine'],
     num_iterations=config['num_iterations_split_affine'],
@@ -160,11 +163,11 @@ split_dataset = SplitDataset(
 )
 
 # -- ALIGNMENT PIPELINE --
-# interest_point_detection.run()
-# interest_point_matching_rigid.run()
-# solver_rigid.run()
-# interest_point_matching_affine.run()
-# solver_affine.run()
-# split_dataset.run()
-# interest_point_matching_split_affine.run()
+interest_point_detection.run()
+interest_point_matching_rigid.run()
+solver_rigid.run()
+interest_point_matching_affine.run()
+solver_affine.run()
+split_dataset.run()
+interest_point_matching_split_affine.run()
 solver_split_affine.run()
