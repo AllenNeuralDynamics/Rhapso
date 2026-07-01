@@ -342,7 +342,8 @@ python Rhapso/pipelines/ray/aws/alignment_pipeline.py
 | `significance`            | Ratio test          | Strictness of descriptor ratio test; larger = stricter acceptance | 3              |
 | `search_radius`           | Spatial gating      | Max spatial distance for candidate matches (in downsampled units) | 100 - 300      |
 | `num_required_neighbors`  | Candidate filtering | Minimum neighbors required to keep a candidate point              | 3              |
-| `model_min_matches`       | RANSAC              | Minimum correspondences to estimate a rigid transform             | 18 – 32        |
+| `ransac_sample_size`      | RANSAC              | Minimum sample size                                               | 3 - 5          |
+| `model_min_inliers`       | RANSAC              | Minimum correspondences to estimate a transform                   | 18 – 32        |
 | `inlier_factor`           | RANSAC              | Inlier tolerance scaling; larger = looser inlier threshold        | 30 – 100       |
 | `lambda_value`            | RANSAC              | Regularization strength during model fitting                      | 0.1 – 0.05     |
 | `num_iterations`          | RANSAC              | Number of RANSAC trials; higher = more robust, slower             | 10,0000        |
@@ -383,12 +384,13 @@ python Rhapso/pipelines/ray/aws/alignment_pipeline.py
 
 ### Fusion
 ```
-| Parameter            | Feature / step | What it does                                                       | Typical range       |
-| :------------------- | :------------- | :----------------------------------------------------------------- | :------------------ |
-| `block_size`         | Fusion opt     | Cell size per task xyz                                             | 256, 256, 256       |
-| `intensity_range`    | Fusion config  | Range of intensity values                                          | 0, 65535            |
-| `block_scale`        | Fusion opt     | Scaling of cell size                                               | 2, 2, 1             |
-| `overlap_strategy`   | Edge handling  | Strategy when more than 1 view contributes also lowest_view_wins   | avg_blend           |
+| Parameter            | Feature / step | What it does                                             | Typical range                 |
+| :------------------- | :------------- | :--------------------------------------------------------| :---------------------------- |
+| `block_size`         | Fusion opt     | Cell size per task xyz                                   | 256, 256, 256                 |
+| `intensity_range`    | Fusion config  | Range of intensity values                                | 0, 65535                      |
+| `block_scale`        | Fusion opt     | Scaling of cell size                                     | 2, 2, 1                       |
+| `overlap_strategy`   | Edge handling  | Strategy for competing pixels                            | avg_blend or lowest_view_wins |
+| `output_zarr_version`| Zarr version   | Set which zarr version you want for output               | 2 or 3                        |
 
 ```
 <br>
