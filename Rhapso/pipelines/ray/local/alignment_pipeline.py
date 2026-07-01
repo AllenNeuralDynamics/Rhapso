@@ -75,24 +75,24 @@ interest_point_matching_affine = InterestPointMatching(
 )
 
 # INTEREST POINT MATCHING SPLIT AFFINE
-# interest_point_matching_split_affine = InterestPointMatching(
-#     xml_input_path=config['xml_file_path_matching_split_affine'],
-#     n5_output_path=config['n5_matching_output_path'],
-#     input_type = config['input_type'],
-#     match_type=config['match_type_split_affine'],
-#     num_neighbors=config['num_neighbors_split_affine'],
-#     redundancy=config['redundancy_split_affine'],
-#     significance=config['significance_split_affine'],
-#     search_radius=config['search_radius_split_affine'],
-#     num_required_neighbors=config['num_required_neighbors_split_affine'],
-#     ransac_sample_size=config['ransac_sample_size_split_affine'],
-#     model_min_inliers=config['model_min_inliers_split_affine'],
-#     inlier_threshold=config['inlier_threshold_split_affine'],
-#     min_inlier_ratio=config['min_inlier_ratio_split_affine'],
-#     num_iterations=config['num_iterations_split_affine'],
-#     regularization_weight=config['regularization_weight_matching_split_affine'],
-#     image_file_prefix=config['image_file_prefix'],
-# )
+interest_point_matching_split_affine = InterestPointMatching(
+    xml_input_path=config['xml_file_path_matching_split_affine'],
+    n5_output_path=config['n5_matching_output_path'],
+    input_type = config['input_type'],
+    match_type=config['match_type_split_affine'],
+    num_neighbors=config['num_neighbors_split_affine'],
+    redundancy=config['redundancy_split_affine'],
+    significance=config['significance_split_affine'],
+    search_radius=config['search_radius_split_affine'],
+    num_required_neighbors=config['num_required_neighbors_split_affine'],
+    ransac_sample_size=config['ransac_sample_size_split_affine'],
+    model_min_inliers=config['model_min_inliers_split_affine'],
+    inlier_threshold=config['inlier_threshold_split_affine'],
+    min_inlier_ratio=config['min_inlier_ratio_split_affine'],
+    num_iterations=config['num_iterations_split_affine'],
+    regularization_weight=config['regularization_weight_matching_split_affine'],
+    image_file_prefix=config['image_file_prefix'],
+)
 
 # SOLVER RIGID
 solver_rigid = Solver(
@@ -131,36 +131,36 @@ solver_affine = Solver(
 )
 
 # SOLVER SPLIT AFFINE
-# solver_split_affine = Solver(
-#     xml_file_path_output=config['xml_file_path_output_split_affine'],
-#     n5_input_path=config['n5_input_path'],
-#     xml_file_path=config['xml_file_path_solver_split_affine'],
-#     run_type=config['run_type_solver_split_affine'],  
-#     relative_threshold=config['relative_threshold'],
-#     absolute_threshold=config['absolute_threshold'],
-#     min_matches=config['min_matches'],
-#     damp=config['damp'],
-#     regularization_weight=config['regularization_weight_solver_split_affine'],
-#     max_iterations=config['max_iterations'],
-#     max_allowed_error=config['max_allowed_error'],
-#     max_plateauwidth=config['max_plateauwidth'],
-#     metrics_output_path=config['metrics_output_path'],
-#     fixed_tile=config['fixed_tile']
-# )
+solver_split_affine = Solver(
+    xml_file_path_output=config['xml_file_path_output_split_affine'],
+    n5_input_path=config['n5_input_path'],
+    xml_file_path=config['xml_file_path_solver_split_affine'],
+    run_type=config['run_type_solver_split_affine'],  
+    relative_threshold=config['relative_threshold'],
+    absolute_threshold=config['absolute_threshold'],
+    min_matches=config['min_matches'],
+    damp=config['damp'],
+    regularization_weight=config['regularization_weight_solver_split_affine'],
+    max_iterations=config['max_iterations'],
+    max_allowed_error=config['max_allowed_error'],
+    max_plateauwidth=config['max_plateauwidth'],
+    metrics_output_path=config['metrics_output_path'],
+    fixed_tile=config['fixed_tile']
+)
 
 # SPLIT DATASETS
-# split_dataset = SplitDataset(
-#     xml_file_path=config['xml_file_path_split'],
-#     xml_output_file_path=config['xml_output_file_path_split'],
-#     n5_path=config['n5_path_split'],
-#     point_density=config['point_density'],
-#     min_points=config['min_points'],
-#     max_points=config['max_points'],
-#     error=config['error'],
-#     exclude_radius=config['exclude_radius'], 
-#     target_image_size=config['target_image_size'],
-#     target_overlap=config['target_overlap'],
-# )
+split_dataset = SplitDataset(
+    xml_file_path=config['xml_file_path_split'],
+    xml_output_file_path=config['xml_output_file_path_split'],
+    n5_path=config['n5_path_split'],
+    point_density=config['point_density'],
+    min_points=config['min_points'],
+    max_points=config['max_points'],
+    error=config['error'],
+    exclude_radius=config['exclude_radius'], 
+    target_image_size=config['target_image_size'],
+    target_overlap=config['target_overlap'],
+)
 
 # Pipeline Entry
 print("-----STARTING ALIGNMENT PIPELINE------")
@@ -171,8 +171,8 @@ solver_rigid.run()
 print("-----STARTING AFFINE-----")
 interest_point_matching_affine.run()
 solver_affine.run()
-# print("-----STARTING SPLIT AFFINE-----")
-# split_dataset.run()
-# interest_point_matching_split_affine.run()
-# solver_split_affine.run()
-# print("-----ALIGNMENT PIPELINE DONE------")
+print("-----STARTING SPLIT AFFINE-----")
+split_dataset.run()
+interest_point_matching_split_affine.run()
+solver_split_affine.run()
+print("-----ALIGNMENT PIPELINE DONE------")
