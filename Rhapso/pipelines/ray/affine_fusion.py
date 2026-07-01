@@ -11,7 +11,8 @@ import ray
 # This class implements the affine fusion pipeline
 
 class AffineFusion:
-    def __init__(self, aligned_xml_path, zarr_input_prefix, output_path, block_size, intensity_range, block_scale, overlap_strategy):
+    def __init__(self, aligned_xml_path, zarr_input_prefix, output_path, block_size, intensity_range, 
+                 block_scale, overlap_strategy, output_zarr_version):
         self.aligned_xml_path = aligned_xml_path
         self.zarr_input_prefix = zarr_input_prefix
         self.output_path = output_path 
@@ -19,6 +20,7 @@ class AffineFusion:
         self.intensity_range = intensity_range
         self.block_scale = block_scale
         self.overlap_strategy = overlap_strategy
+        self.output_zarr_version = output_zarr_version
 
     def affine_fusion(self):
         ray.init()
@@ -30,7 +32,7 @@ class AffineFusion:
         print("Bbox of fused volume computed")
 
         # Initialize zarr datastore in s3 for fused output
-        initialize_output_zarr = InitializeOutputZarr(self.output_path, self.zarr_input_prefix, dims)
+        initialize_output_zarr = InitializeOutputZarr(self.output_path, self.zarr_input_prefix, dims, self.output_zarr_version)
         initialize_output_zarr.run()
         print("Zarr group/store initialized with bbox dims")
 
@@ -82,12 +84,6 @@ class AffineFusion:
 
 # ITERATIVE APPROACH
 # for grid_block in grid:        
-#     # DEBUG: run only this specific fused grid block ----
-#     # TARGET_OFFSET = (65024, 512, 0)
-
-#     # gb_off = tuple(int(x) for x in grid_block[0]) # (ox,oy,oz)
-#     # if gb_off != TARGET_OFFSET:
-#     #     continue
 
 #     # The min coordinates and size of the block this job renders
 #     super_block_offset = grid_block[0] + bb_min

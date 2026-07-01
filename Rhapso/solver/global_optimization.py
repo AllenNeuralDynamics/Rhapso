@@ -7,20 +7,8 @@ using matched point correspondences.
 """
 
 class GlobalOptimization:
-    def __init__(
-        self,
-        tiles,
-        relative_threshold,
-        absolute_threshold,
-        min_matches,
-        damp,
-        regularization_weight,
-        max_iterations,
-        max_allowed_error,
-        max_plateauwidth,
-        run_type,
-        metrics_output_path,
-    ):
+    def __init__(self, tiles, relative_threshold, absolute_threshold, min_matches, damp, regularization_weight,
+                 max_iterations, max_allowed_error, max_plateauwidth, run_type, metrics_output_path):
         self.tiles = tiles
         self.relative_threshold = relative_threshold
         self.absolute_threshold = absolute_threshold
@@ -58,17 +46,9 @@ class GlobalOptimization:
             "var_0": 0,
         }
 
-    # --------------------------------------------------
-    # Data preparation / synchronization
-    # --------------------------------------------------
-
     def prepare_tile_arrays(self):
         """
         Convert match dictionaries into NumPy arrays 
-        _p1_l is static local source points.
-        _p1_w is this tile's current optimized world source points.
-        _p2_w is only a cache and must be refreshed from live matches.
-        _weights is static match weights.
         """
         for tile in self.tiles:
             matches = tile.get("matches", [])
@@ -136,10 +116,6 @@ class GlobalOptimization:
         for tile in self.tiles:
             self.sync_tile_array_to_matches(tile)
 
-    # --------------------------------------------------
-    # Observer / convergence
-    # --------------------------------------------------
-
     def update_observer(self, new_value):
         obs = self.observer
         obs["values"].append(new_value)
@@ -196,10 +172,6 @@ class GlobalOptimization:
             }
         )
 
-    # --------------------------------------------------
-    # Model helpers
-    # --------------------------------------------------
-
     def model_to_matrix_translation(self, model):
         M = np.array(
             [
@@ -243,10 +215,6 @@ class GlobalOptimization:
             key: l1 * affine[key] + self.regularization_weight * rigid[key]
             for key in keys
         }
-
-    # --------------------------------------------------
-    # Cost / error scoring
-    # --------------------------------------------------
 
     def update_cost(self, tile):
         """
@@ -300,10 +268,6 @@ class GlobalOptimization:
             total_distance += distance
 
         return total_distance / len(self.tiles)
-
-    # --------------------------------------------------
-    # Model fitting
-    # --------------------------------------------------
 
     def rigid_fit_model(self, rigid_model, tile):
         """
@@ -433,10 +397,6 @@ class GlobalOptimization:
         tile["model"]["b"] = rigid
         tile["model"]["regularized"] = regularized
 
-    # --------------------------------------------------
-    # Application / dampening
-    # --------------------------------------------------
-
     def apply_damp(self, tile):
         """
         Damp current p1 world positions toward the tile's model-applied local points.
@@ -461,12 +421,8 @@ class GlobalOptimization:
             model = self.get_active_model(tile)
             tile["_p1_w"][:] = self.apply_model_array(tile["_p1_l"], model)
 
-            # Important: make initialized world points visible globally.
+            # make initialized world points visible globally.
             self.sync_tile_array_to_matches(tile)
-
-    # --------------------------------------------------
-    # Optimization loop
-    # --------------------------------------------------
 
     def optimize_silently(self):
         """
@@ -529,4 +485,6 @@ class GlobalOptimization:
         Executes the entry point of the solver.
         """
         self.optimize_silently()
+        print("Global Optimization Complete")
+
         return self.tiles, self.validation_stats

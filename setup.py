@@ -1,7 +1,6 @@
 from setuptools import setup, find_packages
 from pathlib import Path   
 
-# read README.md for the long project description
 this_directory = Path(__file__).parent
 long_description = (this_directory / "README.md").read_text(encoding="utf-8")
 
@@ -20,37 +19,31 @@ setup(
     packages=find_packages(),
     install_requires=[
         'pandas',
-        'dask[array]==2024.12.1',
-        'zarr==2.18.3',
+        'PyYAML==6.0.2',
+        'numcodecs>=0.14',
         'scipy==1.13.1',
         'scikit-image',
+        'matplotlib==3.10.0',
+        'memory-profiler==0.61.0',
+        'scikit-learn',
+        'click==8.2.1',
+        'dask[array]==2024.12.1',
+        'dask-image==2024.5.3',
+        'zarr[remote]>=3.0.8,<3.2',
         'bioio==1.3.0',
         'bioio-tifffile==1.0.0',
         'tifffile==2025.1.10',
-        'dask-image==2024.5.3',
-        'boto3==1.35.92',
-        'numcodecs==0.13.1',
-        'matplotlib==3.10.0',
-        'memory-profiler==0.61.0',
-        's3fs==2024.12.0',
-        'scikit-learn',
-        'click==8.2.1',
         'ome-zarr',
+        's3fs==2024.12.0',
+        'boto3==1.35.92',
+        'ray[default]==2.9.1',
     ],
-    python_requires='>=3.10',
+    python_requires='>=3.11',
     classifiers=[
         'Development Status :: 3 - Alpha',
         'Intended Audience :: Developers',
         'Natural Language :: English',
-        'Programming Language :: Python :: 3.10',
+        'Programming Language :: Python :: 3.11',
         'Operating System :: OS Independent',
     ],
 )
-
-
-
-
-
-
-
-

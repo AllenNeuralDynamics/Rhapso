@@ -95,3 +95,4 @@ class SaveResults:
         self.add_new_view_transform()
         self.save_xml()
         self.save_ransac_metrics()
+        print("Saved Solver Results")

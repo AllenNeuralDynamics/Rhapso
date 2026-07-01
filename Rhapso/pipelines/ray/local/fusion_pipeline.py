@@ -4,7 +4,7 @@ from Rhapso.util.ng_link_gen_z1 import NeuroglancerLinkGeneratorZ1
 import yaml
 
 # Point to param file
-with open("Rhapso/pipelines/ray/param/fusion/exaSPIM_720164.yml", "r") as file:
+with open("Rhapso/pipelines/ray/param/fusion/HCR_823476.yml", "r") as file:
     config = yaml.safe_load(file)
 
 # FUSION
@@ -15,7 +15,8 @@ fusion = AffineFusion(
     block_size=config["block_size"],
     intensity_range=config["intensity_range"],
     block_scale=config["block_scale"],
-    overlap_strategy=config["overlap_strategy"]
+    overlap_strategy=config["overlap_strategy"],
+    output_zarr_version=config["output_zarr_version"]
 )
 
 # MULTISCALE
@@ -38,5 +39,5 @@ ng_link_gen = NeuroglancerLinkGeneratorZ1(
 
 # Run pipeline
 fusion.run()
-multiscale.run()
-ng_link_gen.run()
+# multiscale.run()
+# ng_link_gen.run()

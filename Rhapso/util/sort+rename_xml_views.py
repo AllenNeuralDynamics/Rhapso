@@ -1,30 +1,5 @@
 """
 Renumber BigStitcher/SpimData XML setup IDs to be contiguous 0..N-1,
-and reorder the major per-setup blocks accordingly, while keeping all
-associated metadata (zgroups, ViewSetups, Tile attributes, ViewRegistrations,
-StitchingResults PairwiseResult refs, etc.) consistent.
-
-Default behavior:
-- Collect all setup IDs from <ViewSetups>/<ViewSetup>/<id>.
-- Build mapping by sorting old IDs ascending, then mapping to 0..N-1.
-  (Example: 1,3,5,...,71 -> 0,1,2,...,35)
-- Apply mapping everywhere it matters:
-  * <zgroup setup="...">
-  * <ViewSetup><id>...</id>
-  * <ViewSetup>/<attributes>/<tile>...</tile>
-  * <Attributes name="tile">/<Tile>/<id>...</id>
-  * <ViewRegistration setup="...">
-  * <StitchingResults>/<PairwiseResult view_setup_a="..." view_setup_b="...">
-  * (Optionally) other known places with setup-like attributes
-
-- Reorder lists for readability:
-  * zgroups sorted by setup
-  * ViewSetup blocks sorted by id (only the <ViewSetup> elements; keeps the <Attributes ...> blocks after them)
-  * Tile attribute list sorted by id
-  * ViewRegistrations sorted by setup
-  * PairwiseResult sorted by (a,b)
-
-Edit INPUT_XML / OUTPUT_XML at bottom and run.
 """
 
 from __future__ import annotations
@@ -240,12 +215,6 @@ def process_xml(input_path: str, output_path: str) -> None:
             key_fn=lambda e: (int(e.get("view_setup_a", "0")), int(e.get("view_setup_b", "0"))),
         )
 
-    # ---- Optional: other known places that sometimes carry setup-like attrs ----
-    # If you later discover another attribute that references setup IDs, add it here.
-    # Example:
-    # for el in root.findall(".//*[@setupId]"):
-    #     remap_int_attr(el, "setupId", mapping)
-
     # pretty-print + write
     indent(root)
     tree.write(output_path, encoding="UTF-8", xml_declaration=True)
@@ -261,6 +230,6 @@ def process_xml(input_path: str, output_path: str) -> None:
 # Inline params (edit me)
 # ------------------------
 if __name__ == "__main__":
-    INPUT_XML = "/Users/sean.fite/Desktop/bigstitcher_kept.xml"
+    INPUT_XML = "/Users/sean.fite/Desktop/HCR_823476.xml"
     OUTPUT_XML = "/Users/sean.fite/Desktop/bigstitcher_sorted.xml"
     process_xml(INPUT_XML, OUTPUT_XML)

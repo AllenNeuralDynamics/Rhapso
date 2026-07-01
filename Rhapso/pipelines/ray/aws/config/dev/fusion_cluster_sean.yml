@@ -1,4 +1,4 @@
-cluster_name: rhapso-fusion-cluster-ray-sean-0000011
+cluster_name: rhapso-fusion-cluster-sean-001
 max_workers: 40
 min_workers: 0
 
@@ -48,17 +48,20 @@ head_node_type: ray.head.default
 setup_commands:
   - sudo sed -i -e 's|http://archive.ubuntu.com/ubuntu|https://us-west-2.ec2.archive.ubuntu.com/ubuntu|g' -e 's|http://security.ubuntu.com/ubuntu|https://us-west-2.ec2.archive.ubuntu.com/ubuntu|g' /etc/apt/sources.list
   - sudo rm -rf /var/lib/apt/lists/* && sudo mkdir -p /var/lib/apt/lists/partial
-  - sudo apt-get update -y 
+  - sudo apt-get update -y
   - sudo apt-get -o Acquire::ForceIPv4=true -o Acquire::Retries=5 update -y
   - sudo apt-get remove -y python3-openssl || true
-  - sudo DEBIAN_FRONTEND=noninteractive apt install -y python3-pip 
-  - sudo python3 -m pip install awscli
-  - sudo python3 -m pip install "ray[default]==2.9.1"  
-  - sudo python3 -m pip install protobuf==4.23.4  
-  - aws s3 cp s3://aind-scratch-data/sean.fite/Rhapso-0.2.7-py3-none-any.whl /tmp/Rhapso-0.2.7-py3-none-any.whl
-  - echo 'export PATH=$HOME/.local/bin:$PATH' >> ~/.bashrc
-  - source ~/.bashrc
-  - sudo python3 -m pip install /tmp/Rhapso-0.2.7-py3-none-any.whl  
+  - sudo DEBIAN_FRONTEND=noninteractive apt install -y software-properties-common curl awscli
+  - sudo add-apt-repository -y ppa:deadsnakes/ppa
+  - sudo apt-get update -y
+  - sudo DEBIAN_FRONTEND=noninteractive apt install -y python3.11 python3.11-venv python3.11-dev
+  - python3.11 -m venv /home/ubuntu/rhapso-py311
+  - /home/ubuntu/rhapso-py311/bin/python -m pip install --upgrade "pip<26" "setuptools==69.5.1" wheel
+  - /home/ubuntu/rhapso-py311/bin/python -m pip install "ray[default]==2.9.1" protobuf==4.23.4
+  - sudo ln -sf /home/ubuntu/rhapso-py311/bin/pip /usr/local/bin/pip
+  - sudo ln -sf /home/ubuntu/rhapso-py311/bin/ray /usr/local/bin/ray
+  - aws s3 cp s3://aind-scratch-data/sean.fite/Rhapso-0.2.8-py3-none-any.whl /tmp/Rhapso-0.2.8-py3-none-any.whl
+  - /home/ubuntu/rhapso-py311/bin/python -m pip install /tmp/Rhapso-0.2.8-py3-none-any.whl
 
 head_start_ray_commands:
   - ray stop

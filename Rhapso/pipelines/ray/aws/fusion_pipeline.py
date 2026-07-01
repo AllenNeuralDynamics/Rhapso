@@ -4,14 +4,16 @@ import base64
 import json
 from pathlib import Path
 
-with open("Rhapso/pipelines/ray/param/fusion/exaSPIM_720164.yml", "r") as file:
+with open("Rhapso/pipelines/ray/param/fusion/exaSPIM_791116.yml", "r") as file:
     config = yaml.safe_load(file)
+
+REMOTE_PYTHON = "/home/ubuntu/rhapso-py311/bin/python"
 
 serialized_config = base64.b64encode(json.dumps(config).encode()).decode()
 
 fusion_cmd = (
     "bash -lc \""
-    "python3 - <<\\\"PY\\\"\n"
+    f"{REMOTE_PYTHON} - <<\\\"PY\\\"\n"
     "import json, base64\n"
     "from Rhapso.pipelines.ray.affine_fusion import AffineFusion\n"
     f"cfg = json.loads(base64.b64decode(\\\"{serialized_config}\\\").decode())\n"
@@ -23,6 +25,7 @@ fusion_cmd = (
     "    intensity_range=cfg[\\\"intensity_range\\\"],\n"
     "    block_scale=cfg[\\\"block_scale\\\"],\n"
     "    overlap_strategy=cfg[\\\"overlap_strategy\\\"],\n"
+    "    output_zarr_version=cfg[\\\"output_zarr_version\\\"],\n"
     ")\n"
     "fusion.run()\n"
     "PY\n"
@@ -31,7 +34,7 @@ fusion_cmd = (
 
 multiscale_cmd = (
     "bash -lc \""
-    "python3 - <<\\\"PY\\\"\n"
+    f"{REMOTE_PYTHON} - <<\\\"PY\\\"\n"
     "import json, base64\n"
     "from Rhapso.pipelines.ray.multiscale import MultiScale\n"
     f"cfg = json.loads(base64.b64decode(\\\"{serialized_config}\\\").decode())\n"
@@ -62,7 +65,7 @@ print("$", " ".join(["ray", "up", unified_yml, "-y"]))
 subprocess.run(["ray", "up", unified_yml, "-y"], check=True, cwd=prefix)
 
 try:
-    exec_on_cluster("Affine Fusion", unified_yml, fusion_cmd, prefix)
+    # exec_on_cluster("Affine Fusion", unified_yml, fusion_cmd, prefix)
     exec_on_cluster("Multiscale", unified_yml, multiscale_cmd, prefix)
     print("\n✅ Fusion + Multiscale pipeline complete.")
 

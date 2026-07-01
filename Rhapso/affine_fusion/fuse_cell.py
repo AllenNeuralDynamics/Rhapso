@@ -1,6 +1,5 @@
 import numpy as np
 import zarr
-import fsspec
 from scipy.ndimage import map_coordinates
 
 """
@@ -18,16 +17,73 @@ class FuseCell:
         self.fusion_min_global = fusion_min_global
         self.fusion_max_global = fusion_max_global
         self.overlap_strategy = overlap_strategy
+    
+    def clean_path(self, path: str):
+        path = str(path).rstrip("/")
+
+        if path.startswith("s3://"):
+            bucket_and_key = path[len("s3://"):]
+            return "s3://" + "/".join(p for p in bucket_and_key.split("/") if p)
+
+        return path
+
+    def make_store(self, path: str, mode: str = "r", anon=None):
+        path = self.clean_path(path)
+        read_only = mode == "r"
+
+        if path.startswith("s3://"):
+            storage_options = {}
+            if anon is not None:
+                storage_options["anon"] = bool(anon)
+
+            return zarr.storage.FsspecStore.from_url(
+                path,
+                storage_options=storage_options,
+                read_only=read_only,
+            )
+
+        return zarr.storage.LocalStore(
+            path,
+            read_only=read_only,
+        )
+
+    def open_zarr_at_path(self, path: str, mode: str = "r", anon=None):
+        store = self.make_store(path, mode=mode, anon=anon)
+        return zarr.open(store, mode=mode)
+
+    def open_zarr(self, path: str, mode: str = "r"):
+        path = self.clean_path(path)
+
+        if not path.startswith("s3://"):
+            return self.open_zarr_at_path(path, mode=mode)
+
+        if mode != "r":
+            return self.open_zarr_at_path(path, mode=mode, anon=False)
+
+        try:
+            return self.open_zarr_at_path(path, mode=mode, anon=False)
+        except Exception as private_error:
+            try:
+                return self.open_zarr_at_path(path, mode=mode, anon=True)
+            except Exception as public_error:
+                raise RuntimeError(
+                    "Failed to open Zarr as private or public:\n"
+                    f"path={path}\n"
+                    f"private_error={type(private_error).__name__}: {private_error}\n"
+                    f"public_error={type(public_error).__name__}: {public_error}"
+                ) from public_error
 
     def open_zarr_array(self, path: str, mode: str = "r"):
-        path = path.rstrip("/") + "/0"
-        store = fsspec.get_mapper(path)
-        return zarr.open(store, mode=mode)
+        path = self.clean_path(path)
+
+        if not path.rsplit("/", 1)[-1].isdigit():
+            path = f"{path}/0"
+
+        return self.open_zarr(path, mode=mode)
 
     def open_view_dataset(self, view_id, mode="r"):
-        path = self.per_view_transforms[view_id]["path"].rstrip("/") + "/0"
-        store = fsspec.get_mapper(path)
-        return zarr.open(store, mode=mode)
+        path = self.per_view_transforms[view_id]["path"]
+        return self.open_zarr_array(path, mode=mode)
     
     def write_block(self, fused_block_zyx, out_offset_xyz):
         out = self.open_zarr_array(self.output_path, mode="r+")
@@ -67,7 +123,7 @@ class FuseCell:
         wx = self.ramp(SX, b0[0], b1[0], b2[0], b3[0])
         wy = self.ramp(SY, b0[1], b1[1], b2[1], b3[1])
         wz = self.ramp(SZ, b0[2], b1[2], b2[2], b3[2])
-        return (wx * wy * wz).astype(np.float32, copy=False)  
+        return (wx * wy * wz).astype(np.float32, copy=False) 
     
     def load_source_chunk_for_view(self, view_key, src_min_xyz, src_max_xyz):
         """
@@ -187,7 +243,7 @@ class FuseCell:
     
     def avg_blend(self, final_blocks, images_dict, X, Y, Z, max_slab_n, slab, nz, ny, nx, numerator, denominator):
         """
-        Avg blend
+        Avg blend handling for competing pixels
         """
         for view_key, _ in final_blocks.items():
             split_def = self.per_view_transforms[view_key].get("split_def")
@@ -268,7 +324,6 @@ class FuseCell:
         Z = zs[:, None, None]   # (nz,1,1)
         Y = ys[None, :, None]   # (1,ny,1)
         X = xs[None, None, :]   # (1,1,nx)
-        # Broadcast result shapes: (nz, ny, nx)
 
         out_shape_zyx = (nz, ny, nx)
         numerator = np.zeros(out_shape_zyx, dtype=np.float32)
@@ -300,3 +355,4 @@ class FuseCell:
 
         fused_u16 = np.clip(np.rint(fused_block), 0, 65535).astype(np.uint16)
         self.write_block(fused_u16, self.grid_block[0])
+        

@@ -1,13 +1,13 @@
 from pathlib import Path
 from typing import Any, Dict, List, Optional, Tuple, cast
 from urllib.parse import urlparse
-from ome_zarr.io import parse_url
-from ome_zarr.format import CurrentFormat
+from ome_zarr.format import CurrentFormat, FormatV04
 from ome_zarr.writer import write_multiscales_metadata
 from zarr.errors import ContainsGroupError
 import numpy as np
 import zarr
 import math
+import fsspec
 
 """
 Handles OME-NGFF + OMERO metadata, axes, transforms and Zarr group helpers.
@@ -24,6 +24,7 @@ class OMEMetadata:
         self.chunk_size = chunk_size
         self.channel_names = channel_names
         self.origin = origin or [0.0, 0.0, 0.0]
+        self.zarr_format = None
 
     @staticmethod
     def is_s3_path(path: str) -> bool:
@@ -45,29 +46,65 @@ class OMEMetadata:
             return zarr.group(store=store, path=path, overwrite=False, **kwargs)
         except ContainsGroupError:
             return zarr.open_group(store=store, path=path, mode="r+")
+    
+    @staticmethod
+    def path_has_zarr_metadata(path: str, metadata_name: str) -> bool:
+        path = str(path).rstrip("/")
+        fs, fs_path = fsspec.core.url_to_fs(path)
+        return fs.exists(f"{fs_path.rstrip('/')}/{metadata_name}")
 
+    @classmethod
+    def detect_existing_zarr_format(cls, path: str) -> int:
+        """
+        Detect zarr format from an existing zarr group/array path.
+        """
+        path = str(path).rstrip("/")
+
+        if cls.path_has_zarr_metadata(path, "zarr.json"):
+            return 3
+
+        if (
+            cls.path_has_zarr_metadata(path, ".zgroup")
+            or cls.path_has_zarr_metadata(path, ".zarray")
+        ):
+            return 2
+
+        raise RuntimeError(
+            "Could not detect existing zarr format. Expected an existing "
+            f"v2 or v3 zarr at: {path}"
+        )
+    
     def open_root_and_channel_group(self, output_path: str):
-        """
-        Open the root group + per-stack channel group (create if needed).
-        """
+        output_path = str(output_path).rstrip("/")
         stack_name = Path(output_path).name
-        parent_path = self.get_parent_path(output_path)
+
+        zarr_format = self.detect_existing_zarr_format(output_path)
+        self.zarr_format = zarr_format
 
         if self.is_s3_path(output_path):
-            store = zarr.storage.FSStore(parent_path, mode="w", dimension_separator="/")
+            store = zarr.storage.FsspecStore.from_url(
+                output_path,
+                storage_options={},
+                read_only=False,
+            )
         else:
-            store = parse_url(path=parent_path, mode="w").store
+            store = zarr.storage.LocalStore(
+                output_path,
+                read_only=False,
+            )
 
-        root_group = self.safe_create_zarr_group(store=store)
+        output_group = zarr.open_group(
+            store=store,
+            mode="r+",
+            zarr_format=zarr_format,
+        )
 
-        try:
-            channel_group = root_group[stack_name]
-            print(f"[OMEMetadata] Opened existing channel group: {stack_name}")
-        except KeyError:
-            channel_group = root_group.create_group(name=stack_name, overwrite=True)
-            print(f"[OMEMetadata] Created new channel group: {stack_name}")
+        print(
+            f"[OMEMetadata] Opened output zarr root: {output_path} "
+            f"(zarr v{zarr_format})"
+        )
 
-        return channel_group, stack_name
+        return output_group, stack_name
 
     @staticmethod
     def normalize_scale_factors(scale_factor):
@@ -281,7 +318,15 @@ class OMEMetadata:
     ):
         if metadata is None:
             metadata = {}
-        fmt = CurrentFormat()
+        # fmt = CurrentFormat()
+        if self.zarr_format == 2:
+            fmt = FormatV04()
+        elif self.zarr_format == 3:
+            fmt = CurrentFormat()
+        else:
+            raise RuntimeError(
+                f"Unknown zarr format for OME metadata writing: {self.zarr_format}"
+            )
 
         ome_json = self._build_ome(
             tuple(arr_shape),
@@ -357,4 +402,4 @@ class OMEMetadata:
         )
 
         print("[OMEMetadata] Wrote OME-NGFF metadata")
-        return channel_group, stack_name, self.scale_factors
+        return channel_group, stack_name, self.scale_factors, self.zarr_format

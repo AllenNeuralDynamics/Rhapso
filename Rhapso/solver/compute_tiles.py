@@ -567,4 +567,6 @@ class ComputeTiles:
             )
 
         tc, view_map = result
+        print("Tiles Computed")
+
         return tc, view_map

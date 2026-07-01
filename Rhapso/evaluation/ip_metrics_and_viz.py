@@ -1,30 +1,26 @@
-#!/usr/bin/env python3
-
+import json
 import xml.etree.ElementTree as ET
 from dataclasses import dataclass
+from pathlib import Path
 from typing import List, Optional, Tuple
 from urllib.parse import urlparse
 
 import boto3
 import dask.array as da
+import fsspec
 import matplotlib.pyplot as plt
 import numpy as np
+import pandas as pd
 import s3fs
-import zarr
+from botocore import UNSIGNED
+from botocore.config import Config
 from matplotlib.widgets import Slider
+from scipy import ndimage as ndi
+from scipy.spatial import cKDTree
 
-try:
-    from scipy.spatial import cKDTree
-except Exception:
-    cKDTree = None
-
-
-# ----------------------------
-# Hardcoded params
-# ----------------------------
-
-XML_PATH = "s3://aind-scratch-data/sean.fite/exaSPIM_730904-test/9/rhapso-detection.xml"
-INTERESTPOINTS_BASE = "s3://aind-scratch-data/sean.fite/exaSPIM_730904-test/9/interestpoints.n5"
+XML_PATH = "s3://aind-scratch-data/sean.fite/HCR_823476.xml"
+ALIGNMENT_STORE_BASE = "s3://aind-scratch-data/sean.fite/exaSPIM-test/test5"
+POINT_LABEL = "beads"
 
 SCALE_LEVEL = "4"
 TIMEPOINT = 0
@@ -84,6 +80,15 @@ INLIER_GRID_BINS = (4, 8, 8)
 
 
 # ----------------------------
+# Texture / detector-quality QC params
+# ----------------------------
+
+TEXTURE_SIGMAS_SCALED = (1.0, 1.5, 2.0, 3.0, 4.0, 6.0)
+TEXTURE_PEAK_Z = 4.0
+TEXTURE_GRID_BINS_XY = (8, 8)
+
+
+# ----------------------------
 # Data model
 # ----------------------------
 
@@ -123,6 +128,163 @@ class CropScaled:
 
 
 # ----------------------------
+# New Parquet/JSON point-store reader
+# ----------------------------
+
+class ParquetPointStore:
+    def __init__(self, base_path: str, label: str = "beads", storage_options=None):
+        self.base_path = str(base_path).rstrip("/")
+        self.label = label
+        self.storage_options = storage_options or {}
+
+        self.manifest = {}
+        self.point_index_df = None
+
+    def join_uri(self, *parts):
+        cleaned = []
+
+        for i, part in enumerate(parts):
+            if part is None:
+                continue
+
+            part = str(part)
+            cleaned.append(part.rstrip("/") if i == 0 else part.strip("/"))
+
+        return "/".join(cleaned)
+
+    def get_fs_and_path(self, uri):
+        return fsspec.core.url_to_fs(uri, **self.storage_options)
+
+    def exists(self, uri):
+        try:
+            fs, path = self.get_fs_and_path(uri)
+            return fs.exists(path)
+        except Exception:
+            return False
+
+    def read_json(self, uri):
+        fs, path = self.get_fs_and_path(uri)
+
+        with fs.open(path, "r") as f:
+            return json.load(f)
+
+    def read_parquet(self, uri):
+        fs, path = self.get_fs_and_path(uri)
+
+        with fs.open(path, "rb") as f:
+            return pd.read_parquet(f, engine="pyarrow")
+
+    def default_point_relative_path(self, timepoint: int, setup: int, label: str):
+        return (
+            f"points/"
+            f"timepoint={int(timepoint)}/"
+            f"setup={int(setup)}/"
+            f"label={label}/"
+            f"points.parquet"
+        )
+
+    def view_label_key(self, timepoint: int, setup: int, label: str):
+        return f"{int(timepoint)}/{int(setup)}/{label}"
+
+    def load_manifest(self):
+        if self.manifest:
+            return
+
+        manifest_uri = self.join_uri(self.base_path, "manifest.json")
+
+        if self.exists(manifest_uri):
+            self.manifest = self.read_json(manifest_uri)
+            print(f"Loaded point manifest: {manifest_uri}")
+        else:
+            self.manifest = {}
+            print(f"⚠️ No point manifest found at: {manifest_uri}")
+
+    def load_point_index(self):
+        if self.point_index_df is not None:
+            return
+
+        index_uri = self.join_uri(self.base_path, "point_index.parquet")
+
+        if self.exists(index_uri):
+            df = self.read_parquet(index_uri)
+            print(f"Loaded point index: {index_uri}")
+        else:
+            print(f"⚠️ No point_index.parquet found at: {index_uri}")
+            df = pd.DataFrame(
+                columns=["timepoint", "setup", "label", "path", "num_points"]
+            )
+
+        if len(df) > 0:
+            if "view_setup" in df.columns and "setup" not in df.columns:
+                df = df.rename(columns={"view_setup": "setup"})
+
+            df["timepoint"] = df["timepoint"].astype("int32")
+            df["setup"] = df["setup"].astype("int32")
+            df["label"] = df["label"].astype(str)
+
+            if "path" not in df.columns:
+                df["path"] = [
+                    self.default_point_relative_path(row.timepoint, row.setup, row.label)
+                    for row in df.itertuples(index=False)
+                ]
+
+        self.point_index_df = df
+
+    def resolve_point_relative_path(self, timepoint: int, setup: int, label: str):
+        self.load_manifest()
+        self.load_point_index()
+
+        key = self.view_label_key(timepoint, setup, label)
+        manifest_points = self.manifest.get("points", {}) or {}
+
+        if key in manifest_points:
+            return manifest_points[key]
+
+        if self.point_index_df is not None and len(self.point_index_df) > 0:
+            rows = self.point_index_df[
+                (self.point_index_df["timepoint"].astype(int) == int(timepoint))
+                & (self.point_index_df["setup"].astype(int) == int(setup))
+                & (self.point_index_df["label"].astype(str) == str(label))
+            ]
+
+            if len(rows) > 0 and "path" in rows.columns:
+                return str(rows.iloc[0]["path"])
+
+        return self.default_point_relative_path(timepoint, setup, label)
+
+    def read_points(self, setup: int, timepoint: int = 0, label: str = None):
+        label = label or self.label
+
+        rel_path = self.resolve_point_relative_path(
+            timepoint=timepoint,
+            setup=setup,
+            label=label,
+        )
+
+        point_uri = self.join_uri(self.base_path, rel_path)
+
+        if not self.exists(point_uri):
+            raise FileNotFoundError(
+                f"Missing points parquet for setup={setup}, "
+                f"timepoint={timepoint}, label={label}: {point_uri}"
+            )
+
+        df = self.read_parquet(point_uri)
+
+        if len(df) == 0:
+            return np.empty((0, 3), dtype=np.float32)
+
+        missing = {"x", "y", "z"}.difference(df.columns)
+
+        if missing:
+            raise ValueError(
+                f"Missing required point columns {sorted(missing)} in {point_uri}"
+            )
+
+        return df[["x", "y", "z"]].to_numpy(dtype=np.float32, copy=False)
+
+
+# ----------------------------
 # XML / IO helpers
 # ----------------------------
 
@@ -131,7 +293,16 @@ def load_xml_root(xml_path: str) -> ET.Element:
         parsed = urlparse(xml_path)
         bucket = parsed.netloc
         key = parsed.path.lstrip("/")
-        obj = boto3.client("s3").get_object(Bucket=bucket, Key=key)
+
+        if S3_ANON:
+            client = boto3.client(
+                "s3",
+                config=Config(signature_version=UNSIGNED),
+            )
+        else:
+            client = boto3.client("s3")
+
+        obj = client.get_object(Bucket=bucket, Key=key)
         return ET.fromstring(obj["Body"].read())
 
     return ET.parse(xml_path).getroot()
@@ -139,6 +310,7 @@ def load_xml_root(xml_path: str) -> ET.Element:
 
 def affine_12_to_4x4(affine_text: str) -> np.ndarray:
     vals = [float(v) for v in affine_text.split()]
+
     if len(vals) != 12:
         raise RuntimeError(f"Expected 12 affine values, got {len(vals)}")
 
@@ -146,6 +318,7 @@ def affine_12_to_4x4(affine_text: str) -> np.ndarray:
     mat[0, 0:4] = vals[0:4]
     mat[1, 0:4] = vals[4:8]
     mat[2, 0:4] = vals[8:12]
+
     return mat
 
 
@@ -192,6 +365,7 @@ def parse_zarr_tile_records(root: ET.Element, transform_name: str):
     nominal_transforms = parse_named_transforms_from_xml(root, transform_name)
 
     image_loader = root.find(".//ImageLoader")
+
     if image_loader is None:
         raise RuntimeError("No <ImageLoader> found in XML")
 
@@ -215,6 +389,7 @@ def parse_zarr_tile_records(root: ET.Element, transform_name: str):
 
     for zg in image_loader.findall(".//zgroup"):
         rel_path = zg.get("path") or zg.findtext("path")
+
         if not rel_path:
             continue
 
@@ -246,71 +421,30 @@ def parse_zarr_tile_records(root: ET.Element, transform_name: str):
 
 
 def open_ome_zarr_level(zarr_path: str, scale_level: str):
+    """
+    Open one OME-Zarr scale level.
+    """
+    zarr_path = str(zarr_path).rstrip("/")
+    scale_level = str(scale_level).strip("/")
+
     if zarr_path.startswith("s3://"):
-        s3 = s3fs.S3FileSystem(anon=S3_ANON)
-        store = s3fs.S3Map(root=zarr_path.rstrip("/"), s3=s3, check=False)
-        return da.from_zarr(store, component=scale_level)
+        level_path = f"{zarr_path}/{scale_level}"
 
-    return da.from_zarr(zarr_path.rstrip("/"), component=scale_level)
+        s3 = s3fs.S3FileSystem(
+            anon=S3_ANON,
+            skip_instance_cache=True,
+        )
 
+        store = s3fs.S3Map(
+            root=level_path,
+            s3=s3,
+            check=False,
+        )
 
-def open_zarr_or_n5_array(full_path: str):
-    if full_path.startswith("s3://"):
-        s3 = s3fs.S3FileSystem(anon=False)
-        parsed = urlparse(full_path)
-        components = parsed.path.lstrip("/").split("/")
+        return da.from_zarr(store)
 
-        try:
-            n5_index = next(i for i, c in enumerate(components) if c.endswith(".n5"))
-        except StopIteration:
-            store = s3fs.S3Map(root=full_path.rstrip("/"), s3=s3, check=False)
-            return zarr.open_array(store, mode="r")
-
-        dataset_root = f"s3://{parsed.netloc}/" + "/".join(components[: n5_index + 1])
-        dataset_rel_path = "/".join(components[n5_index + 1:])
-
-        store = s3fs.S3Map(root=dataset_root.rstrip("/"), s3=s3, check=False)
-        root = zarr.open(store, mode="r")
-
-        if dataset_rel_path not in root:
-            raise KeyError(f"Dataset not found in S3 N5: {dataset_rel_path}")
-
-        return root[dataset_rel_path]
-
-    full_path = full_path.rstrip("/")
-    components = full_path.split("/")
-
-    try:
-        n5_index = next(i for i, c in enumerate(components) if c.endswith(".n5"))
-    except StopIteration:
-        return zarr.open_array(full_path, mode="r")
-
-    dataset_path = "/".join(components[: n5_index + 1])
-    dataset_rel_path = "/".join(components[n5_index + 1:])
-
-    store = zarr.N5Store(dataset_path)
-    root = zarr.open(store, mode="r")
-
-    if dataset_rel_path not in root:
-        raise KeyError(f"Dataset not found in N5: {dataset_rel_path}")
-
-    return root[dataset_rel_path]
-
-
-def read_interest_points(base_path: str, setup: int, timepoint: int):
-    loc_path = (
-        f"{base_path.rstrip('/')}/"
-        f"tpId_{timepoint}_viewSetupId_{setup}/"
-        f"beads/interestpoints/loc"
-    )
-
-    arr = open_zarr_or_n5_array(loc_path)
-    pts = np.asarray(arr[:], dtype=np.float32)
-
-    if pts.ndim != 2 or pts.shape[1] != 3:
-        raise RuntimeError(f"Expected loc shape N x 3 for setup {setup}, got {pts.shape}")
-
-    return pts
+    level_path = str(Path(zarr_path).expanduser() / scale_level)
+    return da.from_zarr(level_path)
 
 
 # ----------------------------
@@ -375,6 +509,7 @@ def list_overlapping_pairs(records: List[TileRecord]):
             rec_b = records[j]
 
             overlap = compute_pairwise_overlap_fullres(rec_a, rec_b)
+
             if overlap is not None:
                 overlaps.append((rec_a.setup, rec_b.setup, overlap))
 
@@ -435,10 +570,10 @@ def filter_points_in_xy_crop(pts_xyz: np.ndarray, crop: CropFullRes):
         return np.empty((0, 3), dtype=np.float32)
 
     mask = (
-        (pts_xyz[:, 0] >= crop.x0) &
-        (pts_xyz[:, 0] < crop.x1) &
-        (pts_xyz[:, 1] >= crop.y0) &
-        (pts_xyz[:, 1] < crop.y1)
+        (pts_xyz[:, 0] >= crop.x0)
+        & (pts_xyz[:, 0] < crop.x1)
+        & (pts_xyz[:, 1] >= crop.y0)
+        & (pts_xyz[:, 1] < crop.y1)
     )
 
     return pts_xyz[mask]
@@ -496,12 +631,15 @@ def global_points_to_a_crop_display(
     pts[:, 1] -= origin_y
     pts[:, 2] -= origin_z
 
-    Z, Y, X = image_a_crop_shape
+    z_size, y_size, x_size = image_a_crop_shape
 
     mask = (
-        (pts[:, 0] >= 0) & (pts[:, 0] < X) &
-        (pts[:, 1] >= 0) & (pts[:, 1] < Y) &
-        (pts[:, 2] >= 0) & (pts[:, 2] < Z)
+        (pts[:, 0] >= 0)
+        & (pts[:, 0] < x_size)
+        & (pts[:, 1] >= 0)
+        & (pts[:, 1] < y_size)
+        & (pts[:, 2] >= 0)
+        & (pts[:, 2] < z_size)
     )
 
     return pts[mask].astype(np.float32)
@@ -605,26 +743,26 @@ def estimate_dominant_translation(
     Vote on delta = B - A in coarse 3D bins.
     The strongest bin gives likely residual shift.
     """
-    if cKDTree is None or len(pts_a) == 0 or len(pts_b) == 0:
+    if len(pts_a) == 0 or len(pts_b) == 0:
         return None
 
     tree_b = cKDTree(pts_b.astype(np.float32))
 
     deltas = []
+
     for pa in pts_a.astype(np.float32):
         idxs = tree_b.query_ball_point(pa, r=float(search_radius_scaled))
+
         if not idxs:
             continue
 
         pb = pts_b[np.asarray(idxs, dtype=np.int64)]
-        d = pb - pa[None, :]
-        deltas.append(d)
+        deltas.append(pb - pa[None, :])
 
     if not deltas:
         return None
 
     deltas = np.vstack(deltas).astype(np.float32)
-
     bins = np.floor(deltas / float(bin_size_scaled)).astype(np.int32)
 
     unique_bins, counts = np.unique(bins, axis=0, return_counts=True)
@@ -660,7 +798,7 @@ def nearest_scores_after_shift(
     Apply dominant shift to A points, then score nearest B points.
     shift convention: A_shifted = A + shift.
     """
-    if cKDTree is None or len(pts_a) == 0 or len(pts_b) == 0:
+    if len(pts_a) == 0 or len(pts_b) == 0:
         return {}
 
     a_shifted = pts_a + shift_xyz[None, :]
@@ -685,8 +823,8 @@ def nearest_scores_after_shift(
             out[f"ab_within_{r_key}"] + out[f"ba_within_{r_key}"]
         )
 
-    # Mutual nearest-neighbor pairs after shift.
     mutual_pairs = []
+
     for ia, ib in enumerate(idx_ab):
         if ib < len(idx_ba) and idx_ba[ib] == ia:
             mutual_pairs.append((ia, ib, float(dist_ab[ia])))
@@ -694,8 +832,6 @@ def nearest_scores_after_shift(
     out["mutual_pairs"] = mutual_pairs
     out["n_mutual"] = len(mutual_pairs)
 
-    # Ambiguity: nearest / second-nearest distance.
-    # Lower is more distinctive. Near 1.0 means ambiguous.
     if len(pts_b) >= 2:
         dist2, _ = tree_b.query(a_shifted.astype(np.float32), k=2)
         d1 = dist2[:, 0]
@@ -718,20 +854,22 @@ def fit_affine_lstsq(src: np.ndarray, dst: np.ndarray):
     Returns 4x4 matrix.
     """
     n = len(src)
+
     if n < 4:
         return None
 
-    X = np.ones((n, 4), dtype=np.float64)
-    X[:, :3] = src.astype(np.float64)
+    x = np.ones((n, 4), dtype=np.float64)
+    x[:, :3] = src.astype(np.float64)
 
-    Y = dst.astype(np.float64)
+    y = dst.astype(np.float64)
 
     # Solve X @ M.T = Y, where M is 3x4.
-    M_t, _, _, _ = np.linalg.lstsq(X, Y, rcond=None)
-    M = M_t.T
+    m_t, _, _, _ = np.linalg.lstsq(x, y, rcond=None)
+    m = m_t.T
 
     aff = np.eye(4, dtype=np.float64)
-    aff[:3, :4] = M
+    aff[:3, :4] = m
+
     return aff
 
 
@@ -739,10 +877,11 @@ def apply_affine_to_points(pts: np.ndarray, aff: np.ndarray):
     if len(pts) == 0:
         return np.empty((0, 3), dtype=np.float32)
 
-    X = np.ones((len(pts), 4), dtype=np.float64)
-    X[:, :3] = pts.astype(np.float64)
-    Y = X @ aff[:3, :4].T
-    return Y.astype(np.float32)
+    x = np.ones((len(pts), 4), dtype=np.float64)
+    x[:, :3] = pts.astype(np.float64)
+    y = x @ aff[:3, :4].T
+
+    return y.astype(np.float32)
 
 
 def affine_proxy_score(
@@ -773,6 +912,7 @@ def affine_proxy_score(
     dst = pts_b[ib]
 
     aff = fit_affine_lstsq(src, dst)
+
     if aff is None:
         return {
             "n_pairs": len(mutual_pairs),
@@ -809,7 +949,7 @@ def grid_occupancy_points(pts_xyz: np.ndarray, shape_zyx, bins=INLIER_GRID_BINS)
     if len(pts_xyz) == 0:
         return np.nan
 
-    Z, Y, X = shape_zyx
+    z_size, y_size, x_size = shape_zyx
 
     pts_zyx = np.stack(
         [pts_xyz[:, 2], pts_xyz[:, 1], pts_xyz[:, 0]],
@@ -819,7 +959,7 @@ def grid_occupancy_points(pts_xyz: np.ndarray, shape_zyx, bins=INLIER_GRID_BINS)
     hist, _ = np.histogramdd(
         pts_zyx,
         bins=bins,
-        range=((0, Z), (0, Y), (0, X)),
+        range=((0, z_size), (0, y_size), (0, x_size)),
     )
 
     flat = hist.ravel()
@@ -845,12 +985,6 @@ def print_match_readiness_qc(
     if n_a == 0 or n_b == 0:
         print("VERDICT: CHECK")
         print("Reason: one side has no points in the overlap display crop.")
-        print("=" * 72 + "\n")
-        return
-
-    if cKDTree is None:
-        print("VERDICT: CHECK")
-        print("Reason: scipy.spatial.cKDTree is not available.")
         print("=" * 72 + "\n")
         return
 
@@ -932,14 +1066,14 @@ def print_match_readiness_qc(
     good_translation = trans["support_pct_min_cloud"] >= 35.0
     good_within6 = nn["sym_within_6"] >= 45.0
     good_affine = (
-        aff["n_inliers"] >= 20 and
-        np.isfinite(aff["inlier_ratio"]) and
-        aff["inlier_ratio"] >= 50.0
+        aff["n_inliers"] >= 20
+        and np.isfinite(aff["inlier_ratio"])
+        and aff["inlier_ratio"] >= 50.0
     )
     good_spread = np.isfinite(inlier_grid) and inlier_grid >= 0.20
     not_too_ambiguous = (
-        np.isfinite(nn["ambiguity_ratio_median"]) and
-        nn["ambiguity_ratio_median"] <= 0.80
+        np.isfinite(nn["ambiguity_ratio_median"])
+        and nn["ambiguity_ratio_median"] <= 0.80
     )
 
     if all([good_translation, good_within6, good_affine, good_spread]):
@@ -954,16 +1088,208 @@ def print_match_readiness_qc(
 
     if verdict != "GOOD":
         print("Reason flags:")
+
         if not good_translation:
             print("  - weak dominant translation support")
+
         if not good_within6:
             print("  - low symmetric red/blue proximity within 6 scaled px after shift")
+
         if not good_affine:
             print("  - weak affine/RANSAC proxy inlier set")
+
         if not good_spread:
             print("  - inlier candidates are not spatially spread out")
+
         if not not_too_ambiguous:
             print("  - candidate matches may be ambiguous/repetitive")
+
+    print("=" * 72 + "\n")
+
+
+# ----------------------------
+# Texture / detector-quality QC
+# ----------------------------
+
+def robust_normalize01(x: np.ndarray):
+    x = x.astype(np.float32, copy=False)
+    mask = np.isfinite(x) & (x > 0)
+
+    if not np.any(mask):
+        return np.zeros_like(x, dtype=np.float32)
+
+    lo = float(np.percentile(x[mask], 1))
+    hi = float(np.percentile(x[mask], 99.8))
+
+    if hi <= lo:
+        hi = lo + 1.0
+
+    return np.clip((x - lo) / (hi - lo), 0, 1).astype(np.float32)
+
+
+def robust_zscore(x: np.ndarray):
+    x = x.astype(np.float32, copy=False)
+
+    med = float(np.median(x))
+    mad = float(np.median(np.abs(x - med))) + 1e-6
+
+    return (x - med) / (1.4826 * mad)
+
+
+def point_grid_occupancy_xy(pts_xyz: np.ndarray, shape_zyx, bins=TEXTURE_GRID_BINS_XY):
+    if pts_xyz is None or len(pts_xyz) == 0:
+        return np.nan
+
+    _, y_size, x_size = shape_zyx
+    pts_xy = pts_xyz[:, :2]
+
+    hist, _ = np.histogramdd(
+        pts_xy,
+        bins=bins,
+        range=((0, x_size), (0, y_size)),
+    )
+
+    return float(np.count_nonzero(hist)) / float(np.prod(bins))
+
+
+def texture_metrics_from_crop(vol_zyx: np.ndarray):
+    """
+    Uses the crop max projection so this is fast and directly comparable
+    to the point overlay viewer.
+    """
+    mip = np.max(vol_zyx, axis=0)
+    img = robust_normalize01(mip)
+
+    tissue_mask = img > 0.08
+    tissue_fraction = float(np.mean(tissue_mask))
+
+    if tissue_fraction <= 0:
+        return {
+            "classification": "blank / no tissue",
+            "tissue_fraction": 0.0,
+            "high_freq_ratio": np.nan,
+            "best_sigma": np.nan,
+            "best_peak_density_per_mpix": 0.0,
+            "sigma_rows": [],
+        }
+
+    # High-frequency ratio: sharper / punctate crops tend to be higher.
+    smooth = ndi.gaussian_filter(img, sigma=3.0)
+    high = img - smooth
+    high_freq_ratio = float(
+        np.std(high[tissue_mask]) / (np.std(img[tissue_mask]) + 1e-6)
+    )
+
+    sigma_rows = []
+
+    for sigma in TEXTURE_SIGMAS_SCALED:
+        # Bright blob response. Smaller winning sigma means more punctate/cellular.
+        response = -float(sigma ** 2) * ndi.gaussian_laplace(img, sigma=float(sigma))
+        response = np.maximum(response, 0)
+
+        rz = robust_zscore(response)
+
+        local_max = response == ndi.maximum_filter(response, size=3)
+        peak_mask = local_max & tissue_mask & (rz > TEXTURE_PEAK_Z)
+
+        n_peaks = int(np.count_nonzero(peak_mask))
+        area_mpix = float(img.size) / 1_000_000.0
+        peak_density = n_peaks / area_mpix if area_mpix > 0 else np.nan
+
+        sigma_rows.append(
+            {
+                "sigma": float(sigma),
+                "n_peaks": n_peaks,
+                "peak_density_per_mpix": float(peak_density),
+                "p998_response": float(np.percentile(response[tissue_mask], 99.8)),
+            }
+        )
+
+    # Pick the scale with strongest high-percentile LoG response.
+    best = max(sigma_rows, key=lambda r: r["p998_response"])
+    best_sigma = best["sigma"]
+    best_peak_density = best["peak_density_per_mpix"]
+
+    # Heuristic labels. These are meant as tuning guidance, not absolute truth.
+    if best_sigma <= 2.0 and high_freq_ratio >= 0.25 and best_peak_density >= 100:
+        classification = "punctate / cellular"
+    elif best_sigma >= 4.0 and high_freq_ratio < 0.20 and best_peak_density < 100:
+        classification = "broad / smooth"
+    else:
+        classification = "mixed / ambiguous"
+
+    return {
+        "classification": classification,
+        "tissue_fraction": tissue_fraction,
+        "high_freq_ratio": high_freq_ratio,
+        "best_sigma": best_sigma,
+        "best_peak_density_per_mpix": best_peak_density,
+        "sigma_rows": sigma_rows,
+    }
+
+
+def print_texture_and_point_qc(
+    label: str,
+    vol_zyx: np.ndarray,
+    pts_display_xyz: np.ndarray,
+):
+    print("\n" + "=" * 72)
+    print(f"TEXTURE + DETECTOR QC: {label}")
+    print("=" * 72)
+
+    tex = texture_metrics_from_crop(vol_zyx)
+
+    z_size, y_size, x_size = vol_zyx.shape
+
+    n_pts = len(pts_display_xyz)
+    area_mpix = float(y_size * x_size) / 1_000_000.0
+    pts_per_mpix = n_pts / area_mpix if area_mpix > 0 else np.nan
+    xy_occupancy = point_grid_occupancy_xy(pts_display_xyz, vol_zyx.shape)
+
+    print(f"Image texture class:        {tex['classification']}")
+    print(f"Signal/tissue fraction:     {tex['tissue_fraction']:.3f}")
+    print(f"High-frequency ratio:       {tex['high_freq_ratio']:.3f}")
+    print(f"Best LoG sigma scaled px:   {tex['best_sigma']}")
+    print(f"LoG peaks / Mpix:           {tex['best_peak_density_per_mpix']:.1f}")
+
+    print("")
+    print(f"Detected Rhapso points:     {n_pts:,}")
+    print(f"Rhapso points / Mpix:       {pts_per_mpix:.1f}")
+    print(f"XY point grid occupancy:    {xy_occupancy:.3f}")
+
+    print("")
+    print("LoG response by scale:")
+
+    for row in tex["sigma_rows"]:
+        print(
+            f"  sigma={row['sigma']:<4g} "
+            f"peaks/Mpix={row['peak_density_per_mpix']:>8.1f} "
+            f"p99.8 response={row['p998_response']:.5f}"
+        )
+
+    # Detector-readiness heuristic.
+    enough_points = n_pts >= 50
+    spread_ok = np.isfinite(xy_occupancy) and xy_occupancy >= 0.20
+    not_blank = tex["tissue_fraction"] >= 0.05
+
+    if not not_blank:
+        verdict = "CHECK: mostly blank overlap"
+    elif enough_points and spread_ok:
+        verdict = "GOOD: detector has usable spatial coverage"
+    elif enough_points and not spread_ok:
+        verdict = "CHECK: points are clustered"
+    else:
+        verdict = "CHECK: too few detected points"
+
+    print("")
+    print(f"VERDICT: {verdict}")
+
+    if tex["classification"] == "punctate / cellular":
+        print("Param hint: test smaller/sharper detection, e.g. sigma 1.1–1.8.")
+    elif tex["classification"] == "broad / smooth":
+        print("Param hint: use smoother/permissive detection, and expect matching to be harder.")
+    else:
+        print("Param hint: mixed signal; compare sigma 1.1 vs 1.8 using overlays.")
 
     print("=" * 72 + "\n")
 
@@ -972,7 +1298,11 @@ def print_match_readiness_qc(
 # Main data prep
 # ----------------------------
 
-def prepare_pair_data(rec: TileRecord, overlap_box_fullres):
+def prepare_pair_data(
+    rec: TileRecord,
+    overlap_box_fullres,
+    point_store: ParquetPointStore,
+):
     print(f"Opening setup {rec.setup} image: {rec.full_path}")
 
     vol = open_tile_volume_zyx(rec)
@@ -1009,8 +1339,12 @@ def prepare_pair_data(rec: TileRecord, overlap_box_fullres):
     )
     print(f"  setup {rec.setup} crop scaled zyx={vol_crop.shape}")
 
-    print(f"Loading setup {rec.setup} points")
-    pts_all = read_interest_points(INTERESTPOINTS_BASE, rec.setup, TIMEPOINT)
+    print(f"Loading setup {rec.setup} points from Parquet")
+    pts_all = point_store.read_points(
+        setup=rec.setup,
+        timepoint=TIMEPOINT,
+        label=POINT_LABEL,
+    )
     print(f"  setup {rec.setup} total points: {len(pts_all):,}")
 
     pts_xy = filter_points_in_xy_crop(pts_all, crop_full)
@@ -1046,10 +1380,9 @@ def view_points_on_a_crop(
     Tile B points are transformed into A's local crop frame and shown blue.
     No match links.
     """
-
     assert image_a_crop.ndim == 3
 
-    Z, Y, X = image_a_crop.shape
+    z_size, _, _ = image_a_crop.shape
     lo, hi = compute_global_display_range(image_a_crop)
 
     def norm(z):
@@ -1097,7 +1430,7 @@ def view_points_on_a_crop(
 
     plt.subplots_adjust(bottom=0.16)
     slider_ax = fig.add_axes([0.15, 0.06, 0.7, 0.04])
-    slider = Slider(slider_ax, "Z", 0, Z - 1, valinit=z0, valstep=1)
+    slider = Slider(slider_ax, "Z", 0, z_size - 1, valinit=z0, valstep=1)
 
     def update(val):
         z = int(slider.val)
@@ -1163,6 +1496,7 @@ def main():
         return
 
     print("\nOverlapping pairs:")
+
     for a, b, (ox0, ox1, oy0, oy1) in overlaps:
         print(
             f"  ({a}, {b}) overlap full-res "
@@ -1186,11 +1520,25 @@ def main():
         setup_a, setup_b = a, b
         print(f"\nUsing TARGET_PAIR: ({setup_a}, {setup_b})")
 
+    point_store_storage_options = {}
+
+    if ALIGNMENT_STORE_BASE.startswith("s3://"):
+        point_store_storage_options = {
+            "anon": S3_ANON,
+            "skip_instance_cache": True,
+        }
+
+    point_store = ParquetPointStore(
+        base_path=ALIGNMENT_STORE_BASE,
+        label=POINT_LABEL,
+        storage_options=point_store_storage_options,
+    )
+
     rec_a = by_setup[setup_a]
     rec_b = by_setup[setup_b]
 
-    data_a = prepare_pair_data(rec_a, overlap_box)
-    data_b = prepare_pair_data(rec_b, overlap_box)
+    data_a = prepare_pair_data(rec_a, overlap_box, point_store)
+    data_b = prepare_pair_data(rec_b, overlap_box, point_store)
 
     pts_a_display = global_points_to_a_crop_display(
         pts_global_xyz=data_a["pts_global_scaled"],
@@ -1213,6 +1561,18 @@ def main():
     print(f"  setup {setup_a} red points:  {len(pts_a_display):,}")
     print(f"  setup {setup_b} blue points: {len(pts_b_display):,}")
     print("")
+
+    print_texture_and_point_qc(
+        label=f"setup {setup_a} crop",
+        vol_zyx=data_a["vol_crop"],
+        pts_display_xyz=pts_a_display,
+    )
+
+    print_texture_and_point_qc(
+        label=f"setup {setup_b} projected into setup {setup_a} crop frame",
+        vol_zyx=data_b["vol_crop"],
+        pts_display_xyz=pts_b_display,
+    )
 
     print_match_readiness_qc(
         pts_a_display=pts_a_display,

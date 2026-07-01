@@ -229,6 +229,8 @@ class XMLToDataFrameSolver:
         view_registrations_df = self.parse_view_registrations(root)
         view_interest_points_df = self.parse_view_interest_points(root)
 
+        print("XML Loaded")
+
         return {
             "image_loader": image_loader_df,
             "view_setups": view_setups_df,

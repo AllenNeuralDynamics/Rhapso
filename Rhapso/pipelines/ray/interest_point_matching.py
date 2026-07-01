@@ -26,18 +26,18 @@ class InterestPointMatching:
         self.image_file_prefix = image_file_prefix
 
     def match(self):
+        print("Starting Interest Point Matching")
+
         # Load XML
         parser = XMLParserMatching(self.xml_input_path, self.input_type)
         data_global = parser.run()
-        print("XML loaded and parsed")
 
         # Load and transform points
         data_loader = LoadAndTransformPoints(data_global, self.xml_input_path, self.n5_output_path, self.match_type)
         process_pairs, view_registrations = data_loader.run()
-        print("Points loaded and transformed into global space")
 
         # Distribute interest point matching with Ray
-        @ray.remote
+        @ray.remote(num_cpus=2)
         def match_pair(pointsA, pointsB, viewA_str, viewB_str, label, num_neighbors, redundancy, significance, num_required_neighbors, 
                        match_type, inlier_threshold, min_inlier_ratio, num_iterations, model_min_inliers, regularization_weight, search_radius,
                        view_registrations, input_type, image_file_prefix, ransac_sample_size): 
@@ -78,9 +78,7 @@ class InterestPointMatching:
         # --- Save ---
         saver = SaveMatches(all_results, self.n5_output_path, data_global, self.match_type)
         saver.run()
-        print("Matches Saved as N5")
-
-        print("Interest point matching is done")
+        print("Interest Point Matching is Done")
     
     def run(self):
         self.match()

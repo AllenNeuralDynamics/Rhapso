@@ -239,7 +239,6 @@ class RansacMatching:
             return [], None
         
         for _ in range(self.num_iterations):
-            # indices = random.sample(range(len(candidates)), self.model_min_matches)
             indices = random.sample(range(len(candidates)), self.ransac_sample_size)
             min_matches = [candidates[i] for i in indices]
 
