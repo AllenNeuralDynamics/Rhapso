@@ -203,5 +203,6 @@ class AdvancedRefinement:
         """
         ips_lists_by_view, ints_lits_by_view = self.filter()
         self.kd_tree(ips_lists_by_view, ints_lits_by_view)
+        print("Advanced Refinement Done")
         
         return self.consolidated_data

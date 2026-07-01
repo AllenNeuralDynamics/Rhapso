@@ -31,7 +31,7 @@ class MultiScale:
 
         # Open root + channel group and write OME metadata
         ome = OMEMetadata(self.zarr_path, list(dataset_shape), self.scale_factor, self.voxel_size, self.n_lvls, list(chunk_size))
-        channel_group, stack_name, scale_factors = ome.run()
+        channel_group, stack_name, scale_factors, zarr_version = ome.run()
         print(f"[MultiScale] Using channel group '{stack_name}'")
 
         # Compute block shape once, using the normalized chunks
@@ -41,7 +41,7 @@ class MultiScale:
         print(f"[MultiScale] Block shape ZYX={block_shape_zyx}")
 
         # Execute multiscale pyramid
-        executor = PyramidExecutor(self.n_lvls, scale_factors, tuple(chunk_size), block_shape_zyx, self.zarr_path, self.base_level)
+        executor = PyramidExecutor(self.n_lvls, scale_factors, tuple(chunk_size), block_shape_zyx, self.zarr_path, self.base_level, zarr_version)
         executor.run(channel_group)
         print("[MultiScale] Pyramid build complete")
 

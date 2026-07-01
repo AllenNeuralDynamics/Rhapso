@@ -72,4 +72,6 @@ class ViewTransformModels:
         """
         self.create_transform_matrices()
         self.concatenate_matrices_by_view_id()
+        print("Tranformation Models Loaded")
+        
         return self.concatenated_matrices

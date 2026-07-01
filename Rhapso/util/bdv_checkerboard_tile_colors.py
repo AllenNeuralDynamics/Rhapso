@@ -179,8 +179,8 @@ def generate_settings_file(dataset_xml, output_xml, existing_settings=None):
 if __name__ == "__main__":
 
     vis_grid = True
-    input_xml = "/Users/sean.fite/Desktop/bigstitcher.xml"
-    output_xml = "/Users/sean.fite/Desktop/s6_ls2-settings.xml"
+    input_xml = "/Users/sean.fite/Desktop/rhapso-solver-affine.xml"
+    output_xml = "/Users/sean.fite/Desktop/bdv-settings.xml"
     
     generate_settings_file(input_xml, output_xml)
 

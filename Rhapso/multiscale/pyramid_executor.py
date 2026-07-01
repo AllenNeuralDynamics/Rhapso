@@ -12,13 +12,14 @@ Handles windowed downsampling and block-wise execution using Ray.
 
 class PyramidExecutor:
     def __init__(self, n_lvls: int, scale_factors, chunk_size: Tuple[int, ...], block_shape_zyx: Tuple[int, int, int], 
-                 zarr_path: str, base_level: int) -> None:
+                 zarr_path: str, base_level: int, zarr_version) -> None:
         self.n_lvls = n_lvls
         self.scale_factors = scale_factors
         self.chunk_size = chunk_size
         self.block_shape_zyx = block_shape_zyx
         self.zarr_path = zarr_path
         self.base_level = base_level
+        self.output_zarr_version = zarr_version
 
     @staticmethod
     def reshape_windowed(array: npt.NDArray[Any], window_size: Sequence[int]) -> npt.NDArray[Any]:
@@ -206,12 +207,44 @@ class PyramidExecutor:
                         f"[PyramidExecutor]   Progress: {progress_pct_int}% "
                         f"({completed}/{total_blocks} blocks)"
                     )
+    
+    def create_level_array(self, channel_group, name: str, shape, chunks, dtype):
+        """
+        Create one pyramid level using the known output zarr version.
+        """
+        if self.output_zarr_version == 2:
+            compressor = Blosc(cname="zstd", clevel=3, shuffle=2, blocksize=0)
+
+            return channel_group.create_array(
+                name=name,
+                shape=shape,
+                chunks=chunks,
+                dtype=dtype,
+                compressor=compressor,
+                overwrite=True,
+                chunk_key_encoding={
+                    "name": "v2",
+                    "separator": "/",
+                },
+            )
+
+        return channel_group.create_array(
+            name=name,
+            shape=shape,
+            chunks=chunks,
+            dtype=dtype,
+            overwrite=True,
+            chunk_key_encoding={
+                "name": "default",
+                "separator": "/",
+            },
+        )
 
     def build_pyramid(self, channel_group) -> None:
         """
         Multiscale loop
         """
-        compressor = Blosc(cname="zstd", clevel=3, shuffle=2, blocksize=0)
+        # compressor = Blosc(cname="zstd", clevel=3, shuffle=2, blocksize=0)
         start_level = self.base_level + 1
         levels_to_write = self.n_lvls - start_level
 
@@ -247,8 +280,13 @@ class PyramidExecutor:
                 if dst_arr.shape != dst_shape:
                     raise ValueError(f"Existing level {dst_name} has shape {dst_arr.shape} expected {dst_shape}")
             else:
-                channel_group.create_dataset(name=dst_name, shape=dst_shape, chunks=self.chunk_size, dtype=prev_ds.dtype, 
-                                             compressor=compressor, dimension_separator="/", overwrite=True)
+                self.create_level_array(
+                    channel_group=channel_group,
+                    name=dst_name,
+                    shape=dst_shape,
+                    chunks=self.chunk_size,
+                    dtype=prev_ds.dtype,
+                )
 
             src_shape = tuple(previous_scale.shape)
             scale_factors_zyx = (sz, sy, sx)

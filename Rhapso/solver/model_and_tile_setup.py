@@ -105,5 +105,6 @@ class ModelAndTileSetup():
         Executes the entry point of the script.
         """
         self.setup_point_matches_from_interest_points()
+        print("Tile Pairs Set Up")
 
         return self.pairs

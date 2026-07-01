@@ -113,4 +113,6 @@ class ConcatenateModels:
             tiles_round_2[vid]['model']['regularized'] = self.preconcatenate_affine(m1, m2) 
         
         tiles_round_2 = [tiles_round_2[t['view']] for t in view_map]
+        print("Transformation Models Transposed")
+        
         return tiles_round_2, combined_validation_stats

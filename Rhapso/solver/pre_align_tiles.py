@@ -318,6 +318,7 @@ class PreAlignTiles:
         unaligned_tiles = self.pre_align(tiles)
 
         if len(unaligned_tiles) > 0:
-            print(f"Pre-aligned all tiles but: {len(unaligned_tiles)}")
+            print(f"Unable to Pre-Align {len(unaligned_tiles)} Tiles")
 
+        print("Tiles Pre-Aligned")
         return tiles['tiles']

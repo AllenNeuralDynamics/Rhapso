@@ -3,6 +3,9 @@ import numpy as np
 import s3fs
 from itertools import combinations
 import ray
+import json
+import fsspec
+import pandas as pd
 
 """
 Load and Transform Points loads interest points from n5 and transforms them into global space
@@ -90,48 +93,135 @@ class LoadAndTransformPoints:
         except Exception as e:
             print(f"❌ Error in get_transformation_matrix for view {view_id}: {e}")
             raise
-    
-    def load_interest_points_from_path(self, base_path, loc_path):
+
+    def load_interest_points_from_path(self, base_path, point_key):
         """
-        Load data from any N5 dataset path
+        Load interest points from the Parquet/JSON alignment store.
+
+        point_key format:
+            timepoint/setup/label
         """
-        try:      
-            if self.n5_output_path.startswith("s3://"):
-                path = base_path.rstrip("/")
-                s3 = s3fs.S3FileSystem(anon=False)
-                store = s3fs.S3Map(root=path, s3=s3, check=False)
-                root = zarr.open(store, mode="r")
-                group = root[loc_path]
-                data = group[:]
-                return data.astype(np.float64)
-            
-            else:
-                store = zarr.N5Store(base_path)
-                root = zarr.open(store, mode="r")
-                group = root[loc_path]
-                data = group[:]
-                return data.astype(np.float64)
-            
+        try:
+            base_path = str(base_path).rstrip("/")
+
+            if not hasattr(self, "_manifest_points"):
+                manifest_path = f"{base_path}/manifest.json"
+
+                with fsspec.open(manifest_path, "r") as f:
+                    manifest = json.load(f)
+
+                self._manifest_points = manifest["points"]
+
+            if point_key not in self._manifest_points:
+                print(f"⚠️ No interest points found in manifest for {point_key}")
+                return []
+
+            point_path = f"{base_path}/{self._manifest_points[point_key]}"
+
+            df = pd.read_parquet(point_path, engine="pyarrow")
+
+            if len(df) == 0:
+                return []
+
+            return df[["x", "y", "z"]].to_numpy(dtype=np.float64, copy=False)
+
         except Exception as e:
+            print(f"❌ Failed to load interest points from parquet for {point_key}: {e}")
             return []
+
+    # def load_interest_points_from_path(self, base_path, loc_path):
+    #     """
+    #     Load interest points from the interestpoints store.
+
+    #     Compatible with both Zarr v2 and Zarr v3.
+    #     """
+    #     try:
+    #         base_path = str(base_path).rstrip("/")
+
+    #         if base_path.startswith("s3://"):
+    #             anon_options = [True, False]
+    #             last_error = None
+
+    #             for anon in anon_options:
+    #                 try:
+    #                     s3 = s3fs.S3FileSystem(
+    #                         anon=anon,
+    #                         skip_instance_cache=True,
+    #                     )
+
+    #                     mapper = s3fs.S3Map(
+    #                         root=base_path,
+    #                         s3=s3,
+    #                         check=False,
+    #                     )
+
+    #                     if hasattr(zarr.storage, "FsspecStore"):
+    #                         # Zarr v3 path.
+    #                         store = zarr.storage.FsspecStore.from_mapper(mapper)
+    #                     else:
+    #                         # Zarr v2 path.
+    #                         store = mapper
+
+    #                     root = zarr.open(store, mode="r")
+    #                     data = root[loc_path][:]
+    #                     return data.astype(np.float64)
+
+    #                 except Exception as e:
+    #                     last_error = e
+
+    #             raise last_error
+
+    #         else:
+    #             if hasattr(zarr.storage, "LocalStore"):
+    #                 # Zarr v3 path.
+    #                 store = zarr.storage.LocalStore(base_path)
+    #             else:
+    #                 # Zarr v2 path.
+    #                 store = zarr.DirectoryStore(base_path)
+
+    #             root = zarr.open(store, mode="r")
+    #             data = root[loc_path][:]
+    #             return data.astype(np.float64)
+
+    #     except Exception:
+    #         return []
     
+    # def get_transformed_points(self, view_id, view_data, view_registrations, label):
+    #     """
+    #     Retrieve and transform interest points for a given view
+    #     """
+    #     view_info = view_data[view_id]
+    #     path = view_info['path']
+    #     loc_path = f"{path}/{label}/interestpoints/loc"
+    #     full_path = self.n5_output_path + "interestpoints.n5"
+        
+    #     raw_points = self.load_interest_points_from_path(full_path, loc_path)
+
+    #     if len(raw_points) == 0:
+    #         return []
+        
+    #     transform = self.get_transformation_matrix(view_id, view_registrations)
+    #     transformed_points = self.transform_interest_points(raw_points, transform)
+            
+    #     return transformed_points
+
     def get_transformed_points(self, view_id, view_data, view_registrations, label):
         """
         Retrieve and transform interest points for a given view
         """
-        view_info = view_data[view_id]
-        path = view_info['path']
-        loc_path = f"{path}/{label}/interestpoints/loc"
-        full_path = self.n5_output_path + "interestpoints.n5"
-        
-        raw_points = self.load_interest_points_from_path(full_path, loc_path)
+        timepoint, setup = view_id
+
+        point_key = f"{int(timepoint)}/{int(setup)}/{label}"
+        full_path = self.n5_output_path
+
+        raw_points = self.load_interest_points_from_path(full_path, point_key)
 
         if len(raw_points) == 0:
             return []
-        
+
         transform = self.get_transformation_matrix(view_id, view_registrations)
         transformed_points = self.transform_interest_points(raw_points, transform)
-            
+
         return transformed_points
     
     def load_and_transform_points(self, pair, view_data, view_registrations, label):
@@ -456,3 +546,4 @@ class LoadAndTransformPoints:
         process_pairs = ray.get(futures)
 
         return process_pairs, view_registrations
+    

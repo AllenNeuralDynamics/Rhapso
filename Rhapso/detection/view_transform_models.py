@@ -86,4 +86,6 @@ class ViewTransformModels:
         Execute the entry point of the script.
         """
         self.compose_all_view_transforms()
+        print("Transposed View Based Transformation Models")
+        
         return self.concatenated_matrices

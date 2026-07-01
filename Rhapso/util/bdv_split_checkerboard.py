@@ -252,7 +252,7 @@ def generate_settings_file(dataset_xml, output_xml, existing_settings=None):
 
 
 if __name__ == "__main__":
-    input_xml = "/Users/sean.fite/Desktop/rhapso-solver-split-affine.xml"
+    input_xml = "/Users/sean.fite/Desktop/exaSPIM-1/rhapso-solver-split-affine.xml"
     output_xml = "/Users/sean.fite/Desktop/bdv_settings.xml"
     existing_settings_xml = None  # or path to an existing BDV settings file
 

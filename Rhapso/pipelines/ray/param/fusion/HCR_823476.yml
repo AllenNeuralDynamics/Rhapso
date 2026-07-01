@@ -1,23 +1,23 @@
 # AFFINE FUSION
 # -----------------------------------
-aligned_xml_path: "s3://aind-open-data/HCR_823476-s1-ls2_2025-11-18_00-00-00_processed_2026-03-03_22-58-55/image_tile_alignment/bigstitcher.xml"
+aligned_xml_path: "s3://aind-scratch-data/sean.fite/alignment-1/rhapso-solver-affine.xml"
 zarr_input_prefix: "s3://aind-open-data/HCR_823476-s1-ls2_2025-11-18_00-00-00_processed_2026-03-03_22-58-55/image_radial_correction/"
-output_path: "s3://aind-scratch-data/sean.fite/z1_optimizations/823476-1/fusion/fused.zarr" 
+output_path: "s3://aind-scratch-data/sean.fite/z1_optimizations/823476-35/fusion/fused.zarr" 
 block_size: [256, 256, 256]           # xyz
 intensity_range: [0, 65535]           # UINT16 default
 block_scale: [2, 2, 1]                # xyz
 overlap_strategy: "avg_blend"
+output_zarr_version: 3
 
 # MULTISCALE
 # -----------------------------------
-multiscale_zarr_path: "s3://aind-scratch-data/sean.fite/HCR_823476-s5-ls2_2025-12-24_00-00-00_processed_2026-01-03_01-30-29/image_tile_fusing/fused/channel_488.zarr"
+multiscale_zarr_path: "s3://aind-scratch-data/sean.fite/z1_optimizations/823476-35/fusion/fused.zarr"
 multiscale_chunk_size: [128, 128, 128]
-voxel_size: [0.459, 0.0920179382864407, 0.0920179382864407]                     # ZYX
+voxel_size: [0.4586981717240068, 0.0920179382864407, 0.0920179382864407]        # ZYX
 n_lvls: 6                                                                       # Including base level
 scale_factor: [[1, 2, 2], [1, 2, 2], [2, 2, 2], [2, 2, 2], [2, 2, 2]]           # ZYX
 target_block_size_mb: 256
 base_level: 0
-
 
 # NG LINK GENERATOR
 # -----------------------------------

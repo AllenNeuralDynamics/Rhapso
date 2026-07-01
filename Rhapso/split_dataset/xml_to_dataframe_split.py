@@ -210,6 +210,7 @@ class XMLToDataFrameSplit:
         view_setups_df = self.parse_view_setups(root)
         view_registrations_df = self.parse_view_registrations(root)
         view_interest_points_df = self.parse_view_interest_points(root)
+        print("XML Data Loaded")
 
         return {
             "image_loader": image_loader_df,
