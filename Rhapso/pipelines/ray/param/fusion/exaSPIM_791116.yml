@@ -7,7 +7,7 @@ block_size: [256, 256, 384]           # xyz
 intensity_range: [0, 65535]           # UINT16 default
 block_scale: [2, 2, 1]                # xyz
 overlap_strategy: "avg_blend"
-output_zarr_version: "3"
+output_zarr_version: 3
 
 # MULTISCALE
 # -----------------------------------
