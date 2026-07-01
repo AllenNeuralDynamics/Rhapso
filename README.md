@@ -2,6 +2,8 @@
 
 This is the official code base for **Rhapso**, a modular Python toolkit for stitching (alignment and fusion) large-scale microscopy datasets. 
 
+Now Supporting Zarr v3
+
 [![License](https://img.shields.io/badge/license-MIT-brightgreen)](LICENSE)
 [![Python Version](https://img.shields.io/badge/python-3.10-blue.svg)](https://www.python.org/downloads/release/python-3100/)
 [![Documentation](https://img.shields.io/badge/docs-wiki-blue)](https://github.com/AllenNeuralDynamics/Rhapso/wiki)
