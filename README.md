@@ -5,7 +5,7 @@ This is the official code base for **Rhapso**, a modular Python toolkit for stit
 Now Supporting Zarr v3
 
 [![License](https://img.shields.io/badge/license-MIT-brightgreen)](LICENSE)
-[![Python Version](https://img.shields.io/badge/python-3.10-blue.svg)](https://www.python.org/downloads/release/python-3100/)
+[![Python Version](https://img.shields.io/badge/python-3.11-blue.svg)](https://www.python.org/downloads/release/python-3100/)
 [![Documentation](https://img.shields.io/badge/docs-wiki-blue)](https://github.com/AllenNeuralDynamics/Rhapso/wiki)
 
 > Rhapso is published on PyPI and developed by the Allen Institute.
