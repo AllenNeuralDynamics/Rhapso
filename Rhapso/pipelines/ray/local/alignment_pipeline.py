@@ -9,7 +9,7 @@ import ray
 ray.init()
 
 # Point to param file
-with open("Rhapso/pipelines/ray/param/alignment/HCR_823476.yml", "r") as file:
+with open("Rhapso/pipelines/ray/param/alignment/exaSPIM_791116.yml", "r") as file:
     config = yaml.safe_load(file)
 
 # -- INITIALIZE EACH COMPONENT --
@@ -167,12 +167,12 @@ print("-----STARTING ALIGNMENT PIPELINE------")
 interest_point_detection.run()
 print("-----STARTING RIGID-----")
 interest_point_matching_rigid.run()
-solver_rigid.run()
-print("-----STARTING AFFINE-----")
-interest_point_matching_affine.run()
-solver_affine.run()
-print("-----STARTING SPLIT AFFINE-----")
-split_dataset.run()
-interest_point_matching_split_affine.run()
-solver_split_affine.run()
-print("-----ALIGNMENT PIPELINE DONE------")
+# solver_rigid.run()
+# print("-----STARTING AFFINE-----")
+# interest_point_matching_affine.run()
+# solver_affine.run()
+# print("-----STARTING SPLIT AFFINE-----")
+# split_dataset.run()
+# interest_point_matching_split_affine.run()
+# solver_split_affine.run()
+# print("-----ALIGNMENT PIPELINE DONE------")

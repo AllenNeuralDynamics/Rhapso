@@ -18,8 +18,8 @@ from matplotlib.widgets import Slider
 from scipy import ndimage as ndi
 from scipy.spatial import cKDTree
 
-XML_PATH = "s3://aind-scratch-data/sean.fite/HCR_823476.xml"
-ALIGNMENT_STORE_BASE = "s3://aind-scratch-data/sean.fite/exaSPIM-test/test5"
+XML_PATH = "/Users/sean.fite/Desktop/exaSPIM_791116_2tiles.xml"
+ALIGNMENT_STORE_BASE = "/Users/sean.fite/Desktop/exaSPIM-test"
 POINT_LABEL = "beads"
 
 SCALE_LEVEL = "4"
