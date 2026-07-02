@@ -1,4 +1,5 @@
 from Rhapso.matching.xml_parser import XMLParserMatching
+from Rhapso.matching.generate_pairs import GeneratePairs
 from Rhapso.matching.load_and_transform_points import LoadAndTransformPoints
 from Rhapso.matching.ransac_matching import RansacMatching
 from Rhapso.matching.save_matches import SaveMatches
@@ -32,20 +33,22 @@ class InterestPointMatching:
         parser = XMLParserMatching(self.xml_input_path, self.input_type)
         data_global = parser.run()
 
-        # Load and transform points
-        data_loader = LoadAndTransformPoints(data_global, self.xml_input_path, self.n5_output_path, self.match_type)
-        process_pairs, view_registrations = data_loader.run()
+        # Generate matching pairs
+        generate_pairs = GeneratePairs(data_global, self.match_type)
+        process_pairs, view_registrations = generate_pairs.run()
 
         # Distribute interest point matching with Ray
         @ray.remote(num_cpus=2)
-        def match_pair(pointsA, pointsB, viewA_str, viewB_str, label, num_neighbors, redundancy, significance, num_required_neighbors, 
+        def match_pair(viewA, viewB, viewA_str, viewB_str, label, num_neighbors, redundancy, significance, num_required_neighbors, 
                        match_type, inlier_threshold, min_inlier_ratio, num_iterations, model_min_inliers, regularization_weight, search_radius,
-                       view_registrations, input_type, image_file_prefix, ransac_sample_size): 
+                       view_registrations, input_type, image_file_prefix, ransac_sample_size, n5_output_path): 
             
+            points_loader = LoadAndTransformPoints(data_global, view_registrations, label, n5_output_path)
             matcher = RansacMatching(data_global, num_neighbors, redundancy, significance, num_required_neighbors, match_type, inlier_threshold, 
                                      min_inlier_ratio, num_iterations, model_min_inliers, regularization_weight, search_radius, view_registrations,
                                      input_type, image_file_prefix, ransac_sample_size)
-            
+
+            pointsA, pointsB, viewA_str, viewB_str = points_loader.load_and_transform_points(viewA, viewB)
             pointsA, pointsB = matcher.filter_for_overlapping_points(pointsA, pointsB, viewA_str, viewB_str)
 
             if len(pointsA) == 0 or len(pointsB) == 0:
@@ -58,17 +61,17 @@ class InterestPointMatching:
             percent = 100.0 * len(filtered_inliers) / len(candidates) if candidates else 0
             print(f"✅ RANSAC inlier percentage: {percent:.1f}% ({len(filtered_inliers)} of {len(candidates)} for {viewA_str}), {viewB_str}")
 
-            if len(filtered_inliers) < self.model_min_inliers:
+            if len(filtered_inliers) < model_min_inliers:
                 return []
 
             return filtered_inliers if filtered_inliers else []
 
         # --- Distribute ---
         futures = [
-            match_pair.remote(pointsA, pointsB, viewA_str, viewB_str, label, self.num_neighbors, self.redundancy, self.significance, self.num_required_neighbors,
+            match_pair.remote(viewA, viewB, viewA_str, viewB_str, label, self.num_neighbors, self.redundancy, self.significance, self.num_required_neighbors,
                             self.match_type, self.inlier_threshold, self.min_inlier_ratio, self.num_iterations, self.model_min_inliers, self.regularization_weight, 
-                            self.search_radius, view_registrations, self.input_type, self.image_file_prefix, self.ransac_sample_size)
-            for pointsA, pointsB, viewA_str, viewB_str, label in process_pairs
+                            self.search_radius, view_registrations, self.input_type, self.image_file_prefix, self.ransac_sample_size, self.n5_output_path)
+            for viewA, viewB, viewA_str, viewB_str, label in process_pairs
         ]
 
         # --- Collect ---
@@ -83,14 +86,16 @@ class InterestPointMatching:
     def run(self):
         self.match()
 
-
 # DEBUG MATCHING
 # all_results = []
-# for pointsA, pointsB, viewA_str, viewB_str, label in process_pairs:
+# for viewA, viewB, viewA_str, viewB_str, label in process_pairs:
+
+#     data_loader = LoadAndTransformPoints(data_global, view_registrations, label, self.n5_output_path)
 #     matcher = RansacMatching(data_global, self.num_neighbors, self.redundancy, self.significance, self.num_required_neighbors, self.match_type, self.inlier_threshold, 
-#                              self.min_inlier_ratio, self.num_iterations, self.model_min_matches, self.regularization_weight, self.search_radius, view_registrations,
-#                              self.input_type, self.image_file_prefix)
+#                                 self.min_inlier_ratio, self.num_iterations, self.model_min_inliers, self.regularization_weight, self.search_radius, view_registrations,
+#                                 self.input_type, self.image_file_prefix, self.ransac_sample_size)
     
+#     pointsA, pointsB, viewA_str, viewB_str = data_loader.run(viewA, viewB)
 #     pointsA, pointsB = matcher.filter_for_overlapping_points(pointsA, pointsB, viewA_str, viewB_str)
 
 #     if len(pointsA) == 0 or len(pointsB) == 0:
@@ -103,7 +108,7 @@ class InterestPointMatching:
 #     percent = 100.0 * len(filtered_inliers) / len(candidates) if candidates else 0
 #     print(f"✅ RANSAC inlier percentage: {percent:.1f}% ({len(filtered_inliers)} of {len(candidates)} for {viewA_str}), {viewB_str}")
 
-#     if len(filtered_inliers) < self.model_min_matches:
+#     if len(filtered_inliers) < self.model_min_inliers:
 #         continue
 
 #     all_results.append(filtered_inliers)

@@ -2,10 +2,10 @@
 # INTEREST POINT DETECTION
 # -----------------------------------
 
-xml_file_path_detection: 's3://aind-scratch-data/sean.fite/exaSPIM_791116_2tiles.xml' 
+xml_file_path_detection: '/Users/sean.fite/Desktop/exaSPIM_791116_2tiles.xml' 
 image_file_prefix: 's3://aind-open-data/exaSPIM_791116_2026-06-09_16-31-33_processed_2026-06-16_12-28-34/flatfield_correction/SPIM.ome.zarr/'
-xml_output_file_path: &detection_xml_output_file_path 's3://aind-scratch-data/sean.fite/exaSPIM-test/test7/rhapso-detection.xml'
-n5_output_file_prefix: &n5_output_file_prefix 's3://aind-scratch-data/sean.fite/exaSPIM-test/test7/'
+xml_output_file_path: &detection_xml_output_file_path '/Users/sean.fite/Desktop/exaSPIM-test/rhapso-detection.xml'
+n5_output_file_prefix: &n5_output_file_prefix '/Users/sean.fite/Desktop/exaSPIM-test/'
 detection_run_type: 'ray' 
 file_type: 'zarr' 
 dsxy: 16
@@ -13,11 +13,11 @@ dsz: 16
 min_intensity: 0
 max_intensity: 120
 sigma: 1.8
-threshold: 0.003
+threshold: 0.005
 median_filter: 3
 combine_distance: 0.5
 chunks_per_bound: 1
-max_spots: 1000
+max_spots: 150000
 
 # SOLVER
 # -----------------------------------
@@ -36,26 +36,26 @@ fixed_tile: False
 # -- RIGID --
 run_type_solver_rigid: 'rigid'
 xml_file_path_solver_rigid: *detection_xml_output_file_path
-xml_file_path_output_rigid: &rigid_solver_xml_output 's3://aind-scratch-data/sean.fite/exaSPIM-test/test7/rhapso-solver-rigid.xml'
+xml_file_path_output_rigid: &rigid_solver_xml_output '/Users/sean.fite/Desktop/exaSPIM-test/rhapso-solver-rigid.xml'
 regularization_weight_solver_rigid: 1.0
 
 # -- AFFINE --
 run_type_solver_affine: 'affine'
 xml_file_path_solver_affine: *rigid_solver_xml_output
-xml_file_path_output_affine: &affine_solver_xml_output 's3://aind-scratch-data/sean.fite/exaSPIM-test/test7/rhapso-solver-affine.xml'
+xml_file_path_output_affine: &affine_solver_xml_output '/Users/sean.fite/Desktop/exaSPIM-test/rhapso-solver-affine.xml'
 regularization_weight_solver_affine: 0.25
 
 # -- SPLIT AFFINE --
 run_type_solver_split_affine: 'split-affine'
-xml_file_path_solver_split_affine: 's3://aind-scratch-data/sean.fite/exaSPIM-test/test7/rhapso-split.xml'
-xml_file_path_output_split_affine: 's3://aind-scratch-data/sean.fite/exaSPIM-test/test7/rhapso-solver-split-affine.xml'
+xml_file_path_solver_split_affine: '/Users/sean.fite/Desktop/exaSPIM-test/rhapso-split.xml'
+xml_file_path_output_split_affine: '/Users/sean.fite/Desktop/exaSPIM-test/rhapso-solver-split-affine.xml'
 regularization_weight_solver_split_affine: 0.5
 
 # SPLIT DATASET
 # -----------------------------------
 
 xml_file_path_split: *affine_solver_xml_output
-xml_output_file_path_split: &affine_split_xml_output 's3://aind-scratch-data/sean.fite/exaSPIM-test/test7/rhapso-split.xml'
+xml_output_file_path_split: &affine_split_xml_output '/Users/sean.fite/Desktop/exaSPIM-test/rhapso-split.xml'
 n5_path_split: *n5_output_file_prefix
 point_density: 100.0
 min_points: 20

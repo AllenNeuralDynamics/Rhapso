@@ -18,7 +18,7 @@ setup(
     },
     packages=find_packages(),
     install_requires=[
-        'setuptools>=68',
+        'setuptools>=68,<80',
         'pandas',
         'PyYAML==6.0.2',
         'numcodecs>=0.14',

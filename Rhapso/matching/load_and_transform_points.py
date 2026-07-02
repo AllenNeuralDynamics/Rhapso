@@ -1,8 +1,4 @@
-import zarr
 import numpy as np
-import s3fs
-from itertools import combinations
-import ray
 import json
 import fsspec
 import pandas as pd
@@ -12,11 +8,11 @@ Load and Transform Points loads interest points from n5 and transforms them into
 """
 
 class LoadAndTransformPoints:
-    def __init__(self, data_global, xml_input_path, n5_output_path, match_type):
+    def __init__(self, data_global, view_registrations, label, n5_output_path):
         self.data_global = data_global
-        self.xml_input_path = xml_input_path
+        self.view_registrations = view_registrations
+        self.label = label
         self.n5_output_path = n5_output_path
-        self.match_type = match_type
     
     def transform_interest_points(self, points, transformation_matrix):
         """
@@ -60,12 +56,12 @@ class LoadAndTransformPoints:
             # Return identity matrix as fallback
             return np.eye(4)
         
-    def get_transformation_matrix(self, view_id, view_registrations):
+    def get_transformation_matrix(self, view_id):
         """
         Compose all affine ViewTransforms for a given view (timepoint, setup)
         """
         try:
-            transforms = view_registrations.get(view_id, [])
+            transforms = self.view_registrations.get(view_id, [])
             if not transforms:
                 print(f"⚠️ No transforms found for view {view_id}, using identity matrix")
                 return np.eye(4)
@@ -93,180 +89,6 @@ class LoadAndTransformPoints:
         except Exception as e:
             print(f"❌ Error in get_transformation_matrix for view {view_id}: {e}")
             raise
-
-    def load_interest_points_from_path(self, base_path, point_key):
-        """
-        Load interest points from the Parquet/JSON alignment store.
-
-        point_key format:
-            timepoint/setup/label
-        """
-        try:
-            base_path = str(base_path).rstrip("/")
-
-            if not hasattr(self, "_manifest_points"):
-                manifest_path = f"{base_path}/manifest.json"
-
-                with fsspec.open(manifest_path, "r") as f:
-                    manifest = json.load(f)
-
-                self._manifest_points = manifest["points"]
-
-            if point_key not in self._manifest_points:
-                print(f"⚠️ No interest points found in manifest for {point_key}")
-                return []
-
-            point_path = f"{base_path}/{self._manifest_points[point_key]}"
-
-            df = pd.read_parquet(point_path, engine="pyarrow")
-
-            if len(df) == 0:
-                return []
-
-            return df[["x", "y", "z"]].to_numpy(dtype=np.float64, copy=False)
-
-        except Exception as e:
-            print(f"❌ Failed to load interest points from parquet for {point_key}: {e}")
-            return []
-
-    def get_transformed_points(self, view_id, view_data, view_registrations, label):
-        """
-        Retrieve and transform interest points for a given view
-        """
-        timepoint, setup = view_id
-
-        point_key = f"{int(timepoint)}/{int(setup)}/{label}"
-        full_path = self.n5_output_path
-
-        raw_points = self.load_interest_points_from_path(full_path, point_key)
-
-        if len(raw_points) == 0:
-            return []
-
-        transform = self.get_transformation_matrix(view_id, view_registrations)
-        transformed_points = self.transform_interest_points(raw_points, transform)
-
-        return transformed_points
-    
-    def load_and_transform_points(self, pair, view_data, view_registrations, label):
-        """
-        Process a single matching task
-        """
-        viewA, viewB = pair
-        try:
-            # Retrieve and transform interest points for both views
-            if isinstance(viewA, tuple) and len(viewA) == 2:
-                tpA, setupA = viewA
-                viewA_str = f"(tpId={tpA}, setupId={setupA})"
-            else:
-                viewA_str = str(viewA)
-            if isinstance(viewB, tuple) and len(viewB) == 2:
-                tpB, setupB = viewB
-                viewB_str = f"(tpId={tpB}, setupId={setupB})"
-            else:
-                viewB_str = str(viewB)
-            
-            pointsA = self.get_transformed_points(viewA, view_data, view_registrations, label)
-            pointsB = self.get_transformed_points(viewB, view_data, view_registrations, label)
-
-            return pointsA, pointsB, viewA_str, viewB_str
-            
-        except Exception as e:
-            print(f"❌ ERROR: Failed in process_matching_task for views {viewA} and {viewB}")
-            print(f"Exception type: {type(e).__name__}")
-            print(f"Exception details: {str(e)}")
-            import traceback
-            traceback.print_exc()
-            return []
-    
-    # TODO - eventually handle if more than 1 timepoint
-    def merge_sets(self, v_sets, pair_sets, i1, i2):
-        return [], []
-    
-    def set_id(self, v1, v_sets):
-        """
-        Find the index of the component in `v_sets` that contains `v1`
-        """
-        i = -1
-        for j in range(len(v_sets)):
-            if v1 in v_sets[j]:
-                i = j
-        
-        return i
-    
-    def subsets(self, pairs):
-        """
-        Cluster views into connected components based on the given pairs
-        """
-        views = list(self.data_global['viewsInterestPoints'].keys())
-        v_sets: list[set] = []
-        pair_sets: list[list[tuple]] = []       
-        groups = None
-
-        counter = 0
-
-        for pair_a, pair_b in pairs:
-            
-            counter += 1
-            if counter == 100:
-                break
-            
-            i1 = self.set_id(pair_a, v_sets)
-            i2 = self.set_id(pair_b, v_sets)
-
-            if i1 == -1 and i2 == -1:
-                v_set: list[set] = []
-                pair_set: list[set] = []
-                pair_set.append((pair_a, pair_b))
-                v_set.append(pair_a)
-                v_set.append(pair_b)
-
-                v_sets.append(v_set)
-                pair_sets.append(pair_set)
-            
-            elif i1 >= 0 and i2 == 0:
-                v_sets[i2].append(pair_a)
-                pair_sets[i2].append((pair_a, pair_b))
-            
-            elif i1 >= 0 and i2 == -1:
-                v_sets[i1].append(pair_b)
-                pair_sets[i1].append((pair_a, pair_b))
-            
-            elif i1 == i2:
-                pair_sets[i1].append((pair_a, pair_b))
-            
-            else:
-                pair_sets, v_sets = self.merge_sets(v_sets, pair_sets, i1, i2)
-        
-        for view in views:
-            is_present = False
-
-            for subset_precursor in v_sets:
-                if view in subset_precursor:
-                    is_present = True
-
-            if not is_present:
-                v_set = []
-                pair_set = []
-
-                v_set.append(view)
-                v_sets.append(v_set)
-                pair_sets.append(pair_set)
-
-        subsets = []
-
-        for i in range(len(v_sets)):
-            set_pairs = pair_sets[i]
-            set_views = v_sets[i]
-            subsets.append((set_views, set_pairs, groups))
-        
-        return {
-            'groups': None,
-            'pairs': pairs,
-            'rangeComparator': None,
-            'subsets': subsets,
-            'views': views 
-        }
 
     def get_bounding_boxes(self, M, dims):
         """
@@ -353,121 +175,79 @@ class LoadAndTransformPoints:
         bbb = self.bounding_boxes(mb, dims_b)
 
         return self.overlaps(bba, bbb)   
-
-    def setup_groups_split(self):
+    
+    def load_interest_points_from_path(self, base_path, point_key):
         """
-        Generate all unique view pairs and keep only those whose setups overlap
-        """
-        views = list(self.data_global['viewsInterestPoints'].keys())
-        pairs = list(combinations(views, 2))
-        final_pairs = []
+        Load interest points from the Parquet/JSON alignment store.
 
-        for view_a, view_b in pairs:    
-            dims_a = self.data_global['viewSetup']['byId'][view_a[1]]
-            dims_b = self.data_global['viewSetup']['byId'][view_b[1]]
+        point_key format:
+            timepoint/setup/label
+        """
+        try:
+            base_path = str(base_path).rstrip("/")
+
+            if not hasattr(self, "_manifest_points"):
+                manifest_path = f"{base_path}/manifest.json"
+
+                with fsspec.open(manifest_path, "r") as f:
+                    manifest = json.load(f)
+
+                self._manifest_points = manifest["points"]
+
+            if point_key not in self._manifest_points:
+                print(f"⚠️ No interest points found in manifest for {point_key}")
+                return []
+
+            point_path = f"{base_path}/{self._manifest_points[point_key]}"
+
+            df = pd.read_parquet(point_path, engine="pyarrow")
+
+            if len(df) == 0:
+                return []
+
+            return df[["x", "y", "z"]].to_numpy(dtype=np.float64, copy=False)
+
+        except Exception as e:
+            print(f"❌ Failed to load interest points from parquet for {point_key}: {e}")
+            return []
+
+    def get_transformed_points(self, view_id):
+        """
+        Retrieve and transform interest points for a given view
+        """
+        timepoint, setup = view_id
+
+        point_key = f"{int(timepoint)}/{int(setup)}/{self.label}"
+        full_path = self.n5_output_path
+
+        raw_points = self.load_interest_points_from_path(full_path, point_key)
+
+        if len(raw_points) == 0:
+            return []
+
+        transform = self.get_transformation_matrix(view_id)
+        transformed_points = self.transform_interest_points(raw_points, transform)
+
+        return transformed_points
+    
+    def load_and_transform_points(self, viewA, viewB):
+        """
+        Process a single matching task
+        """
+        try:
+            # Retrieve and transform interest points for both views
+            viewA_str = f"(tpId={viewA[0]}, setupId={viewA[1]})"
+            viewB_str = f"(tpId={viewB[0]}, setupId={viewB[1]})"   
+            pointsA = self.get_transformed_points(viewA)
+            pointsB = self.get_transformed_points(viewB)
+            return pointsA, pointsB, viewA_str, viewB_str
             
-            if self.overlap(view_a, dims_a, view_b, dims_b):
-                view_a = (view_a[0], view_a[1])
-                view_b = (view_b[0], view_b[1])
-                final_pairs.append((view_a, view_b))
-        
-        return final_pairs
+        except Exception:
+            print(f"❌ ERROR: Failed in process_matching_task for views {viewA} and {viewB}")
+            return []
     
-    def setup_groups(self):
-        """
-        Group views by timepoint and generate all unique unordered intra-timepoint pairs
-        """
-        views = list(self.data_global['viewsInterestPoints'].keys())
-
-        # Group views by timepoint
-        timepoint_groups = {}
-        for view in views:
-            timepoint, _ = view
-            if timepoint not in timepoint_groups:
-                timepoint_groups[timepoint] = []
-            timepoint_groups[timepoint].append(view)
-
-        # Create pairs within each timepoint
-        pairs = []
-        for timepoint, timepoint_views in timepoint_groups.items():
-            for i in range(len(timepoint_views)):
-                for j in range(i + 1, len(timepoint_views)):
-                    pairs.append((timepoint_views[i], timepoint_views[j]))
-
-        return {
-            'groups': timepoint_groups,
-            'pairs': pairs,
-            'rangeComparator': None,
-            'subsets': None,
-            'views': views
-        }
-    
-    def as_list(self, x):
-        return x if isinstance(x, list) else [x]
-
-    def expand_pairs_with_labels(self, base_pairs, view_ids_global):
-        """
-        Add a label for each pair
-        """
-        out = []
-        for va, vb in base_pairs:
-            la = self.as_list(view_ids_global[va].get('label', []))
-            lb = self.as_list(view_ids_global[vb].get('label', []))
-
-            if not la or not lb:
-                continue
-
-            lb_set = set(lb)
-            common = [l for l in la if l in lb_set]
-
-            for l in common:
-                out.append(((va[0], va[1]), (vb[0], vb[1]), l))
-
-        return out
-    
-    def run(self):
+    def run(self, viewA, viewB):
         """
         Executes the entry point of the script.
         """
-        view_ids_global = self.data_global['viewsInterestPoints']
-        view_registrations = self.data_global['viewRegistrations']
-
-        # Set up view groups using complete dataset info
-        if self.match_type == "split-affine":
-            setup = self.setup_groups_split()
-            setup = self.subsets(setup)
-        else:
-            setup = self.setup_groups()
-        
-        # Distribute points loading (very helpful with split-affine)
-        @ray.remote
-        def process_pair(view_a, view_b, label, view_ids_global, view_registrations):
-            if isinstance(view_a, tuple) and len(view_a) == 2:
-                tpA, setupA = view_a
-                viewA_str = f"(tpId={tpA}, setupId={setupA})"
-            else:
-                viewA_str = str(view_a)
-
-            if isinstance(view_b, tuple) and len(view_b) == 2:
-                tpB, setupB = view_b
-                viewB_str = f"(tpId={tpB}, setupId={setupB})"
-            else:
-                viewB_str = str(view_b)
-
-            pointsA, pointsB, viewA_str, viewB_str = self.load_and_transform_points(
-                (view_a, view_b), view_ids_global, view_registrations, label
-            )
-            return pointsA, pointsB, viewA_str, viewB_str, label
-
-        setup['pairs'] = self.expand_pairs_with_labels(setup['pairs'], view_ids_global)
-
-        # launch Ray tasks
-        futures = [
-            process_pair.remote(view_a, view_b, label, view_ids_global, view_registrations)
-            for view_a, view_b, label in setup['pairs']
-        ]
-
-        process_pairs = ray.get(futures)
-
-        return process_pairs, view_registrations
-    
+        return self.load_and_transform_points(viewA, viewB)

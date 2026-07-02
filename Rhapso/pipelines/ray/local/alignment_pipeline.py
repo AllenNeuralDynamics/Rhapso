@@ -9,7 +9,7 @@ import ray
 ray.init()
 
 # Point to param file
-with open("Rhapso/pipelines/ray/param/alignment/HCR_823476.yml", "r") as file:
+with open("Rhapso/pipelines/ray/param/alignment/exaSPIM_791116.yml", "r") as file:
     config = yaml.safe_load(file)
 
 # -- INITIALIZE EACH COMPONENT --
