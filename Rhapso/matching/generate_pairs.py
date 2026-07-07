@@ -1,4 +1,5 @@
 from itertools import combinations
+import numpy as np
 
 """
 Generate match pairs
@@ -97,6 +98,112 @@ class GeneratePairs:
             'subsets': subsets,
             'views': views 
         }
+    
+    def get_bounding_boxes(self, matrix, dims):
+        """
+        Compute the world-space axis-aligned bounding box of a voxel-aligned view.
+        """
+        matrix = np.asarray(matrix, dtype=float)
+
+        if matrix.shape == (3, 4):
+            matrix = np.vstack([
+                matrix,
+                [0.0, 0.0, 0.0, 1.0],
+            ])
+
+        size_x = float(dims[0]) - 1.0
+        size_y = float(dims[1]) - 1.0
+        size_z = float(dims[2]) - 1.0
+
+        linear = matrix[:3, :3]
+        translation = matrix[:3, 3]
+
+        minimum = translation.copy()
+        maximum = translation.copy()
+
+        sizes = (size_x, size_y, size_z)
+
+        for output_axis in range(3):
+            for input_axis, size in enumerate(sizes):
+                contribution = size * linear[output_axis, input_axis]
+
+                if contribution < 0:
+                    minimum[output_axis] += contribution
+                else:
+                    maximum[output_axis] += contribution
+
+        return minimum, maximum
+
+    def bounding_boxes(self, matrix, dims):
+        """
+        Convert the real-valued bounds to a padded integer bounding box.
+        """
+        minimum, maximum = self.get_bounding_boxes(
+            matrix,
+            dims["size"],
+        )
+
+        minimum_integer = np.rint(minimum).astype(int) - 1
+        maximum_integer = np.rint(maximum).astype(int) + 1
+
+        return minimum_integer.tolist(), maximum_integer.tolist()
+
+
+    def transform_matrices(self, view):
+        """
+        Compose all registered transforms for a view.
+        """
+        matrix = np.eye(4, dtype=float)
+
+        for model in self.data_global["viewRegistrations"].get(view, []):
+            values = np.fromstring(
+                str(model["affine"]).replace(",", " "),
+                sep=" ",
+                dtype=float,
+            )
+
+            if values.size != 12:
+                raise ValueError(
+                    f"Expected 12 affine values for view {view}, "
+                    f"got {values.size}"
+                )
+
+            transform = np.eye(4, dtype=float)
+            transform[:3, :4] = values.reshape(3, 4)
+
+            matrix = matrix @ transform
+
+        return matrix
+
+
+    def overlaps(self, box_a, box_b):
+        """
+        Return True when two axis-aligned bounding boxes intersect.
+        """
+        minimum_a, maximum_a = box_a
+        minimum_b, maximum_b = box_b
+
+        for axis in range(3):
+            if maximum_a[axis] < minimum_b[axis]:
+                return False
+
+            if maximum_b[axis] < minimum_a[axis]:
+                return False
+
+        return True
+
+
+    def overlap(self, view_a, dims_a, view_b, dims_b):
+        """
+        Determine whether two transformed views overlap.
+        """
+        matrix_a = self.transform_matrices(view_a)
+        matrix_b = self.transform_matrices(view_b)
+
+        box_a = self.bounding_boxes(matrix_a, dims_a)
+        box_b = self.bounding_boxes(matrix_b, dims_b)
+
+        return self.overlaps(box_a, box_b)
     
     def setup_groups_split(self):
         """
