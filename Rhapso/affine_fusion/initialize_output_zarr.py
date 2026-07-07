@@ -194,7 +194,7 @@ class InitializeOutputZarr:
         """
         return self.open_group_at_path(
             self.output_path,
-            mode="w",
+            mode="a",
             anon=False if self.output_path.startswith("s3://") else None,
         )
 
@@ -210,7 +210,7 @@ class InitializeOutputZarr:
                 shape=shape,
                 chunks=chunks,
                 dtype=np.uint16,
-                overwrite=True,
+                overwrite=False,
                 fill_value=0,
             )
 
@@ -239,11 +239,13 @@ class InitializeOutputZarr:
             shape=shape,
             chunks=chunks,
             dtype=np.uint16,
-            overwrite=True,
+            overwrite=False,
             fill_value=0,
             dimension_separator="/",
         )
 
     def run(self):
         root = self.create_output_root()
-        self.create_output_array(root)
+
+        if "0" not in root:
+            self.create_output_array(root)
