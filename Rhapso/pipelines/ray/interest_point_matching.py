@@ -38,7 +38,7 @@ class InterestPointMatching:
         process_pairs, view_registrations = generate_pairs.run()
 
         # Distribute interest point matching with Ray
-        @ray.remote(num_cpus=2)
+        @ray.remote
         def match_pair(viewA, viewB, viewA_str, viewB_str, label, num_neighbors, redundancy, significance, num_required_neighbors, 
                        match_type, inlier_threshold, min_inlier_ratio, num_iterations, model_min_inliers, regularization_weight, search_radius,
                        view_registrations, input_type, image_file_prefix, ransac_sample_size, n5_output_path): 
