@@ -307,11 +307,12 @@ class GenerateFusionInstructions():
             
             if self.overlap_strategy == "avg_blend":
                 instructions = self.create_avg_blend(dim, border, blending, transform, interval_min_xyz=(0, 0, 0))
-            elif self.overlap_strategy == "lowest_view_wins":
+            elif self.overlap_strategy in ("lowest_view_wins", "max_blend"):
                 instructions = self.create_masking(dim, border, transform, interval_min_xyz=(0,0,0))
             else:
                 raise ValueError(
-                f"Unknown fusion_type={self.overlap_strategy!r}. Expected 'avg_blend' or 'lowest_view_wins'."
+                f"Unknown overlap_strategy={self.overlap_strategy!r}. Expected 'avg_blend', "
+                "'lowest_view_wins', or 'max_blend'."
             )
                 
             image_instructions[view] = instructions

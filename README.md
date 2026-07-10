@@ -389,7 +389,7 @@ python Rhapso/pipelines/ray/aws/alignment_pipeline.py
 | `block_size`         | Fusion opt     | Cell size per task xyz                                   | 256, 256, 256                 |
 | `intensity_range`    | Fusion config  | Range of intensity values                                | 0, 65535                      |
 | `block_scale`        | Fusion opt     | Scaling of cell size                                     | 2, 2, 1                       |
-| `overlap_strategy`   | Edge handling  | Strategy for competing pixels                            | avg_blend or lowest_view_wins |
+| `overlap_strategy`   | Edge handling  | Strategy for competing pixels                            | avg_blend, lowest_view_wins, or max_blend |
 | `output_zarr_version`| Zarr version   | Set which zarr version you want for output               | 2 or 3                        |
 
 ```
