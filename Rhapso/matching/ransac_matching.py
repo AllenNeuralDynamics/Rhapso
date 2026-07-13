@@ -1,6 +1,5 @@
 import numpy as np
 from sklearn.neighbors import KDTree
-import itertools
 import random
 from scipy.linalg import eigh
 import zarr
@@ -220,88 +219,93 @@ class RansacMatching:
     
     def model_regularization(self, point_pairs):
         if self.match_type == "rigid":
-            regularized_model = self.fit_rigid_model(point_pairs)
-        elif self.match_type == "affine" or self.match_type == "split-affine":
+            return self.fit_rigid_model(point_pairs)
+
+        if self.match_type == "affine" or self.match_type == "split-affine":
             rigid_model = self.fit_rigid_model(point_pairs)
             affine_model = self.fit_affine_model(point_pairs)
-            regularized_model = (1 - self.regularization_weight) * affine_model + self.regularization_weight * rigid_model
-        else:
-            raise SystemExit(f"Unsupported match type: {self.match_type}")
-        
-        return regularized_model
-    
+            w = self.regularization_weight
+            return (1.0 - w) * affine_model + w * rigid_model
+
+        raise SystemExit(f"Unsupported match type: {self.match_type}")
+
     def compute_ransac(self, candidates):
         best_inliers = []
-        max_inliers = 0
         best_model = None
+        max_inliers = 0
 
         if len(candidates) < self.model_min_inliers:
             return [], None
-        
+
+        rng = random
+
         for _ in range(self.num_iterations):
-            indices = random.sample(range(len(candidates)), self.ransac_sample_size)
-            min_matches = [candidates[i] for i in indices]
+            indices = rng.sample(
+                range(len(candidates)),
+                self.ransac_sample_size,
+            )
+            sample = [candidates[i] for i in indices]
 
             try:
-                point_pairs = [(m[1], m[5]) for m in min_matches]
-                regularized_model = self.model_regularization(point_pairs)
-            except Exception as e:
-                print(e)
-                continue
-
-            num_inliers = 0
-            is_good, tmp_inliers = self.test(candidates, regularized_model, self.inlier_threshold, self.min_inlier_ratio, self.model_min_inliers)
-
-            while is_good and num_inliers < len(tmp_inliers):
-                num_inliers = len(tmp_inliers)
-                point_pairs = [(i[1], i[5]) for i in tmp_inliers]
-                regularized_model = self.model_regularization(point_pairs)
-                is_good, tmp_inliers = self.test(candidates, regularized_model, self.inlier_threshold, self.min_inlier_ratio, self.model_min_inliers)
-
-            if len(tmp_inliers) > max_inliers:
-                best_inliers = tmp_inliers
-                max_inliers = len(tmp_inliers)
-                best_model = regularized_model
-
-        return best_inliers, best_model
-
-    def create_candidates(self, desc_a, desc_b):
-        match_list = []
-        
-        for a in range(1):
-            for b in range(1):
-
-                matches = []
-                for i in range(self.num_required_neighbors):
-                    point_match = (desc_a['relative_descriptors'][i], desc_b['relative_descriptors'][i])
-                    matches.append(point_match)
-
-                match_list.append(matches)
-        
-        return match_list
-    
-    def descriptor_distance(self, desc_a, desc_b):
-        matches_list = self.create_candidates(desc_a, desc_b)
-
-        best_similarity = float("inf")
-        best_match_set = None
-
-        for matches in matches_list:
-            try:
-                points_a = np.array([pa for pa, _ in matches])
-                points_b = np.array([pb for _, pb in matches])
-
-                squared_diff_sum = np.sum((points_a - points_b) ** 2)
-                similarity = squared_diff_sum / points_a.shape[1] 
-
-                if similarity < best_similarity:
-                    best_similarity = similarity
-                    best_match_set = matches
-
+                point_pairs = [
+                    (match[1], match[5])
+                    for match in sample
+                ]
+                model = self.model_regularization(point_pairs)
             except Exception:
                 continue
 
-        return best_similarity
+            is_good, inliers = self.test(
+                candidates,
+                model,
+                self.inlier_threshold,
+                self.min_inlier_ratio,
+                self.model_min_inliers,
+            )
+
+            # The initial model did not satisfy the configured RANSAC gates.
+            if not is_good:
+                continue
+
+            previous_count = 0
+
+            # Refit using all current inliers until the inlier set stops growing.
+            while is_good and len(inliers) > previous_count:
+                previous_count = len(inliers)
+
+                try:
+                    point_pairs = [
+                        (match[1], match[5])
+                        for match in inliers
+                    ]
+                    model = self.model_regularization(point_pairs)
+                except Exception:
+                    is_good = False
+                    break
+
+                is_good, refined_inliers = self.test(
+                    candidates,
+                    model,
+                    self.inlier_threshold,
+                    self.min_inlier_ratio,
+                    self.model_min_inliers,
+                )
+
+                if not is_good:
+                    break
+
+                inliers = refined_inliers
+
+            # Never save a model that failed after refinement.
+            if not is_good:
+                continue
+
+            if len(inliers) > max_inliers:
+                best_inliers = inliers
+                max_inliers = len(inliers)
+                best_model = model
+
+        return best_inliers, best_model
     
     def create_simple_point_descriptors(self, tree, points_array, idx, num_required_neighbors, matcher):
         k = num_required_neighbors + 1 
@@ -339,90 +343,113 @@ class RansacMatching:
                 raise
 
         return descriptors
-
+    
     def get_candidates(self, points_a, points_b, view_a, view_b, label):
-        difference_threshold = 3.4028235e+38
-        max_value = float("inf")
-        
-        # -- Get Points and Indexes
+        if len(points_a) == 0 or len(points_b) == 0:
+            return []
+
         idx_a, coords_a = zip(*points_a)
         idx_b, coords_b = zip(*points_b)
-        points_a_array = np.array(coords_a)
-        points_b_array = np.array(coords_b)
-        
-        # --- KD Trees ---
+
+        points_a_array = np.asarray(coords_a, dtype=np.float64)
+        points_b_array = np.asarray(coords_b, dtype=np.float64)
+
+        k = self.num_required_neighbors + 1
+
+        if len(points_a_array) < k or len(points_b_array) < k:
+            return []
+
         tree_a = KDTree(points_a_array)
         tree_b = KDTree(points_b_array)
 
-        # --- Subset Matcher ---
-        subset_size = self.num_neighbors
-        total_neighbors = self.num_neighbors + self.redundancy  
-        neighbor_indices_combinations = list(itertools.combinations(range(total_neighbors), subset_size))
-        num_combinations = len(neighbor_indices_combinations)
-        num_matchings = num_combinations * num_combinations
-        matcher = {
-            "subset_size": subset_size,
-            "num_neighbors": total_neighbors,
-            "neighbors": neighbor_indices_combinations,
-            "num_combinations": num_combinations,
-            "num_matchings": num_matchings
-        }
+        # Build the same local nearest-neighbor descriptors as before.
+        _, nbr_a = tree_a.query(
+            points_a_array,
+            k=k,
+            return_distance=True,
+        )
+        _, nbr_b = tree_b.query(
+            points_b_array,
+            k=k,
+            return_distance=True,
+        )
 
-        # --- Descriptors ---
-        descriptors_a = self.create_simple_point_descriptors(tree_a, points_a_array, idx_a, self.num_required_neighbors, matcher)
-        descriptors_b = self.create_simple_point_descriptors(tree_b, points_b_array, idx_b, self.num_required_neighbors, matcher)
+        relative_a = (
+            points_a_array[nbr_a[:, 1:]]
+            - points_a_array[:, None, :]
+        )
+        relative_b = (
+            points_b_array[nbr_b[:, 1:]]
+            - points_b_array[:, None, :]
+        )
 
-        # --- Descriptor Matching ---
+        # Only compare A points to B points inside the existing search radius.
+        nearby_b_for_a = tree_b.query_radius(
+            points_a_array,
+            r=self.search_radius,
+            return_distance=False,
+        )
+
         correspondence_candidates = []
 
-        out_of_radius = 0
-        passed_lowes = 0
-        first_if = 0
-        second_if = 0
-        
-        for desc_a in descriptors_a:  
-            best_difference = float("inf")
-            second_best_difference = float("inf")  
-            best_match = None
-            second_best_match = None
+        for a_pos, b_positions in enumerate(nearby_b_for_a):
+            # Lowe's test requires a best and second-best candidate.
+            if b_positions.size < 2:
+                continue
 
-            for desc_b in descriptors_b:
+            # Match original B traversal order and deterministic tie behavior.
+            b_positions = np.sort(b_positions)
 
-                if np.linalg.norm(desc_a['point'] - desc_b['point']) > self.search_radius:
-                    out_of_radius += 1
-                    continue
-                
-                difference = self.descriptor_distance(desc_a, desc_b)
+            # Compare this A descriptor against all nearby B descriptors.
+            delta = relative_b[b_positions] - relative_a[a_pos]
 
-                if difference < second_best_difference:
-                    second_best_difference = difference
-                    second_best_match = desc_b
-                    first_if += 1
+            differences = (
+                np.einsum(
+                    "nkd,nkd->n",
+                    delta,
+                    delta,
+                )
+                / 3.0
+            )
 
-                    if second_best_difference < best_difference:
-                        tmp_diff = second_best_difference
-                        tmp_match = second_best_match
-                        second_best_difference = best_difference
-                        second_best_match = best_match
-                        best_difference = tmp_diff
-                        best_match = tmp_match
-                        second_if += 1
-            
-            # --- Lowe's Test ---
-            if best_difference < difference_threshold and best_difference * self.significance < second_best_difference and second_best_difference != max_value:
-                correspondence_candidates.append((
-                    desc_a['point_index'],        
-                    desc_a['point'],               
-                    view_a,
-                    label,
-                    best_match['point_index'],    
-                    best_match['point'],            
-                    view_b,
-                    label
-                ))
-                passed_lowes += 1
+            # Find the best and second-best without sorting every score.
+            best_local = int(np.argmin(differences))
 
-        # print(f"out of range: {out_of_radius}, first if: {first_if}, second if: {second_if}, passed lowes: {passed_lowes}")
+            second_differences = differences.copy()
+            second_differences[best_local] = np.inf
+            second_local = int(np.argmin(second_differences))
+
+            best_difference = float(differences[best_local])
+            second_best_difference = float(
+                differences[second_local]
+            )
+
+            if not (
+                np.isfinite(best_difference)
+                and np.isfinite(second_best_difference)
+            ):
+                continue
+
+            # Same Lowe/significance gate as the original matcher.
+            if (
+                best_difference * self.significance
+                < second_best_difference
+            ):
+                b_pos = int(b_positions[best_local])
+
+                correspondence_candidates.append(
+                    (
+                        idx_a[a_pos],
+                        points_a_array[a_pos],
+                        view_a,
+                        label,
+                        idx_b[b_pos],
+                        points_b_array[b_pos],
+                        view_b,
+                        label,
+                    )
+                )
+
         return correspondence_candidates
     
     def get_tile_dims(self, view1):

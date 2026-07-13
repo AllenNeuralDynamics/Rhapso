@@ -6,7 +6,7 @@ xml_file_path_detection: 's3://aind-scratch-data/sean.fite/HCR_823476.xml'
 image_file_prefix: 's3://aind-open-data/HCR_823476-s1-ls2_2025-11-18_00-00-00_processed_2026-03-03_22-58-55/image_radial_correction/' 
 xml_output_file_path: &detection_xml_output_file_path 's3://aind-scratch-data/sean.fite/alignment-1/rhapso-detection.xml'
 n5_output_file_prefix: &n5_output_file_prefix 's3://aind-scratch-data/sean.fite/alignment-1/' 
-detection_run_type: 'ray' 
+run_type: 'ray' 
 file_type: 'zarr' 
 dsxy: 4
 dsz: 4
@@ -24,27 +24,30 @@ max_spots: 1000
 
 n5_input_path: *n5_output_file_prefix
 metrics_output_path: "metrics/metrics.json"
-relative_threshold: 3.5
-absolute_threshold: 7.0
 min_matches: 3
 damp: 1.0
 max_iterations: 10000
 max_allowed_error: .inf
 max_plateauwidth: 200
-fixed_tile: False
+fixed_tile: 
 
 # -- RIGID --
 run_type_solver_rigid: 'rigid'
 xml_file_path_solver_rigid: *detection_xml_output_file_path
 xml_file_path_output_rigid: &rigid_solver_xml_output 's3://aind-scratch-data/sean.fite/alignment-1/rhapso-solver-rigid.xml'
 regularization_weight_solver_rigid: 1.0
+relative_threshold_rigid: 3.5
+absolute_threshold_rigid: 7.0
+max_cleanup_rounds_rigid: 3
 
 # -- AFFINE --
 run_type_solver_affine: 'affine'
 xml_file_path_solver_affine: *rigid_solver_xml_output
 xml_file_path_output_affine: &affine_solver_xml_output 's3://aind-scratch-data/sean.fite/alignment-1/rhapso-solver-affine.xml'
 regularization_weight_solver_affine: 0.05
-
+relative_threshold_affine: 3.25
+absolute_threshold_affine: 6.0
+max_cleanup_rounds_affine: 5
 
 # INTEREST POINT MATCHING
 # -----------------------------------

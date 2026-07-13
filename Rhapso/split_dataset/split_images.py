@@ -9,7 +9,8 @@ import numpy as np
 import pandas as pd
 
 class SplitImages:
-    def __init__(self, target_image_size, target_overlap, min_step_size, data_gloabl, n5_path, point_density, min_points, max_points, error, excludeRadius):
+    def __init__(self, target_image_size, target_overlap, min_step_size, data_gloabl, n5_path, point_density, min_points, 
+                 max_points, error, excludeRadius):
         self.target_image_size = target_image_size
         self.target_overlap = target_overlap
         self.min_step_size = min_step_size
@@ -55,6 +56,13 @@ class SplitImages:
 
     def point_key(self, timepoint, setup, label):
         return f"{int(timepoint)}/{int(setup)}/{label}"
+    
+    def xml_point_path(self, timepoint, setup, label):
+        return (
+            f"tpId_{int(timepoint)}_"
+            f"viewSetupId_{int(setup)}/"
+            f"{label}"
+        )
 
     def point_relative_path(self, timepoint, setup, label):
         return (
@@ -327,7 +335,11 @@ class SplitImages:
                             "label": split_label,
                             "ip_list": {
                                 "interest_points": split_points,
-                                "point_path": self.point_relative_path(t, new_setup_id, split_label),
+                                "point_path": self.xml_point_path(
+                                    t,
+                                    new_setup_id,
+                                    split_label,
+                                ),
                                 "parameters": old_ip_l1["parameters_split"],
                             },
                         }
@@ -409,7 +421,11 @@ class SplitImages:
                             "label": fake_label,
                             "ip_list": {
                                 "interest_points": fake_points,
-                                "point_path": self.point_relative_path(t, new_setup_id, fake_label),
+                                "point_path": self.xml_point_path(
+                                    t,
+                                    new_setup_id,
+                                    fake_label,
+                                ),
                                 "parameters": old_ip_l1["parameters_fake"],
                             },
                         }

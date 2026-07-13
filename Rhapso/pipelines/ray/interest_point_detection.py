@@ -89,7 +89,8 @@ class InterestPointDetection:
                     'view_id': view_id,
                     'interval_key': interval,
                     'interest_points': interest_points['interest_points'],
-                    'intensities': interest_points['intensities']
+                    'intensities': interest_points['intensities'],
+                    'peak_scores': interest_points['peak_scores']
                 }
             except Exception as e:
                 return {'error': str(e), 'view_id': chunk_metadata.get('view_id', 'unknown')}

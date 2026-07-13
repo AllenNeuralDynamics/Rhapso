@@ -117,18 +117,32 @@ class InitializeOutputZarr:
         store = self.make_store(path, mode=mode, anon=anon)
 
         if self.has_zarr3_store_api:
-            if mode == "w":
-                return zarr.open_group(
-                    store=store,
-                    mode=mode,
-                    zarr_format=self.output_zarr_version,
-                )
+            kwargs = {
+                "store": store,
+                "mode": mode,
+            }
 
-            return zarr.open_group(
-                store=store,
-                mode=mode,
-            )
+            # "a" means open existing OR create when missing.
+            # Pass the requested format so a missing store is created correctly.
+            if mode in ("a", "w", "w-"):
+                kwargs["zarr_format"] = self.output_zarr_version
 
+            root = zarr.open_group(**kwargs)
+
+            # An existing hierarchy must match the requested format.
+            if mode in ("a", "r+"):
+                actual_format = root.metadata.zarr_format
+
+                if actual_format != self.output_zarr_version:
+                    raise RuntimeError(
+                        f"Existing output is Zarr format {actual_format}, "
+                        f"but output_zarr_version={self.output_zarr_version}. "
+                        "Cannot append using a different Zarr format."
+                    )
+
+            return root
+
+        # Zarr-Python 2 only supports writing format 2 here.
         return zarr.open_group(
             store=store,
             mode=mode,
@@ -194,7 +208,7 @@ class InitializeOutputZarr:
         """
         return self.open_group_at_path(
             self.output_path,
-            mode="w",
+            mode="a",
             anon=False if self.output_path.startswith("s3://") else None,
         )
 
@@ -210,7 +224,7 @@ class InitializeOutputZarr:
                 shape=shape,
                 chunks=chunks,
                 dtype=np.uint16,
-                overwrite=True,
+                overwrite=False,
                 fill_value=0,
             )
 
@@ -239,11 +253,13 @@ class InitializeOutputZarr:
             shape=shape,
             chunks=chunks,
             dtype=np.uint16,
-            overwrite=True,
+            overwrite=False,
             fill_value=0,
             dimension_separator="/",
         )
 
     def run(self):
         root = self.create_output_root()
-        self.create_output_array(root)
+
+        if "0" not in root:
+            self.create_output_array(root)

@@ -252,8 +252,8 @@ def generate_settings_file(dataset_xml, output_xml, existing_settings=None):
 
 
 if __name__ == "__main__":
-    input_xml = "/Users/sean.fite/Desktop/exaSPIM-1/rhapso-solver-split-affine.xml"
-    output_xml = "/Users/sean.fite/Desktop/bdv_settings.xml"
+    input_xml = "/Users/sean.fite/Desktop/bigstitcher_affine.split.xml"
+    output_xml = "/Users/sean.fite/Desktop/bdv_settings_bs.xml"
     existing_settings_xml = None  # or path to an existing BDV settings file
 
     generate_settings_file(input_xml, output_xml, existing_settings=existing_settings_xml)
