@@ -358,6 +358,7 @@ python Rhapso/pipelines/ray/aws/alignment_pipeline.py
 | :------------------- | :------------- | :----------------------------------------------------------------- | :------------------ |
 | `relative_threshold` | Graph pruning  | Reject edges with residuals above dataset-relative cutoff          | 3.5                 |
 | `absolute_threshold` | Graph pruning  | Reject edges above an absolute error bound (detection-space units) | 7.0                 |
+| `max_cleanup_rounds` | Graph pruning  | Number of cleanup rounds                                           | 3 - 5               |
 | `min_matches`        | Graph pruning  | Minimum matches required to retain an edge between tiles           | 3                   |
 | `damp`               | Optimization   | Damping for iterative solver; higher can stabilize tough cases     | 1.0                 |
 | `max_iterations`     | Optimization   | Upper bound on solver iterations                                   | 10,0000             |
