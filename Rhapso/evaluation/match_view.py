@@ -1,11 +1,16 @@
 #!/usr/bin/env python3
+"""
+Slider-only POST-alignment viewer.
 
+This script opens a configurable coarse Zarr display level and visualizes the
+saved correspondence pairs. It does not load the PRE XML, calculate PRE/POST
+full-resolution metrics, or write the metrics CSV.
+"""
 import json
 import xml.etree.ElementTree as ET
 from typing import Optional, Tuple
 from urllib.parse import urlparse
 from pathlib import Path
-
 import boto3
 import dask.array as da
 import fsspec
@@ -17,49 +22,45 @@ from matplotlib.collections import LineCollection
 from matplotlib.widgets import Slider
 from scipy.ndimage import map_coordinates
 
-
 # ----------------------------
 # Params
 # ----------------------------
 
-# Use detection xml for rigid match metrics - rigid xml for affine match metrics - etc.
-XML_PATH = "/Users/sean.fite/Desktop/exaSPIM_791116_2tiles.xml"
+# POST_XML_PATH = "s3://aind-scratch-data/sean.fite/exaSPIM-test-new/rhapso-solver-affine.xml"
+# ALIGNMENT_BASE = "s3://aind-scratch-data/sean.fite/exaSPIM-test-new"
+
+# POST_XML_PATH = "/Users/sean.fite/Desktop/exaSPIM-test/rhapso-solver-rigid.xml"
+POST_XML_PATH = "/Users/sean.fite/Desktop/exaSPIM-test/rhapso-solver-affine.xml"
 ALIGNMENT_BASE = "/Users/sean.fite/Desktop/exaSPIM-test"
 
-SCALE_LEVEL = "4"
+# Independent of detection/matching scale. Keep this coarse enough for sliders.
+DISPLAY_SCALE_LEVEL = "4"
+SCALE_LEVEL = DISPLAY_SCALE_LEVEL  # used by the existing display helpers
+
 TIMEPOINT = 0
 MATCH_LABEL = "beads"
-
 TARGET_PAIR: Optional[Tuple[int, int]] = None
-# TARGET_PAIR = (5, 9)
+# TARGET_PAIR = (0, 1)
 
-ZOOM_Y_CHUNKS = 2
-ZOOM_LINK_BY = "midpoint"  # "midpoint" or "either_endpoint"
-
+ZOOM_Y_CHUNKS = 3
+ZOOM_LINK_BY = "midpoint"
 OVERLAP_PAD_XY = 0
 POINT_Z_RADIUS_SCALED = 1.5
 LINK_Z_RADIUS_SCALED = 2.0
 
-DISPLAY_NORM_MODE = "global"  # "global" or "per_slice"
+DISPLAY_NORM_MODE = "global"
 P_LO = 1
 P_HI = 99
-
-# Display-only brightness controls. These do not change points, matches, QC, or input data.
-# Lower P_HI / lower gamma / higher gain brightens dim tissue while allowing bright spots to clip.
 DISPLAY_BRIGHTNESS_GAIN = 1.00
 DISPLAY_GAMMA = 1.00
 DISPLAY_BLACK_LEVEL = 0.00
-
 IMAGE_ASPECT = "equal"
 
 GOOD_RESIDUAL_PX = 2.0
 OK_RESIDUAL_PX = 4.0
 BAD_RESIDUAL_PX = 8.0
-INLIER_RESIDUAL_PX = 4.0
 GRID_BINS = (4, 8, 8)
 
-# Tile overlay display
-# A tile is shown as green. B tile is resampled into A display frame and shown as purple.
 SHOW_TILE_B_PURPLE_OVERLAY = True
 TILE_A_BASE_RGB = np.array([0.20, 1.00, 0.25], dtype=np.float32)
 TILE_B_OVERLAY_RGB = np.array([0.78, 0.35, 0.95], dtype=np.float32)
@@ -67,27 +68,20 @@ TILE_B_OVERLAY_ALPHA = 0.35
 TILE_B_MIN_VISIBLE = 0.03
 WARP_Y_BLOCK = 512
 
-# Sideways display tweaks.
-# These are display-only rotations: image, match dots, links, and rings rotate together.
-# They do not change warp math, match math, QC, or saved data.
 FULL_VIEW_ROTATE_90 = True
-FULL_VIEW_ROTATE_DIRECTION = "clockwise"  # "clockwise" or "counterclockwise"
-FULL_VIEW_AREA_SCALE = 1.0  # keep contained; old 10x area made the sideways view huge/off-screen
+FULL_VIEW_ROTATE_DIRECTION = "clockwise"
+FULL_VIEW_AREA_SCALE = 1.0
 FULL_VIEW_BASE_FIGSIZE = (12.0, 7.5)
 FULL_VIEW_MAX_FIGSIZE = (13.5, 8.5)
 
 SPLIT_VIEW_ROTATE_90 = True
-SPLIT_VIEW_ROTATE_DIRECTION = "clockwise"  # "clockwise" or "counterclockwise"
+SPLIT_VIEW_ROTATE_DIRECTION = "clockwise"
 SPLIT_VIEW_FIGSIZE = (12.0, 8.5)
 SPLIT_VIEW_LINK_SHOW_HALO = False
 SPLIT_VIEW_LINK_LINEWIDTH = 1.1
 SPLIT_VIEW_LINK_ALPHA = 0.75
 SPLIT_VIEW_LINK_LINESTYLE = "dashed"
 
-
-# ----------------------------
-# Generic IO helpers
-# ----------------------------
 
 def join_uri(*parts):
     return "/".join(
@@ -96,18 +90,15 @@ def join_uri(*parts):
         if part is not None
     )
 
-
 def read_json(uri):
     fs, path = fsspec.core.url_to_fs(uri)
     with fs.open(path, "r") as f:
         return json.load(f)
 
-
 def read_parquet(uri):
     fs, path = fsspec.core.url_to_fs(uri)
     with fs.open(path, "rb") as f:
         return pd.read_parquet(f, engine="pyarrow")
-
 
 def load_xml_root(xml_path: str) -> ET.Element:
     if xml_path.startswith("s3://"):
@@ -120,11 +111,6 @@ def load_xml_root(xml_path: str) -> ET.Element:
 
     return ET.parse(xml_path).getroot()
 
-
-# ----------------------------
-# XML / transform helpers
-# ----------------------------
-
 def affine_12_to_4x4(affine_text: str) -> np.ndarray:
     vals = [float(v) for v in str(affine_text).replace(",", " ").split()]
     if len(vals) != 12:
@@ -136,7 +122,6 @@ def affine_12_to_4x4(affine_text: str) -> np.ndarray:
     mat[2, 0:4] = vals[8:12]
     return mat
 
-
 def apply_affine_xyz(pts_xyz: np.ndarray, mat: np.ndarray) -> np.ndarray:
     if pts_xyz is None or len(pts_xyz) == 0:
         return np.empty((0, 3), dtype=np.float32)
@@ -145,7 +130,6 @@ def apply_affine_xyz(pts_xyz: np.ndarray, mat: np.ndarray) -> np.ndarray:
     homo = np.concatenate([pts_xyz.astype(np.float64), ones], axis=1)
     out = homo @ mat.T
     return out[:, :3].astype(np.float32)
-
 
 def parse_view_setup_sizes(root: ET.Element):
     sizes = {}
@@ -162,7 +146,6 @@ def parse_view_setup_sizes(root: ET.Element):
         sizes[setup_id] = (sx, sy, sz)
 
     return sizes
-
 
 def parse_all_transforms_from_xml(root: ET.Element):
     transforms = {}
@@ -185,7 +168,7 @@ def parse_all_transforms_from_xml(root: ET.Element):
                 continue
 
             mat = affine_12_to_4x4(affine_text)
-            composed = mat @ composed
+            composed = composed @ mat
             names.append(name)
 
         if not names:
@@ -195,27 +178,26 @@ def parse_all_transforms_from_xml(root: ET.Element):
 
     return transforms
 
-
-def parse_zarr_tile_records(root: ET.Element):
+def parse_zarr_tile_records(root: ET.Element, xml_path: str, transform_label: str):
     setup_sizes = parse_view_setup_sizes(root)
     all_transforms = parse_all_transforms_from_xml(root)
 
     image_loader = root.find(".//ImageLoader")
     if image_loader is None:
-        raise RuntimeError("No <ImageLoader> found in XML")
+        raise RuntimeError(f"No <ImageLoader> found in {transform_label} XML")
 
     s3bucket = image_loader.findtext("s3bucket")
     zarr_base = image_loader.findtext("zarr")
 
     if not zarr_base:
-        raise RuntimeError("No <zarr> base path found in XML ImageLoader")
+        raise RuntimeError(f"No <zarr> base path found in {transform_label} XML ImageLoader")
 
     if zarr_base.startswith("s3://"):
         zarr_base = zarr_base.rstrip("/") + "/"
     elif s3bucket:
         zarr_base = f"s3://{s3bucket}/{zarr_base.lstrip('/')}".rstrip("/") + "/"
-    elif XML_PATH.startswith("s3://"):
-        parsed = urlparse(XML_PATH)
+    elif xml_path.startswith("s3://"):
+        parsed = urlparse(xml_path)
         zarr_base = f"s3://{parsed.netloc}/{zarr_base.lstrip('/')}".rstrip("/") + "/"
     else:
         zarr_base = zarr_base.rstrip("/") + "/"
@@ -234,15 +216,15 @@ def parse_zarr_tile_records(root: ET.Element):
             continue
 
         if setup not in setup_sizes:
-            raise RuntimeError(f"Missing ViewSetup size for setup {setup}")
+            raise RuntimeError(f"Missing ViewSetup size for setup {setup} in {transform_label} XML")
 
         if setup not in all_transforms:
-            raise RuntimeError(f"Missing transform stack for setup {setup}")
+            raise RuntimeError(f"Missing transform stack for setup {setup} in {transform_label} XML")
 
         sx, sy, sz = setup_sizes[setup]
         transform, transform_names = all_transforms[setup]
 
-        print(f"Setup {setup} transform stack: {transform_names}")
+        print(f"{transform_label} setup {setup} transform stack: {transform_names}")
 
         records.append({
             "setup": setup,
@@ -254,10 +236,10 @@ def parse_zarr_tile_records(root: ET.Element):
             "size_z": sz,
             "transform": transform,
             "transform_names": transform_names,
+            "transform_label": transform_label,
         })
 
     return sorted(records, key=lambda r: r["setup"])
-
 
 def open_ome_zarr_level(zarr_path: str, scale_level: str):
     zarr_path = str(zarr_path).rstrip("/")
@@ -272,23 +254,15 @@ def open_ome_zarr_level(zarr_path: str, scale_level: str):
     level_path = str(Path(zarr_path).expanduser() / scale_level)
     return da.from_zarr(level_path)
 
-
-# ----------------------------
-# Parquet points / matches
-# ----------------------------
-
 def load_point_manifest(alignment_base: str):
     manifest = read_json(join_uri(alignment_base, "manifest.json"))
     return manifest["points"]
 
-
 def load_match_index(alignment_base: str):
     return read_parquet(join_uri(alignment_base, "matches", "match_index.parquet"))
 
-
 def point_key(tp_id: int, setup_id: int, label: str):
     return f"{int(tp_id)}/{int(setup_id)}/{label}"
-
 
 def read_interest_points(point_manifest, setup: int, timepoint: int, label: str):
     rel_path = point_manifest[point_key(timepoint, setup, label)]
@@ -299,7 +273,6 @@ def read_interest_points(point_manifest, setup: int, timepoint: int, label: str)
         return np.empty((0, 3), dtype=np.float32)
 
     return df[["x", "y", "z"]].to_numpy(dtype=np.float32, copy=False)
-
 
 def match_row(match_index_df, tp_id: int, setup_id: int, label: str):
     rows = match_index_df[
@@ -313,12 +286,10 @@ def match_row(match_index_df, tp_id: int, setup_id: int, label: str):
 
     return rows.iloc[0]
 
-
 def read_correspondences(match_index_df, tp_id: int, setup_id: int, label: str):
     row = match_row(match_index_df, tp_id, setup_id, label)
     uri = join_uri(ALIGNMENT_BASE, str(row["correspondences_path"]))
     return read_parquet(uri)
-
 
 def get_pair_matches_one_direction(
     point_manifest,
@@ -397,9 +368,17 @@ def get_pair_matches_one_direction(
 
     return np.vstack(chunks_a).astype(np.float32), np.vstack(chunks_b).astype(np.float32), metadata
 
-
 def get_pair_matches_bidirectional(point_manifest, match_index_df, tp_id: int, setup_a: int, setup_b: int, label: str):
-    a1, b1, meta1 = get_pair_matches_one_direction(
+    """
+    Return saved correspondences for this unordered pair, normalized so output arrays are always:
+      match_a_local = points from setup_a local/full-res coordinates
+      match_b_local = points from setup_b local/full-res coordinates
+
+    Important: these are already the saved accepted/RANSAC correspondences from parquet.
+    This function does not use the XML transform stack, so the raw count should not change
+    between pre-solver and post-solver XMLs as long as ALIGNMENT_BASE is the same.
+    """
+    a1, b1, meta1_raw = get_pair_matches_one_direction(
         point_manifest=point_manifest,
         match_index_df=match_index_df,
         tp_id=tp_id,
@@ -424,7 +403,15 @@ def get_pair_matches_bidirectional(point_manifest, match_index_df, tp_id: int, s
     if len(a1):
         chunks_a.append(a1)
         chunks_b.append(b1)
-        metadata.extend(meta1)
+
+        for m in meta1_raw:
+            m2 = dict(m)
+            m2["direction_was_reversed"] = False
+            m2["a_setup"] = int(setup_a)
+            m2["a_index"] = int(m.get("src_index", -1))
+            m2["b_setup"] = int(setup_b)
+            m2["b_index"] = int(m.get("dst_index", -1))
+            metadata.append(m2)
 
     if len(a2):
         chunks_a.append(a2)
@@ -433,6 +420,11 @@ def get_pair_matches_bidirectional(point_manifest, match_index_df, tp_id: int, s
         for m in meta2_raw:
             m2 = dict(m)
             m2["direction_was_reversed"] = True
+            # The raw row was setup_b -> setup_a, but the returned arrays are normalized A/B.
+            m2["a_setup"] = int(setup_a)
+            m2["a_index"] = int(m.get("dst_index", -1))
+            m2["b_setup"] = int(setup_b)
+            m2["b_index"] = int(m.get("src_index", -1))
             metadata.append(m2)
 
     if not chunks_a:
@@ -440,10 +432,33 @@ def get_pair_matches_bidirectional(point_manifest, match_index_df, tp_id: int, s
 
     return np.vstack(chunks_a).astype(np.float32), np.vstack(chunks_b).astype(np.float32), metadata
 
+def list_saved_match_pairs(match_index_df, tp_id: int, label: str):
+    """
+    Build stable pair candidates from saved parquet correspondences, not from XML overlap order.
+    This keeps TARGET_PAIR=None from silently choosing different pairs when the XML changes.
+    """
+    pairs = set()
+    rows = match_index_df[
+        (match_index_df["timepoint"].astype(int) == int(tp_id)) &
+        (match_index_df["label"].astype(str) == str(label))
+    ]
 
-# ----------------------------
-# Geometry
-# ----------------------------
+    for _, row in rows.iterrows():
+        setup = int(row["setup"])
+        uri = join_uri(ALIGNMENT_BASE, str(row["correspondences_path"]))
+        corr_df = read_parquet(uri)
+
+        if len(corr_df) == 0 or "target_setup" not in corr_df.columns:
+            continue
+
+        corr_df = corr_df[corr_df["target_timepoint"].astype(int) == int(tp_id)]
+        for target_setup in corr_df["target_setup"].astype(int).unique():
+            target_setup = int(target_setup)
+            if target_setup == setup:
+                continue
+            pairs.add(tuple(sorted((setup, target_setup))))
+
+    return sorted(pairs)
 
 def open_tile_volume_zyx(rec: dict):
     arr = open_ome_zarr_level(rec["full_path"], SCALE_LEVEL)
@@ -456,7 +471,6 @@ def open_tile_volume_zyx(rec: dict):
 
     raise RuntimeError(f"Unexpected array shape for {rec['full_path']}: {arr.shape}")
 
-
 def infer_scale_info(rec: dict, vol_zyx: da.Array) -> dict:
     z_scaled, y_scaled, x_scaled = vol_zyx.shape
 
@@ -465,7 +479,6 @@ def infer_scale_info(rec: dict, vol_zyx: da.Array) -> dict:
         "scale_y": float(rec["size_y"]) / float(y_scaled),
         "scale_z": float(rec["size_z"]) / float(z_scaled),
     }
-
 
 def transformed_xy_box_fullres(rec: dict):
     corners = np.asarray(
@@ -481,7 +494,6 @@ def transformed_xy_box_fullres(rec: dict):
     out = apply_affine_xyz(corners, rec["transform"])
     return float(np.min(out[:, 0])), float(np.max(out[:, 0])), float(np.min(out[:, 1])), float(np.max(out[:, 1]))
 
-
 def compute_pairwise_overlap_fullres(rec_a: dict, rec_b: dict):
     ax0, ax1, ay0, ay1 = transformed_xy_box_fullres(rec_a)
     bx0, bx1, by0, by1 = transformed_xy_box_fullres(rec_b)
@@ -496,7 +508,6 @@ def compute_pairwise_overlap_fullres(rec_a: dict, rec_b: dict):
 
     return ox0, ox1, oy0, oy1
 
-
 def list_overlapping_pairs(records):
     overlaps = []
 
@@ -510,7 +521,6 @@ def list_overlapping_pairs(records):
                 overlaps.append((rec_a["setup"], rec_b["setup"], overlap))
 
     return overlaps
-
 
 def nominal_overlap_to_local_padded_crop(rec: dict, overlap_box_fullres, pad_xy: int):
     ox0, ox1, oy0, oy1 = overlap_box_fullres
@@ -537,7 +547,6 @@ def nominal_overlap_to_local_padded_crop(rec: dict, overlap_box_fullres, pad_xy:
 
     return {"x0": lx0, "x1": lx1, "y0": ly0, "y1": ly1}
 
-
 def fullres_crop_to_scaled(crop: dict, scale: dict, vol_zyx: da.Array):
     _, y_max, x_max = vol_zyx.shape
 
@@ -556,7 +565,6 @@ def fullres_crop_to_scaled(crop: dict, scale: dict, vol_zyx: da.Array):
 
     return {"x0": sx0, "x1": sx1, "y0": sy0, "y1": sy1}
 
-
 def filter_points_in_xy_crop(pts_xyz: np.ndarray, crop: dict):
     if pts_xyz is None or len(pts_xyz) == 0:
         return np.empty((0, 3), dtype=np.float32)
@@ -569,7 +577,6 @@ def filter_points_in_xy_crop(pts_xyz: np.ndarray, crop: dict):
     )
 
     return pts_xyz[mask].astype(np.float32)
-
 
 def filter_paired_points_in_xy_crops(pts_a_xyz: np.ndarray, pts_b_xyz: np.ndarray, crop_a: dict, crop_b: dict):
     if len(pts_a_xyz) == 0:
@@ -592,7 +599,6 @@ def filter_paired_points_in_xy_crops(pts_a_xyz: np.ndarray, pts_b_xyz: np.ndarra
     mask = mask_a & mask_b
     return pts_a_xyz[mask].astype(np.float32), pts_b_xyz[mask].astype(np.float32)
 
-
 def local_fullres_to_global_scaled(pts_full_xyz: np.ndarray, rec: dict, scale: dict):
     if pts_full_xyz is None or len(pts_full_xyz) == 0:
         return np.empty((0, 3), dtype=np.float32)
@@ -606,7 +612,6 @@ def local_fullres_to_global_scaled(pts_full_xyz: np.ndarray, rec: dict, scale: d
 
     return out
 
-
 def display_bounds_mask(pts_display_xyz: np.ndarray, shape_zyx):
     if pts_display_xyz is None or len(pts_display_xyz) == 0:
         return np.zeros((0,), dtype=bool)
@@ -618,7 +623,6 @@ def display_bounds_mask(pts_display_xyz: np.ndarray, shape_zyx):
         (pts_display_xyz[:, 1] >= 0) & (pts_display_xyz[:, 1] < y) &
         (pts_display_xyz[:, 2] >= 0) & (pts_display_xyz[:, 2] < z)
     )
-
 
 def global_scaled_to_a_crop_display_unfiltered(pts_global_xyz: np.ndarray, rec_a: dict, crop_a_full: dict, scale_a: dict):
     if pts_global_xyz is None or len(pts_global_xyz) == 0:
@@ -638,7 +642,6 @@ def global_scaled_to_a_crop_display_unfiltered(pts_global_xyz: np.ndarray, rec_a
 
     return pts.astype(np.float32)
 
-
 def global_scaled_to_a_crop_display_filtered(
     pts_global_xyz: np.ndarray,
     rec_a: dict,
@@ -649,11 +652,6 @@ def global_scaled_to_a_crop_display_filtered(
     pts = global_scaled_to_a_crop_display_unfiltered(pts_global_xyz, rec_a, crop_a_full, scale_a)
     mask = display_bounds_mask(pts, image_a_crop_shape)
     return pts[mask].astype(np.float32)
-
-
-# ----------------------------
-# Tile-B image overlay in setup-A display frame
-# ----------------------------
 
 def compute_a_display_origin_scaled(rec_a: dict, crop_a_full: dict, scale_a: dict):
     """
@@ -671,7 +669,6 @@ def compute_a_display_origin_scaled(rec_a: dict, crop_a_full: dict, scale_a: dic
         ],
         dtype=np.float32,
     )
-
 
 def warp_b_into_a_display_volume(
     vol_a_crop: np.ndarray,
@@ -750,11 +747,6 @@ def warp_b_into_a_display_volume(
 
     return out
 
-
-# ----------------------------
-# Display normalization / RGB overlay
-# ----------------------------
-
 def normalize_slice(x: np.ndarray, lo: float, hi: float):
     """
     Display-only contrast/brightness normalization.
@@ -783,7 +775,6 @@ def normalize_slice(x: np.ndarray, lo: float, hi: float):
 
     return np.clip(x, 0.0, 1.0).astype(np.float32, copy=False)
 
-
 def compute_global_display_range(vol_zyx: np.ndarray):
     x = vol_zyx.astype(np.float32, copy=False)
     mask = np.isfinite(x) & (x > 0)
@@ -802,7 +793,6 @@ def compute_global_display_range(vol_zyx: np.ndarray):
         hi = lo + 1.0
 
     return lo, hi
-
 
 def normalize_for_display(slice2d: np.ndarray, global_lo: float, global_hi: float):
     if DISPLAY_NORM_MODE == "global":
@@ -826,13 +816,11 @@ def normalize_for_display(slice2d: np.ndarray, global_lo: float, global_hi: floa
 
     return normalize_slice(x, lo, hi)
 
-
 def make_a_rgb(slice_a: np.ndarray, lo_a: float, hi_a: float):
     """Render setup A as green instead of grayscale."""
     a_norm = normalize_for_display(slice_a, lo_a, hi_a)
     rgb = a_norm[..., None] * TILE_A_BASE_RGB[None, None, :]
     return np.clip(rgb, 0.0, 1.0)
-
 
 def make_overlay_rgb(slice_a: np.ndarray, slice_b_warped: np.ndarray, lo_a: float, hi_a: float, lo_b: float, hi_b: float):
     """A = green base. B = purple transparent overlay. Overlay alpha follows B intensity."""
@@ -845,14 +833,8 @@ def make_overlay_rgb(slice_a: np.ndarray, slice_b_warped: np.ndarray, lo_a: floa
     rgb = a_rgb * (1.0 - alpha[..., None]) + TILE_B_OVERLAY_RGB[None, None, :] * alpha[..., None]
     return np.clip(rgb, 0.0, 1.0)
 
-
-# ----------------------------
-# QC metrics
-# ----------------------------
-
 def safe_div(n, d):
     return float(n) / float(d) if d else np.nan
-
 
 def grid_stats(pts_xyz: np.ndarray, shape_zyx, bins=GRID_BINS):
     if len(pts_xyz) == 0:
@@ -869,161 +851,6 @@ def grid_stats(pts_xyz: np.ndarray, shape_zyx, bins=GRID_BINS):
         "max_cell_fraction": float(np.max(flat) / n) if n > 0 else np.nan,
     }
 
-
-def duplicate_fraction(pts_xyz: np.ndarray, decimals: int = 2):
-    if len(pts_xyz) == 0:
-        return np.nan
-
-    rounded = np.round(pts_xyz, decimals=decimals)
-    unique = np.unique(rounded, axis=0)
-    return 1.0 - safe_div(len(unique), len(pts_xyz))
-
-
-def compute_match_qc(match_a_display: np.ndarray, match_b_display: np.ndarray, image_shape_zyx, scale: dict):
-    if len(match_a_display) == 0:
-        return None
-
-    deltas = match_b_display - match_a_display
-    raw_link_lengths = np.sqrt(np.sum(deltas ** 2, axis=1))
-
-    median_delta = np.median(deltas, axis=0)
-    centered_deltas = deltas - median_delta[None, :]
-    consistency_residuals = np.sqrt(np.sum(centered_deltas ** 2, axis=1))
-
-    inlier_mask = consistency_residuals <= INLIER_RESIDUAL_PX
-    inlier_a = match_a_display[inlier_mask]
-    grid = grid_stats(inlier_a, image_shape_zyx)
-
-    qc = {
-        "n_matches": int(len(consistency_residuals)),
-        "n_inliers": int(np.count_nonzero(inlier_mask)),
-        "inlier_ratio": 100.0 * safe_div(np.count_nonzero(inlier_mask), len(consistency_residuals)),
-        "raw_median_link_scaled": float(np.median(raw_link_lengths)),
-        "raw_p90_link_scaled": float(np.percentile(raw_link_lengths, 90)),
-        "raw_p95_link_scaled": float(np.percentile(raw_link_lengths, 95)),
-        "raw_max_link_scaled": float(np.max(raw_link_lengths)),
-        "median_consistency_residual_scaled": float(np.median(consistency_residuals)),
-        "p90_consistency_residual_scaled": float(np.percentile(consistency_residuals, 90)),
-        "p95_consistency_residual_scaled": float(np.percentile(consistency_residuals, 95)),
-        "max_consistency_residual_scaled": float(np.max(consistency_residuals)),
-        "within_2px": 100.0 * float(np.mean(consistency_residuals <= 2.0)),
-        "within_4px": 100.0 * float(np.mean(consistency_residuals <= 4.0)),
-        "within_8px": 100.0 * float(np.mean(consistency_residuals <= 8.0)),
-        "median_dx": float(median_delta[0]),
-        "median_dy": float(median_delta[1]),
-        "median_dz": float(median_delta[2]),
-        "mad_dx": float(np.median(np.abs(deltas[:, 0] - median_delta[0]))),
-        "mad_dy": float(np.median(np.abs(deltas[:, 1] - median_delta[1]))),
-        "mad_dz": float(np.median(np.abs(deltas[:, 2] - median_delta[2]))),
-        "grid_occupancy": grid["occupancy"],
-        "max_cell_fraction": grid["max_cell_fraction"],
-        "duplicate_a_fraction": duplicate_fraction(match_a_display),
-        "duplicate_b_fraction": duplicate_fraction(match_b_display),
-        "raw_link_lengths": raw_link_lengths,
-        "consistency_residuals": consistency_residuals,
-        "inlier_mask": inlier_mask,
-        "median_delta": median_delta,
-    }
-
-    flags = []
-
-    if qc["n_inliers"] < 50:
-        flags.append("too few inlier matches")
-
-    if not np.isfinite(qc["inlier_ratio"]) or qc["inlier_ratio"] < 35.0:
-        flags.append("low inlier ratio")
-
-    if qc["median_consistency_residual_scaled"] > 3.0:
-        flags.append("high median consistency residual")
-
-    if qc["p90_consistency_residual_scaled"] > 8.0:
-        flags.append("high p90 consistency residual")
-
-    if np.isfinite(qc["grid_occupancy"]) and qc["grid_occupancy"] < 0.02:
-        flags.append("poor spatial spread across overlap")
-
-    if np.isfinite(qc["max_cell_fraction"]) and qc["max_cell_fraction"] > 0.75:
-        flags.append("matches concentrated in one grid cell")
-
-    if np.isfinite(qc["duplicate_a_fraction"]) and qc["duplicate_a_fraction"] > 0.20:
-        flags.append("many duplicate A match coordinates")
-
-    if np.isfinite(qc["duplicate_b_fraction"]) and qc["duplicate_b_fraction"] > 0.20:
-        flags.append("many duplicate B match coordinates")
-
-    if not flags:
-        verdict = "GOOD"
-    elif len(flags) <= 2 and qc["n_inliers"] >= 20:
-        verdict = "CHECK"
-    else:
-        verdict = "BAD"
-
-    qc["flags"] = flags
-    qc["verdict"] = verdict
-    return qc
-
-
-def print_match_qc(qc, scale: dict):
-    print("\n" + "=" * 72)
-    print("MATCH QC")
-    print("=" * 72)
-
-    if qc is None:
-        print("No visible matches in display frame.")
-        print("=" * 72 + "\n")
-        return
-
-    print(f"matches:                     {qc['n_matches']:,}")
-    print(f"inliers <= {INLIER_RESIDUAL_PX:.1f}px:          {qc['n_inliers']:,}")
-    print(f"inlier ratio:                {qc['inlier_ratio']:.2f}%")
-
-    print("\nRaw A->B link length in scaled display pixels:")
-    print(f"  median:                    {qc['raw_median_link_scaled']:.3f}")
-    print(f"  p90:                       {qc['raw_p90_link_scaled']:.3f}")
-    print(f"  p95:                       {qc['raw_p95_link_scaled']:.3f}")
-    print(f"  max:                       {qc['raw_max_link_scaled']:.3f}")
-
-    print("\nConsistency residual after subtracting median shift:")
-    print(f"  median:                    {qc['median_consistency_residual_scaled']:.3f}")
-    print(f"  p90:                       {qc['p90_consistency_residual_scaled']:.3f}")
-    print(f"  p95:                       {qc['p95_consistency_residual_scaled']:.3f}")
-    print(f"  max:                       {qc['max_consistency_residual_scaled']:.3f}")
-
-    print("\nMedian shift B-A in scaled display pixels:")
-    print(f"  dx:                        {qc['median_dx']:.3f}")
-    print(f"  dy:                        {qc['median_dy']:.3f}")
-    print(f"  dz:                        {qc['median_dz']:.3f}")
-    print("\nMedian absolute deviation:")
-    print(f"  mad dx:                    {qc['mad_dx']:.3f}")
-    print(f"  mad dy:                    {qc['mad_dy']:.3f}")
-    print(f"  mad dz:                    {qc['mad_dz']:.3f}")
-
-    print("\nConsistency thresholds:")
-    print(f"  within 2px:                 {qc['within_2px']:.2f}%")
-    print(f"  within 4px:                 {qc['within_4px']:.2f}%")
-    print(f"  within 8px:                 {qc['within_8px']:.2f}%")
-
-    print("\nSpatial spread / duplicates:")
-    print(f"  grid occupancy:             {qc['grid_occupancy']:.4f}")
-    print(f"  max cell fraction:          {qc['max_cell_fraction']:.4f}")
-    print(f"  duplicate A fraction:       {qc['duplicate_a_fraction']:.4f}")
-    print(f"  duplicate B fraction:       {qc['duplicate_b_fraction']:.4f}")
-
-    print("")
-    print(f"VERDICT: {qc['verdict']}")
-
-    if qc["flags"]:
-        print("Reason flags:")
-        for flag in qc["flags"]:
-            print(f"  - {flag}")
-
-    print("=" * 72 + "\n")
-
-
-# ----------------------------
-# Match viewer helpers
-# ----------------------------
-
 def color_for_residual(r: float):
     if r <= GOOD_RESIDUAL_PX:
         return "lime"
@@ -1032,7 +859,6 @@ def color_for_residual(r: float):
     if r <= BAD_RESIDUAL_PX:
         return "orange"
     return "magenta"
-
 
 def make_pair_ring_segments(
     a_xy: np.ndarray,
@@ -1056,7 +882,6 @@ def make_pair_ring_segments(
         rings.append(center[None, :] + radius * unit)
 
     return rings
-
 
 def visible_matches_for_slice(match_a: np.ndarray, match_b: np.ndarray, residuals: np.ndarray, z: int, z_radius: float):
     if len(match_a) == 0:
@@ -1094,7 +919,6 @@ def visible_matches_for_slice(match_a: np.ndarray, match_b: np.ndarray, residual
 
     return a, b, segments, ring_segments, link_colors, r
 
-
 def full_view_figsize():
     """
     Keep the first/full slider contained in a normal notebook/browser viewport.
@@ -1110,7 +934,6 @@ def full_view_figsize():
     shrink = min(1.0, max_width / max(width, 1e-6), max_height / max(height, 1e-6))
     return (width * shrink, height * shrink)
 
-
 def rotate_image_90(image_rgb: np.ndarray, rotate_90: bool, direction: str):
     if not rotate_90:
         return image_rgb
@@ -1119,7 +942,6 @@ def rotate_image_90(image_rgb: np.ndarray, rotate_90: bool, direction: str):
         return np.rot90(image_rgb, k=1)
 
     return np.rot90(image_rgb, k=3)
-
 
 def rotate_xy_90(points_xy: np.ndarray, original_shape_hw, rotate_90: bool, direction: str):
     pts = points_xy.astype(np.float32, copy=True)
@@ -1141,7 +963,6 @@ def rotate_xy_90(points_xy: np.ndarray, original_shape_hw, rotate_90: bool, dire
         pts[:, 1] = x_old
 
     return pts
-
 
 def rotate_segments_and_rings_90(
     segments: np.ndarray,
@@ -1168,14 +989,11 @@ def rotate_segments_and_rings_90(
 
     return seg, rotated_rings
 
-
 def rotate_full_view_image(image_rgb: np.ndarray):
     return rotate_image_90(image_rgb, FULL_VIEW_ROTATE_90, FULL_VIEW_ROTATE_DIRECTION)
 
-
 def rotate_full_view_xy(points_xy: np.ndarray, original_shape_hw):
     return rotate_xy_90(points_xy, original_shape_hw, FULL_VIEW_ROTATE_90, FULL_VIEW_ROTATE_DIRECTION)
-
 
 def rotate_full_view_segments_and_rings(segments: np.ndarray, rings, original_shape_hw):
     return rotate_segments_and_rings_90(
@@ -1186,14 +1004,11 @@ def rotate_full_view_segments_and_rings(segments: np.ndarray, rings, original_sh
         FULL_VIEW_ROTATE_DIRECTION,
     )
 
-
 def rotate_split_view_image(image_rgb: np.ndarray):
     return rotate_image_90(image_rgb, SPLIT_VIEW_ROTATE_90, SPLIT_VIEW_ROTATE_DIRECTION)
 
-
 def rotate_split_view_xy(points_xy: np.ndarray, original_shape_hw):
     return rotate_xy_90(points_xy, original_shape_hw, SPLIT_VIEW_ROTATE_90, SPLIT_VIEW_ROTATE_DIRECTION)
-
 
 def rotate_split_view_segments_and_rings(segments: np.ndarray, rings, original_shape_hw):
     return rotate_segments_and_rings_90(
@@ -1204,16 +1019,10 @@ def rotate_split_view_segments_and_rings(segments: np.ndarray, rings, original_s
         SPLIT_VIEW_ROTATE_DIRECTION,
     )
 
-
 def set_image_axes_limits(ax, image_rgb: np.ndarray):
     h, w = image_rgb.shape[:2]
     ax.set_xlim(-0.5, w - 0.5)
     ax.set_ylim(h - 0.5, -0.5)
-
-
-# ----------------------------
-# First/full slider view - rotated sideways
-# ----------------------------
 
 def view_match_pair_slider(
     vol_a_crop: np.ndarray,
@@ -1321,7 +1130,7 @@ def view_match_pair_slider(
     rotate_label = "rotated sideways" if FULL_VIEW_ROTATE_90 else "normal orientation"
     ax.legend(loc="upper right", fontsize=8, frameon=True)
     ax.set_title(
-        f"FULL VIEW {rotate_label} | Match QC after full XML transform stack | "
+        f"FULL VIEW {rotate_label} | POST-solver match QC | "
         f"{title_prefix} | red=A match | blue=B match",
         fontsize=11,
         pad=8,
@@ -1383,11 +1192,6 @@ def view_match_pair_slider(
     update(z0)
     plt.show()
 
-
-# ----------------------------
-# Chunk sliders - rotated sideways and independently scrollable
-# ----------------------------
-
 def visible_matches_for_slice_y_window(
     match_a: np.ndarray,
     match_b: np.ndarray,
@@ -1447,7 +1251,6 @@ def visible_matches_for_slice_y_window(
     link_colors = [color_for_residual(float(x)) for x in r_now]
 
     return a_now, b_now, seg, ring_segments, link_colors, r_now
-
 
 def view_match_pair_y_chunk_sliders(
     vol_a_crop: np.ndarray,
@@ -1656,14 +1459,9 @@ def view_match_pair_y_chunk_sliders(
 
     plt.show()
 
-
-# ----------------------------
-# Pair prep / main
-# ----------------------------
-
-def dedupe_match_pairs(match_a_local, match_b_local, decimals=3):
+def dedupe_match_pairs_with_indices(match_a_local, match_b_local, decimals=3):
     if len(match_a_local) == 0:
-        return match_a_local, match_b_local
+        return match_a_local, match_b_local, np.empty((0,), dtype=np.int64)
 
     if len(match_a_local) != len(match_b_local):
         raise RuntimeError(f"Cannot dedupe unpaired match arrays: A={len(match_a_local)}, B={len(match_b_local)}")
@@ -1673,10 +1471,21 @@ def dedupe_match_pairs(match_a_local, match_b_local, decimals=3):
         axis=1,
     )
     _, keep_idx = np.unique(key_arr, axis=0, return_index=True)
-    keep_idx = np.sort(keep_idx)
+    keep_idx = np.sort(keep_idx).astype(np.int64)
 
-    return match_a_local[keep_idx].astype(np.float32), match_b_local[keep_idx].astype(np.float32)
+    return (
+        match_a_local[keep_idx].astype(np.float32),
+        match_b_local[keep_idx].astype(np.float32),
+        keep_idx,
+    )
 
+def dedupe_match_pairs(match_a_local, match_b_local, decimals=3):
+    match_a_deduped, match_b_deduped, _ = dedupe_match_pairs_with_indices(
+        match_a_local,
+        match_b_local,
+        decimals=decimals,
+    )
+    return match_a_deduped, match_b_deduped
 
 def prepare_pair_data(rec: dict, overlap_box_fullres, point_manifest):
     print(f"\nPreparing setup {rec['setup']}...")
@@ -1730,171 +1539,136 @@ def prepare_pair_data(rec: dict, overlap_box_fullres, point_manifest):
     }
 
 
-def main():
-    print(f"XML_PATH:        {XML_PATH}")
-    print(f"ALIGNMENT_BASE:  {ALIGNMENT_BASE}")
-    print(f"SCALE_LEVEL:     {SCALE_LEVEL}")
-    print(f"MATCH_LABEL:     {MATCH_LABEL}")
-    print(f"FULL_VIEW_ROTATE_90: {FULL_VIEW_ROTATE_90} ({FULL_VIEW_ROTATE_DIRECTION})")
-    print(f"FULL_VIEW_FIGSIZE: {full_view_figsize()} max={FULL_VIEW_MAX_FIGSIZE}")
-    print(f"SPLIT_VIEW_ROTATE_90: {SPLIT_VIEW_ROTATE_90} ({SPLIT_VIEW_ROTATE_DIRECTION})")
-    print(f"SPLIT_VIEW_FIGSIZE: {SPLIT_VIEW_FIGSIZE}")
+def compute_slider_qc(match_a_display, match_b_display, image_shape_zyx):
+    if len(match_a_display):
+        residuals = np.linalg.norm(match_b_display - match_a_display, axis=1).astype(np.float32)
+        grid = grid_stats(match_a_display, image_shape_zyx)
+    else:
+        residuals = np.empty((0,), dtype=np.float32)
+        grid = {"occupancy": np.nan, "max_cell_fraction": np.nan}
 
-    root = load_xml_root(XML_PATH)
+    flags = []
+    if len(residuals) == 0:
+        flags.append("no saved matches visible in display frame")
+    else:
+        if float(np.median(residuals)) > OK_RESIDUAL_PX:
+            flags.append("high display-scale median residual")
+        if float(np.percentile(residuals, 90)) > BAD_RESIDUAL_PX:
+            flags.append("high display-scale p90 residual")
+
+    return {
+        "consistency_residuals": residuals,
+        "grid_occupancy": grid["occupancy"],
+        "max_cell_fraction": grid["max_cell_fraction"],
+        "verdict": "GOOD" if not flags else "CHECK",
+        "flags": flags,
+    }
+
+
+def print_slider_summary(qc, raw_count, deduped_count, crop_count, visible_count):
+    r = qc["consistency_residuals"]
+    print("\n" + "=" * 96)
+    print("POST-ALIGNMENT SLIDER DATA")
+    print("=" * 96)
+    print(f"Display Zarr level:                     {DISPLAY_SCALE_LEVEL}")
+    print(f"Raw bidirectional correspondence rows: {raw_count:,}")
+    print(f"Deduped saved/RANSAC matches:           {deduped_count:,}")
+    print(f"Matches inside POST overlap crop:       {crop_count:,}")
+    print(f"Matches visible in setup-A frame:       {visible_count:,}")
+    if len(r):
+        print(f"Display residual mean/median/p90:       {np.mean(r):.3f} / {np.median(r):.3f} / {np.percentile(r, 90):.3f} px")
+    print(f"Grid occupancy:                         {qc['grid_occupancy']:.4f}")
+    print(f"Max cell fraction:                      {qc['max_cell_fraction']:.4f}")
+    print(f"Viewer verdict:                         {qc['verdict']}")
+    for flag in qc["flags"]:
+        print(f"  - {flag}")
+    print("=" * 96 + "\n")
+
+
+def main():
+    print(f"POST_XML_PATH:       {POST_XML_PATH}")
+    print(f"ALIGNMENT_BASE:      {ALIGNMENT_BASE}")
+    print(f"DISPLAY_SCALE_LEVEL: {DISPLAY_SCALE_LEVEL}")
+    print(f"MATCH_LABEL:         {MATCH_LABEL}")
+    print(f"FULL_VIEW_ROTATE_90: {FULL_VIEW_ROTATE_90} ({FULL_VIEW_ROTATE_DIRECTION})")
+    print(f"SPLIT_VIEW_ROTATE_90: {SPLIT_VIEW_ROTATE_90} ({SPLIT_VIEW_ROTATE_DIRECTION})")
+
+    post_root = load_xml_root(POST_XML_PATH)
     point_manifest = load_point_manifest(ALIGNMENT_BASE)
     match_index_df = load_match_index(ALIGNMENT_BASE)
-
-    records = parse_zarr_tile_records(root)
-    print(f"Found tile records: {len(records)}")
-
-    if len(records) == 0:
-        print("No tile records found.")
-        return
-
-    by_setup = {r["setup"]: r for r in records}
-    overlaps = list_overlapping_pairs(records)
-
-    if len(overlaps) == 0:
-        print("No overlapping pairs found.")
-        return
-
-    print("\nOverlapping pairs:")
-    for a, b, (ox0, ox1, oy0, oy1) in overlaps:
-        print(f"  ({a}, {b}) overlap full-res x[{ox0:.1f}:{ox1:.1f}] y[{oy0:.1f}:{oy1:.1f}]")
+    post_records = parse_zarr_tile_records(post_root, POST_XML_PATH, "POST")
+    post_by_setup = {r["setup"]: r for r in post_records}
+    post_overlaps = list_overlapping_pairs(post_records)
+    saved_pairs = list_saved_match_pairs(match_index_df, TIMEPOINT, MATCH_LABEL)
 
     if TARGET_PAIR is None:
-        setup_a, setup_b, overlap_box = overlaps[0]
-        print(f"\nTARGET_PAIR is None, using first overlap: ({setup_a}, {setup_b})")
+        chosen = None
+        for a, b in saved_pairs:
+            if a in post_by_setup and b in post_by_setup:
+                overlap = compute_pairwise_overlap_fullres(post_by_setup[a], post_by_setup[b])
+                if overlap is not None:
+                    chosen = (a, b, overlap)
+                    break
+        if chosen is None:
+            if not post_overlaps:
+                raise RuntimeError("No saved+overlapping POST pair found")
+            chosen = post_overlaps[0]
+        setup_a, setup_b, overlap_box = chosen
+        print(f"\nTARGET_PAIR is None, using pair: ({setup_a}, {setup_b})")
     else:
         setup_a, setup_b = TARGET_PAIR
-
-        if setup_a not in by_setup or setup_b not in by_setup:
-            raise RuntimeError(f"TARGET_PAIR {TARGET_PAIR} not found in XML records")
-
-        overlap_box = compute_pairwise_overlap_fullres(by_setup[setup_a], by_setup[setup_b])
-
+        if setup_a not in post_by_setup or setup_b not in post_by_setup:
+            raise RuntimeError(f"TARGET_PAIR {TARGET_PAIR} not found in POST XML")
+        overlap_box = compute_pairwise_overlap_fullres(post_by_setup[setup_a], post_by_setup[setup_b])
         if overlap_box is None:
-            raise RuntimeError(f"TARGET_PAIR {TARGET_PAIR} does not overlap in XY")
+            raise RuntimeError(f"TARGET_PAIR {TARGET_PAIR} does not overlap in POST XML")
 
-        print(f"\nUsing TARGET_PAIR: ({setup_a}, {setup_b})")
-
-    rec_a = by_setup[setup_a]
-    rec_b = by_setup[setup_b]
-
+    rec_a, rec_b = post_by_setup[setup_a], post_by_setup[setup_b]
     data_a = prepare_pair_data(rec_a, overlap_box, point_manifest)
     data_b = prepare_pair_data(rec_b, overlap_box, point_manifest)
-
-    vol_a_crop = data_a["vol_crop"]
-    vol_b_crop = data_b["vol_crop"]
+    vol_a_crop, vol_b_crop = data_a["vol_crop"], data_b["vol_crop"]
 
     vol_b_in_a_crop = None
     if SHOW_TILE_B_PURPLE_OVERLAY:
-        print(f"\nWarping setup {setup_b} image into setup {setup_a} display frame for purple overlay...")
+        print(f"\nWarping POST setup {setup_b} image into POST setup {setup_a} display frame...")
         vol_b_in_a_crop = warp_b_into_a_display_volume(
-            vol_a_crop=vol_a_crop,
-            rec_a=rec_a,
-            scale_a=data_a["scale"],
-            crop_a_full=data_a["crop_full"],
-            rec_b=rec_b,
-            scale_b=data_b["scale"],
-            crop_b_full=data_b["crop_full"],
-            vol_b_crop=vol_b_crop,
+            vol_a_crop, rec_a, data_a["scale"], data_a["crop_full"],
+            rec_b, data_b["scale"], data_b["crop_full"], vol_b_crop,
         )
 
     pts_a_display = global_scaled_to_a_crop_display_filtered(
-        data_a["pts_global_scaled"],
-        rec_a,
-        data_a["crop_full"],
-        data_a["scale"],
-        vol_a_crop.shape,
+        data_a["pts_global_scaled"], rec_a, data_a["crop_full"], data_a["scale"], vol_a_crop.shape
     )
-
     pts_b_display = global_scaled_to_a_crop_display_filtered(
-        data_b["pts_global_scaled"],
-        rec_a,
-        data_a["crop_full"],
-        data_a["scale"],
-        vol_a_crop.shape,
+        data_b["pts_global_scaled"], rec_a, data_a["crop_full"], data_a["scale"], vol_a_crop.shape
     )
 
-    print("\nDisplay-frame all points:")
-    print(f"  setup {setup_a}: {len(pts_a_display):,}")
-    print(f"  setup {setup_b}: {len(pts_b_display):,}")
-
-    match_a_local, match_b_local, match_meta = get_pair_matches_bidirectional(
-        point_manifest=point_manifest,
-        match_index_df=match_index_df,
-        tp_id=TIMEPOINT,
-        setup_a=setup_a,
-        setup_b=setup_b,
-        label=MATCH_LABEL,
+    match_a_raw, match_b_raw, _ = get_pair_matches_bidirectional(
+        point_manifest, match_index_df, TIMEPOINT, setup_a, setup_b, MATCH_LABEL
+    )
+    match_a, match_b, _ = dedupe_match_pairs_with_indices(match_a_raw, match_b_raw, decimals=3)
+    match_a_crop, match_b_crop = filter_paired_points_in_xy_crops(
+        match_a, match_b, data_a["crop_full"], data_b["crop_full"]
     )
 
-    print(f"\nLoaded raw bidirectional matches for pair ({setup_a}, {setup_b}): {len(match_a_local):,}")
-    print(f"Match metadata rows before dedupe: {len(match_meta):,}")
+    match_a_global = local_fullres_to_global_scaled(match_a_crop, rec_a, data_a["scale"])
+    match_b_global = local_fullres_to_global_scaled(match_b_crop, rec_b, data_b["scale"])
+    match_a_all = global_scaled_to_a_crop_display_unfiltered(match_a_global, rec_a, data_a["crop_full"], data_a["scale"])
+    match_b_all = global_scaled_to_a_crop_display_unfiltered(match_b_global, rec_a, data_a["crop_full"], data_a["scale"])
+    mask = display_bounds_mask(match_a_all, vol_a_crop.shape) & display_bounds_mask(match_b_all, vol_a_crop.shape)
+    match_a_display = match_a_all[mask].astype(np.float32)
+    match_b_display = match_b_all[mask].astype(np.float32)
 
-    match_a_local, match_b_local = dedupe_match_pairs(match_a_local, match_b_local, decimals=3)
-    print(f"Raw matches after A/B pair dedupe: {len(match_a_local):,}")
-
-    match_a_local_crop, match_b_local_crop = filter_paired_points_in_xy_crops(
-        match_a_local,
-        match_b_local,
-        data_a["crop_full"],
-        data_b["crop_full"],
-    )
-
-    print(f"Matches after paired XY crop filter: {len(match_a_local_crop):,}")
-
-    match_a_global_scaled = local_fullres_to_global_scaled(match_a_local_crop, rec_a, data_a["scale"])
-    match_b_global_scaled = local_fullres_to_global_scaled(match_b_local_crop, rec_b, data_b["scale"])
-
-    match_a_display_all = global_scaled_to_a_crop_display_unfiltered(
-        match_a_global_scaled,
-        rec_a,
-        data_a["crop_full"],
-        data_a["scale"],
-    )
-    match_b_display_all = global_scaled_to_a_crop_display_unfiltered(
-        match_b_global_scaled,
-        rec_a,
-        data_a["crop_full"],
-        data_a["scale"],
-    )
-
-    pair_display_mask = (
-        display_bounds_mask(match_a_display_all, vol_a_crop.shape) &
-        display_bounds_mask(match_b_display_all, vol_a_crop.shape)
-    )
-
-    match_a_display = match_a_display_all[pair_display_mask].astype(np.float32)
-    match_b_display = match_b_display_all[pair_display_mask].astype(np.float32)
-
-    print(f"Matches visible in setup-A display frame: {len(match_a_display):,}")
-
-    qc = compute_match_qc(match_a_display, match_b_display, vol_a_crop.shape, data_a["scale"])
-    print_match_qc(qc, data_a["scale"])
+    qc = compute_slider_qc(match_a_display, match_b_display, vol_a_crop.shape)
+    print_slider_summary(qc, len(match_a_raw), len(match_a), len(match_a_crop), len(match_a_display))
 
     view_match_pair_slider(
-        vol_a_crop=vol_a_crop,
-        vol_b_in_a_crop=vol_b_in_a_crop,
-        pts_a_display=pts_a_display,
-        pts_b_display=pts_b_display,
-        match_a_display=match_a_display,
-        match_b_display=match_b_display,
-        qc=qc,
-        setup_a=setup_a,
-        setup_b=setup_b,
+        vol_a_crop, vol_b_in_a_crop, pts_a_display, pts_b_display,
+        match_a_display, match_b_display, qc, setup_a, setup_b,
     )
-
     view_match_pair_y_chunk_sliders(
-        vol_a_crop=vol_a_crop,
-        vol_b_in_a_crop=vol_b_in_a_crop,
-        match_a_display=match_a_display,
-        match_b_display=match_b_display,
-        qc=qc,
-        setup_a=setup_a,
-        setup_b=setup_b,
-        n_y_chunks=ZOOM_Y_CHUNKS,
+        vol_a_crop, vol_b_in_a_crop, match_a_display, match_b_display,
+        qc, setup_a, setup_b, ZOOM_Y_CHUNKS,
     )
 
 

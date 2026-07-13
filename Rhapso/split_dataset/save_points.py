@@ -3,11 +3,11 @@ import fsspec
 import numpy as np
 import pandas as pd
 
-class SavePoints:
-    """
-    Save split interest points into the Parquet/JSON alignment store.
-    """
+"""
+Save split interest points into the Parquet/JSON alignment store.
+"""
 
+class SavePoints:
     def __init__(self, split_interest_points, n5_prefix):
         self.split_interest_points = split_interest_points
         self.alignment_prefix = str(n5_prefix).rstrip("/")
@@ -93,8 +93,12 @@ class SavePoints:
         coords = []
 
         for i, point in enumerate(raw_points):
-            point_ids.append(int(point[0]) if isinstance(point, (list, tuple)) else i)
-            coords.append(point[1] if isinstance(point, (list, tuple)) else point)
+            if isinstance(point, (list, tuple)):
+                point_ids.append(int(point[0]))
+                coords.append(point[1])
+            else:
+                point_ids.append(i)
+                coords.append(point)
 
         coords = np.asarray(coords, dtype=np.float64).reshape(-1, 3)
 
@@ -104,15 +108,25 @@ class SavePoints:
                 "x": coords[:, 0],
                 "y": coords[:, 1],
                 "z": coords[:, 2],
-                "intensity": np.full(len(coords), np.nan, dtype=np.float32),
+                "intensity": np.full(
+                    len(coords),
+                    np.nan,
+                    dtype=np.float32,
+                ),
             }
         )
 
     def manifest_uri(self):
-        return self.join_uri(self.alignment_prefix, "manifest.json")
+        return self.join_uri(
+            self.alignment_prefix,
+            "manifest.json",
+        )
 
     def point_index_uri(self):
-        return self.join_uri(self.alignment_prefix, "point_index.parquet")
+        return self.join_uri(
+            self.alignment_prefix,
+            "point_index.parquet",
+        )
 
     def load_manifest(self):
         uri = self.manifest_uri()
@@ -166,13 +180,29 @@ class SavePoints:
         for view_id, label_entries in self.split_interest_points.items():
             timepoint, setup = self.parse_view_id(view_id)
 
-            for label_entry in label_entries:
-                label = str(label_entry["label"])
-                raw_points = label_entry["ip_list"].get("interest_points", [])
+            for label_entry_index, label_entry in enumerate(label_entries):
+                if not isinstance(label_entry, dict):
+                    continue
+
+                label = str(label_entry.get("label", ""))
+
+                ip_list = label_entry.get("ip_list")
+
+                if not isinstance(ip_list, dict):
+                    raw_points = []
+                else:
+                    raw_points = ip_list.get("interest_points", [])
 
                 points_df = self.points_to_dataframe(raw_points)
-                rel_path = self.point_relative_path(timepoint, setup, label)
-                output_uri = self.join_uri(self.alignment_prefix, rel_path)
+                rel_path = self.point_relative_path(
+                    timepoint,
+                    setup,
+                    label,
+                )
+                output_uri = self.join_uri(
+                    self.alignment_prefix,
+                    rel_path,
+                )
 
                 self.write_parquet(output_uri, points_df)
 
@@ -198,7 +228,10 @@ class SavePoints:
 
         index_df = (
             index_df
-            .drop_duplicates(["timepoint", "setup", "label"], keep="last")
+            .drop_duplicates(
+                ["timepoint", "setup", "label"],
+                keep="last",
+            )
             .sort_values(["timepoint", "setup", "label"])
             .reset_index(drop=True)
         )

@@ -60,8 +60,8 @@ setup_commands:
   - /home/ubuntu/rhapso-py311/bin/python -m pip install "ray[default]==2.9.1" protobuf==4.23.4
   - sudo ln -sf /home/ubuntu/rhapso-py311/bin/pip /usr/local/bin/pip
   - sudo ln -sf /home/ubuntu/rhapso-py311/bin/ray /usr/local/bin/ray
-  - aws s3 cp s3://aind-scratch-data/sean.fite/Rhapso-0.2.8-py3-none-any.whl /tmp/Rhapso-0.2.8-py3-none-any.whl
-  - /home/ubuntu/rhapso-py311/bin/python -m pip install /tmp/Rhapso-0.2.8-py3-none-any.whl
+  - aws s3 cp s3://aind-scratch-data/sean.fite/Rhapso-0.3.7-py3-none-any.whl /tmp/Rhapso-0.3.7-py3-none-any.whl
+  - /home/ubuntu/rhapso-py311/bin/python -m pip install /tmp/Rhapso-0.3.7-py3-none-any.whl
 
 head_start_ray_commands:
   - ray stop
@@ -76,6 +76,8 @@ worker_start_ray_commands:
 # CREATE WHL FILE
 # python3 setup.py bdist_wheel 
 
+# aws s3 cp /Users/sean.fite/Desktop/Rhapso/dist/Rhapso-0.3.7-py3-none-any.whl s3://aind-scratch-data/sean.fite/
+
 # RAY UP / DOWN / CLEAR CACHE COMMANDS
 # ray up alignment_cluster_sean.yml --no-config-cache
 # ray down alignment_cluster_sean.yml
@@ -83,7 +85,7 @@ worker_start_ray_commands:
 # rm -rf ~/.cache/ray
 
 # ACCESS RAY DASHBOARD
-# ssh -i /Users/sean.fite/Desktop/AllenInstitute/Auth/AWS/EC2-SSH-KEY/aind-ray-cluster.pem -L 8265:localhost:8265 ubuntu@34.222.10.144
+# ssh -i /Users/sean.fite/Desktop/AllenInstitute/Auth/AWS/EC2-SSH-KEY/aind-ray-cluster.pem -L 8265:localhost:8265 ubuntu@18.236.95.240
 # http://localhost:8265
 
 # TO FIX

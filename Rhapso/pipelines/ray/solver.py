@@ -17,15 +17,16 @@ This class implements the Solver pipeline for rigid, affine, and split-affine op
 """
 
 class Solver:
-    def __init__(self, xml_file_path_output, n5_input_path, xml_file_path, run_type, relative_threshold, absolute_threshold, 
-                 min_matches, damp, regularization_weight, max_iterations, max_allowed_error, max_plateauwidth, metrics_output_path, 
-                 fixed_tile):
+    def __init__(self, xml_file_path_output, n5_input_path, xml_file_path, run_type, relative_threshold, 
+                 absolute_threshold, max_cleanup_rounds, min_matches, damp, regularization_weight, max_iterations, 
+                 max_allowed_error, max_plateauwidth, metrics_output_path, fixed_tile):
         self.xml_file_path_output = xml_file_path_output
         self.n5_input_path = n5_input_path
         self.xml_file_path = xml_file_path
         self.run_type = run_type
         self.relative_threshold = relative_threshold
         self.absolute_threshold = absolute_threshold
+        self.max_cleanup_rounds = max_cleanup_rounds
         self.min_matches = min_matches
         self.damp = damp
         self.regularization_weight = regularization_weight
@@ -80,16 +81,16 @@ class Solver:
         tiles, view_map = compute_tiles.run()
 
         # Use matches to update transformation matrices to represent rough alignment
-        pre_align_tiles = PreAlignTiles(self.min_matches, self.run_type, self.fixed_tile)
-        tc = pre_align_tiles.run(tiles)
+        pre_align_tiles = PreAlignTiles(self.min_matches, self.run_type, self.fixed_tile, self.regularization_weight)
+        tc, initial_pos = pre_align_tiles.run(tiles)
 
         # Update all points with transform models and iterate through all tiles (views) and optimize alignment
         global_optimization = GlobalOptimization(tc, self.relative_threshold, self.absolute_threshold, self.min_matches, self.damp, 
-                                                 self.regularization_weight, self.max_iterations, self.max_allowed_error, 
-                                                 self.max_plateauwidth, self.run_type, self.metrics_output_path)
+                                                 self.regularization_weight, self.max_iterations, self.max_allowed_error, self.max_cleanup_rounds,
+                                                 self.max_plateauwidth, self.run_type, self.metrics_output_path, initial_pos)
         tiles, validation_stats = global_optimization.run()
         
-        if(self.run_type == "split-affine"):
+        if(self.run_type == "two-round-simple"):
             
             # Combine splits into groups
             connected_graphs = ConnectedGraphs(tiles, dataframes)
@@ -100,13 +101,13 @@ class Solver:
             tiles_round_2, view_map = compute_tiles.run()
 
             # Use matches to update transformation matrices to represent rough alignment
-            pre_align_tiles = PreAlignTiles(self.min_matches, self.run_type, self.fixed_tile)
-            tc = pre_align_tiles.run(tiles_round_2)
+            pre_align_tiles = PreAlignTiles(self.min_matches, self.run_type, self.fixed_tile, self.regularization_weight)
+            tc, initial_pos = pre_align_tiles.run(tiles_round_2)
 
             # Update all points with transform models and iterate through all tiles (views) and optimize alignment
             global_optimization = GlobalOptimization(tc, self.relative_threshold, self.absolute_threshold, self.min_matches, self.damp, 
                                                     self.regularization_weight, self.max_iterations, self.max_allowed_error, 
-                                                    self.max_plateauwidth, self.run_type, self.metrics_output_path)
+                                                    self.max_plateauwidth, self.run_type, self.metrics_output_path, initial_pos)
             tiles_round_2, validation_stats_round_2 = global_optimization.run()
 
             # Combine models/metrics for round 1 and 2 

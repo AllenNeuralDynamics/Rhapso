@@ -48,7 +48,7 @@ class InterestPointMatching:
                                      min_inlier_ratio, num_iterations, model_min_inliers, regularization_weight, search_radius, view_registrations,
                                      input_type, image_file_prefix, ransac_sample_size)
 
-            pointsA, pointsB, viewA_str, viewB_str = points_loader.load_and_transform_points(viewA, viewB)
+            pointsA, pointsB, viewA_str, viewB_str = points_loader.run(viewA, viewB)
             pointsA, pointsB = matcher.filter_for_overlapping_points(pointsA, pointsB, viewA_str, viewB_str)
 
             if len(pointsA) == 0 or len(pointsB) == 0:
@@ -90,12 +90,12 @@ class InterestPointMatching:
 # all_results = []
 # for viewA, viewB, viewA_str, viewB_str, label in process_pairs:
 
-#     data_loader = LoadAndTransformPoints(data_global, view_registrations, label, self.n5_output_path)
+#     points_loader = LoadAndTransformPoints(data_global, view_registrations, label, self.n5_output_path)
 #     matcher = RansacMatching(data_global, self.num_neighbors, self.redundancy, self.significance, self.num_required_neighbors, self.match_type, self.inlier_threshold, 
 #                                 self.min_inlier_ratio, self.num_iterations, self.model_min_inliers, self.regularization_weight, self.search_radius, view_registrations,
 #                                 self.input_type, self.image_file_prefix, self.ransac_sample_size)
     
-#     pointsA, pointsB, viewA_str, viewB_str = data_loader.run(viewA, viewB)
+#     pointsA, pointsB, viewA_str, viewB_str = points_loader.run(viewA, viewB)
 #     pointsA, pointsB = matcher.filter_for_overlapping_points(pointsA, pointsB, viewA_str, viewB_str)
 
 #     if len(pointsA) == 0 or len(pointsB) == 0:
