@@ -35,7 +35,7 @@ Now Supporting Zarr v3
 ## Summary
 Rhapso is a set of Python components used to register, align, and fuse large-scale images. Its stateless components can run on a single machine or scale out across cloud-based clusters. 
 
-The core Rhapso components are not tied to any specific cloud service, infrastructure, image type, or imaging modality. They only require image data as NumPy arrays. The initial use case is large-scale, overlapping, tile-based, multiscale 3D microscopy datasets (OME Zarr) hosted in S3, but the same components can be adapted to many other large image workflows.
+The core Rhapso components are not tied to any specific cloud service, infrastructure, image type, or imaging modality. The only requirement is 3D image data in NumPy arrays. The initial use case is large-scale, overlapping, tile-based, multiscale 3D microscopy datasets (OME Zarr) hosted in S3, but the same components can be adapted to many other large image workflows.
 
 **Looking forward, we are developing an automated QC system for alignment.**
 
