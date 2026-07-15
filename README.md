@@ -195,35 +195,11 @@ Image prefix (referenced by the XML)
 
 <br>
 
-**Note:** Occasionally we clean up our aind-open-data bucket. If you find this dataset does not exist, please create an issue and we will replace it.
-
----
+Use the [Parameters](#parameters) table and [Tuning Guide](#tuning-guide) if you need help picking params.
 
 <br>
 
-## High Level Approach to Registration, Alignment, and Fusion
-
-This process has a lot of knobs and variations, and when used correctly, can work for a broad range of datasets.
-
-**First, figure out what type of alignment you need.**  
-- Are there translations to shift to?  
-- If so, you’ll likely want to start with a rigid alignment.
-
-Once you’ve run the rigid step, how does your data look?  
-- Did the required translations shrink to an acceptable level?  
-- If not, try again with new parameters, keeping the questions above in mind.
-
-At this point, the translational part of your alignment should be in good shape. Now ask: **are transformations needed?** If so, you likely need an affine alignment next.
-
-Your dataset should be correctly aligned at this point. If not, there are a number of reasons why, and we have listed some common recurrences and will keep this up to date.
-
-There is a special case in some datasets where the z-stack is very large. In this case, you can use the split-dataset utility, which splits each tile into chunks. Then you can run split-affine alignment, allowing for more precise transformations without such imposing global rails.
-
-**Common Causes of Poor Alignment**
-- Not enough quality matches (adjust sigma threshold until you do)
-- Data is not consistent looking (we take a global approach to params)
-- Large translations needed (extend search radius)
-- Translations that extend beyond overlapping span (increase overlap)
+**Note:** Occasionally we clean up our aind-open-data bucket. If you find this dataset does not exist, please create an issue and we will replace it.
 
 ---
 
