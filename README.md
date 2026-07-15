@@ -340,45 +340,51 @@ python Rhapso/pipelines/ray/aws/alignment_pipeline.py
 
 ## Parameters
 
+There is no single set of parameters that will work well for every dataset. The optimal values depend on the characteristics of the data, the dataset size, and the accuracy required for alignment.
+
+The ranges below are examples intended to explain the available parameters, what they control, and the values commonly used for some of our light-sheet datasets. They should be treated as starting points and adjusted based on the quality of the detected peaks, matches, and final alignment.
+
+<br>
+
 ### Detection
 ```
-| Parameter          | Feature / step         | What it does                                                                                  | Typical range\*                   |
-| :----------------- | :--------------------- | :-------------------------------------------------------------------------------------------- | :-------------------------------- |
-| `dsxy`             | Downsampling (XY)      | Reduces XY resolution before detection; speeds up & denoises, but raises minimum feature size | 16                                |
-| `dsz`              | Downsampling (Z)       | Reduces Z resolution; often lower than XY due to anisotropy                                   | 16                                |
-| `min_intensity`    | Normalization          | Lower bound for intensity normalization prior to DoG                                          | 1                                 |
-| `max_intensity`    | Normalization          | Upper bound for intensity normalization prior to DoG                                          | 5                                 |
-| `sigma`            | DoG blur               | Gaussian blur scale (sets feature size); higher = smoother, fewer peaks                       | 1.5 - 2.5                         |
-| `threshold`        | Peak detection (DoG)   | Peak threshold (initial min peak ≈ `threshold / 3`); higher = fewer, stronger peaks           | 0.0008 - .05                      |
-| `median_filter`    | Pre-filter (XY)        | Median filter size to suppress speckle/isolated noise before DoG                              | 1-10                              |
-| `combine_distance` | Post-merge (DoG peaks) | Merge radius (voxels) to de-duplicate nearby detections                                       | 0.5                               |
-| `chunks_per_bound` | Tiling/parallelism     | Sub-partitions per tile/bound; higher improves parallelism but adds overhead                  | 12-18                             |
-| `max_spots`        | Post-cap               | Maximum detections per bound to prevent domination by dense regions                           | 8,0000 - 10,000                   |
+| Parameter          | Feature / step         | What it does                                                            | Example range\*      |
+| :----------------- | :--------------------- | :---------------------------------------------------------------------- | :------------------- |
+| `dsxy`             | Downsampling (XY)      | Reduces XY resolution                                                   | 1, 2, 4, 8, or 16    |
+| `dsz`              | Downsampling (Z)       | Reduces Z resolution                                                    | 1, 2, 4, 8, or 16    |
+| `min_intensity`    | Normalization          | Lower bound for intensity normalization prior to DoG                    | 0                    |
+| `max_intensity`    | Normalization          | Upper bound for intensity normalization prior to DoG                    | 100                  |
+| `sigma`            | DoG blur               | Gaussian blur scale (sets feature size), higher = smoother              | 1.1 - 2.8            |
+| `threshold`        | Peak detection (DoG)   | Peak gating threshold, higher = fewer points                            | 0.0001 - .9          |
+| `median_filter`    | Pre-filter (XY)        | Median filter size to suppress speckle/isolated noise before DoG        | 8                    |
+| `combine_distance` | Post-merge (DoG peaks) | Merge radius (voxels) to de-duplicate nearby detections                 | 1-16                 |
+| `chunks_per_bound` | Tiling/parallelism     | Amount of chunks per overlap bound, to optimize mem usage and run time  | 1 - 50               |
+| `max_spots`        | Post-cap               | Maximum detections per bound to prevent domination by dense regions     | 0 - 100,000          |
 ```
 <br>
 
 ### Matching
 ```
-| Parameter                 | Feature / step      | What it does                                                      | Typical range  |
+| Parameter                 | Feature / step      | What it does                                                      | Example range  |
 | :------------------------ | :------------------ | :---------------------------------------------------------------- | :------------- |
 | `num_neighbors`           | Candidate search    | Number of nearest neighbors to consider per point                 | 3              |
 | `redundancy`              | Candidate search    | Extra neighbors added for robustness beyond `num_neighbors`       | 0 - 1          |
-| `significance`            | Ratio test          | Strictness of descriptor ratio test; larger = stricter acceptance | 3              |
-| `search_radius`           | Spatial gating      | Max spatial distance for candidate matches (in downsampled units) | 100 - 300      |
+| `significance`            | Ratio test          | Strictness of descriptor ratio test; larger = stricter acceptance | 3 - 5          |
+| `search_radius`           | Spatial gating      | Max spatial distance for candidate matches (in downsampled units) | 100 - 600      |
 | `num_required_neighbors`  | Candidate filtering | Minimum neighbors required to keep a candidate point              | 3              |
 | `ransac_sample_size`      | RANSAC              | Minimum sample size                                               | 3 - 5          |
 | `model_min_inliers`       | RANSAC              | Minimum correspondences to estimate a transform                   | 18 – 32        |
 | `inlier_factor`           | RANSAC              | Inlier tolerance scaling; larger = looser inlier threshold        | 30 – 100       |
 | `lambda_value`            | RANSAC              | Regularization strength during model fitting                      | 0.1 – 0.05     |
 | `num_iterations`          | RANSAC              | Number of RANSAC trials; higher = more robust, slower             | 10,0000        |
-| `regularization_weight`   | RANSAC              | Weight applied to the regularization term                         | 1.0            |
+| `regularization_weight`   | RANSAC              | Weight applied to the regularization term                         | .05 - 1.0      |
 
 ```
 <br>
 
 ### Solver
 ```
-| Parameter            | Feature / step | What it does                                                       | Typical range       |
+| Parameter            | Feature / step | What it does                                                       | Example range       |
 | :------------------- | :------------- | :----------------------------------------------------------------- | :------------------ |
 | `relative_threshold` | Graph pruning  | Reject edges with residuals above dataset-relative cutoff          | 3.5                 |
 | `absolute_threshold` | Graph pruning  | Reject edges above an absolute error bound (detection-space units) | 7.0                 |
@@ -394,14 +400,14 @@ python Rhapso/pipelines/ray/aws/alignment_pipeline.py
 
 ### Split
 ```
-| Parameter            | Feature / step | What it does                                       | Typical range       |
+| Parameter            | Feature / step | What it does                                       | Example range       |
 | :------------------- | :------------- | :------------------------------------------------- | :------------------ |
-| `point_density`      | Fake points    | Controls overlap point count                       | 100                 |
+| `point_density`      | Fake points    | Controls overlap point count                       | 1.0                 |
 | `min_points`         | Fake points    | Min points per overlap                             | 20                  |
-| `max_points`         | Fake points    | Max points per overlap                             | 500                 |
+| `max_points`         | Fake points    | Max points per overlap                             | 800                 |
 | `error`              | Fake points    | Adds random coordinate jitter                      | 0.5                 |
 | `exclude_radius`     | Fake points    | Prevents points from being too close               | 200                 |
-| `target_image_size`  | Grid split     | Desired split tile size                            | [7040, 7040, 7040]  |
+| `target_image_size`  | Grid split     | Desired split tile size                            | [5000, 5000, 3400]  |
 | `target_overlap`     | Grid split     | Desire tile overlap size                           | [128, 128, 128]     |
 
 ```
@@ -409,20 +415,20 @@ python Rhapso/pipelines/ray/aws/alignment_pipeline.py
 
 ### Fusion
 ```
-| Parameter            | Feature / step | What it does                                             | Typical range                 |
-| :------------------- | :------------- | :--------------------------------------------------------| :---------------------------- |
-| `block_size`         | Fusion opt     | Cell size per task xyz                                   | 256, 256, 256                 |
-| `intensity_range`    | Fusion config  | Range of intensity values                                | 0, 65535                      |
-| `block_scale`        | Fusion opt     | Scaling of cell size                                     | 2, 2, 1                       |
-| `overlap_strategy`   | Edge handling  | Strategy for competing pixels                            | avg_blend, lowest_view_wins, or max_blend |
-| `output_zarr_version`| Zarr version   | Set which zarr version you want for output               | 2 or 3                        |
+| Parameter            | Feature / step | What it does                                 | Example range                             |
+| :------------------- | :------------- | :--------------------------------------------| :---------------------------------------- |
+| `block_size`         | Fusion opt     | Cell size per task xyz                       | 256, 256, 256                             |
+| `intensity_range`    | Fusion config  | Range of intensity values                    | 0, 65535                                  |
+| `block_scale`        | Fusion opt     | Scaling of cell size                         | 2, 2, 1                                   |
+| `overlap_strategy`   | Edge handling  | Strategy for competing pixels                | avg_blend, lowest_view_wins, or max_blend |
+| `output_zarr_version`| Zarr version   | Set which zarr version you want for output   | 2 or 3                                    |
 
 ```
 <br>
 
 ### Multiscale
 ```
-| Parameter               | Feature / step         | What it does                                            | Typical range       |
+| Parameter               | Feature / step         | What it does                                            | Example range       |
 | :---------------------- | :----------------------| :------------------------------------------------------ | :------------------ |
 | `multiscale_chunk_size` | Optimization           | Output cell size                                        | 128, 128, 128       |
 | `voxel_size`            | Data config            | Voxel size of data in zyx                               | 1.0, .748, .748     |
@@ -439,15 +445,33 @@ python Rhapso/pipelines/ray/aws/alignment_pipeline.py
 
 ## Tuning Guide
 
-- **Start with Detection:** Interest point quality and coverage have the biggest impact on alignment results.
+The alignment workflow has three main components: **peak detection, matching, and solving**. These components are tuned together, and the matching and solver stages can be run progressively through **rigid, affine, and split-affine alignment**.
 
-- **Inspect the Peaks:** There is no universal peak count that guarantees good alignment. Tune detection to capture as many meaningful peaks as possible without mostly detecting noise. Use `detection_visualization.py` to compare detected points against the image data. Good params should produce points that follow visible tissue structure rather than random background. It is usually better to allow some extra peaks as RANSAC can reject noisy matches, but this will increase runtime.
+### 1. Peak Detection
 
-- **Rigid -> Affine Alignment:** For large datasets, acquisition can take long enough that the sample may slightly deform over time. Start by solving rigid/translation alignment between overlapping tiles, then run affine alignment to account for remaining local scale, shear, or deformation effects.
+* **Inspect Your Data:** Start by understanding what your data looks like and what type of registration it requires. Determine whether feature-based registration is appropriate and whether the misalignment can be corrected with a rigid transformation or requires affine deformation.
 
-- **Debug Weak Regions Locally:** If a tile aligns poorly, first inspect its match counts with neighboring tiles. Low match counts usually point back to detection quality, overlap size, and sparsity of data.
+* **Tune Peak Detection:** Choose a downsampling level that balances dataset size, runtime, and the precision required for alignment. Sigma should correspond to the expected size of the features you want to detect, while the threshold controls how much noise is allowed through. Interest-point quality and spatial coverage are equally important and have the greatest impact on alignment performance.
 
-- **Tune Matching Carefully:** Adjust the matching regularization weight when needed, but avoid making RANSAC too permissive. A loose RANSAC threshold can accept bad matches and usually makes alignment worse, not better.
+* **Inspect the Peaks:** Use `evaluation/ip_metrics_and_viz.py` to visualize the detected peaks and confirm that they provide sufficient spatial coverage across the dataset.
+
+### 2. Matching
+
+The key matching metrics are correspondence quality, match quantity, spatial coverage, and the residual error between matched points after alignment.
+
+* **Rigid Matching:** Because the rigid model has fewer degrees of freedom, you can generally allow more matches to produce a robust estimate of translation and rotation.
+
+* **Affine Matching:** Match quality becomes more important because incorrect correspondences can introduce unwanted scaling, shear, or deformation. Stricter filtering is typically required.
+
+* **Split-Affine Matching:** Spatial coverage is critical. Ensure that each split contains enough real correspondences and synthetic points to remain connected and well constrained during optimization.
+
+* **Inspect the Matches:** Use `evaluation/match_viz.py` to visualize the matches. Confirm that they span the regions being aligned and provide sufficient coverage throughout the dataset.
+
+### 3. Solver
+
+The solver iteratively optimizes the alignment through the rigid, affine, and split-affine stages. Each stage begins from the result of the previous stage and introduces additional model flexibility.
+
+During optimization, the solver can remove poor correspondences based on their residual error. Use the absolute and relative error thresholds to control this outlier rejection. If the maximum error is significantly higher than the average error, the thresholds may need to be stricter.
   
 ---
 
