@@ -5,7 +5,7 @@ This is the official code base for **Rhapso**, a modular Python toolkit for stit
 Now Supporting Zarr v3
 
 [![License](https://img.shields.io/badge/license-MIT-brightgreen)](LICENSE)
-[![Python Version](https://img.shields.io/badge/python-3.11-blue.svg)](https://www.python.org/downloads/release/python-3100/)
+[![Python Version](https://img.shields.io/badge/python-3.11-blue.svg)](https://www.python.org/downloads/)
 [![Documentation](https://img.shields.io/badge/docs-wiki-blue)](https://github.com/AllenNeuralDynamics/Rhapso/wiki)
 
 > Rhapso is published on PyPI and developed by the Allen Institute.
@@ -97,30 +97,54 @@ Rhapso/
 
 ## Installation
 
+Rhapso requires Python 3.11 or newer. The examples below use Python 3.11.
+
 ### Option 1: Install from PyPI (recommended)
 
-```bash
-# create and activate a virtual environment
-python -m venv .venv && source .venv/bin/activate
-# or: conda create -n rhapso python=3.10 && conda activate rhapso
+#### macOS and Linux
 
-# install Rhapso from PyPI
-pip install Rhapso
+```bash
+python3.11 -m venv .venv
+source .venv/bin/activate
+
+python -m pip install --upgrade pip
+python -m pip install Rhapso
+```
+
+#### Windows PowerShell
+
+```powershell
+py -3.11 -m venv .venv
+.\.venv\Scripts\Activate.ps1
+
+python -m pip install --upgrade pip
+python -m pip install Rhapso
+```
+
+#### Conda
+
+```bash
+conda create -n rhapso python=3.11
+conda activate rhapso
+
+python -m pip install Rhapso
 ```
 
 ### Option 2: Install from GitHub (developers)
 
- ```sh
-# clone the repo
+```bash
 git clone https://github.com/AllenNeuralDynamics/Rhapso.git
+cd Rhapso
 
-# create and activate a virtual environment
-python -m venv .venv && source .venv/bin/activate
-# or: conda create -n rhapso python=3.11 && conda activate rhapso
+python3.11 -m venv .venv
+source .venv/bin/activate
 
-# install deps
-pip install -r requirements.txt
+python -m pip install --upgrade pip
+python -m pip install -e .
 ```
+
+On Windows, use the PowerShell environment creation and activation commands shown above, then run `python -m pip install -e .` from the repository root. The editable install includes the dependencies declared by Rhapso.
+
 ---
 
 <br>
@@ -243,7 +267,7 @@ There is a special case in some datasets where the z-stack is very large. In thi
 
 ### 1. Edit or create param file (templates in codebase)
 ```python
-Rhapso/Rhapso/pipelines/param/
+Rhapso/pipelines/ray/param/
 ```
 
 ### 2. Update alignment pipeline script to point to param file
@@ -433,13 +457,13 @@ python Rhapso/pipelines/ray/aws/alignment_pipeline.py
 
 ### Using the Built `.whl` File
 
-1. **Build the `.whl` File in the root of this repo:**
+1. **Build the source distribution and `.whl` file from the repository root:**
   ```sh
   cd /path/to/Rhapso
-  pip install setuptools wheel
-  python setup.py sdist bdist_wheel
+  python -m pip install --upgrade build
+  python -m build
   ```
-  The `.whl` file will appear in the `dist` directory. Do not rename it to ensure compatibility (e.g., `rhapso-0.1-py3-none-any.whl`).
+  The distributions will appear in the `dist` directory. Do not rename the wheel because its filename contains package compatibility metadata (for example, `rhapso-<version>-py3-none-any.whl`).
 
 ---
 
