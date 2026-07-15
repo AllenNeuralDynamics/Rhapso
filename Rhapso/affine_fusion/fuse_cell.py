@@ -240,6 +240,83 @@ class FuseCell:
             del SX, SY, SZ, SX_read, SY_read, SZ_read, mask_zyx, out_buf
 
         return out
+
+    def max_blend(self, out_shape_zyx, final_blocks, images_dict, X, Y, Z, max_slab_n, slab, nz, ny, nx):
+        """
+        Take the voxelwise maximum across all valid contributing views.
+
+        Nearest-neighbor sampling preserves discrete mask values. For split
+        views, masks are evaluated in split-local coordinates while source
+        reads use coordinates in the original tile.
+        """
+        out = np.zeros(out_shape_zyx, dtype=np.float32)
+
+        for view_key in final_blocks:
+            split_def = self.per_view_transforms[view_key].get("split_def")
+
+            if split_def is not None:
+                split_min = np.asarray(split_def["split_min_xyz"], dtype=np.float32)
+            else:
+                split_min = np.array([0, 0, 0], dtype=np.float32)
+
+            instr = images_dict[view_key]
+            inv_t = np.asarray(instr["inv_t"], dtype=np.float32)
+            A = inv_t[:3, :3]
+            t = inv_t[:3, 3]
+
+            # These are split-local coords if this is a split view
+            SX = A[0, 0] * X + A[0, 1] * Y + A[0, 2] * Z + t[0]
+            SY = A[1, 0] * X + A[1, 1] * Y + A[1, 2] * Z + t[1]
+            SZ = A[2, 0] * X + A[2, 1] * Y + A[2, 2] * Z + t[2]
+
+            # These are the coords actually used to read from the OLD tile zarr
+            SX_read = SX + split_min[0]
+            SY_read = SY + split_min[1]
+            SZ_read = SZ + split_min[2]
+
+            src_min = np.floor([SX_read.min(), SY_read.min(), SZ_read.min()]).astype(np.int64)
+            src_max = np.ceil([SX_read.max(), SY_read.max(), SZ_read.max()]).astype(np.int64)
+
+            src_chunk_zyx, src_min_xyz = self.load_source_chunk_for_view(view_key, src_min, src_max)
+            if src_chunk_zyx.size == 0:
+                del SX, SY, SZ, SX_read, SY_read, SZ_read
+                continue
+
+            # Mask should stay in split-local coords
+            mask_zyx = self.evaluate_mask_xyz(instr, SX, SY, SZ)
+
+            # Convert READ coords to chunk-relative in-place
+            SX_read -= src_min_xyz[0]
+            SY_read -= src_min_xyz[1]
+            SZ_read -= src_min_xyz[2]
+
+            out_buf = np.empty(max_slab_n, dtype=np.float32)
+
+            for z0 in range(0, nz, slab):
+                z1 = min(nz, z0 + slab)
+                n_slab = (z1 - z0) * ny * nx
+
+                map_coordinates(
+                    src_chunk_zyx,
+                    [SZ_read[z0:z1].ravel(), SY_read[z0:z1].ravel(), SX_read[z0:z1].ravel()],
+                    order=0,
+                    mode="nearest",
+                    prefilter=False,
+                    output=out_buf[:n_slab],
+                )
+
+                sampled_zyx = out_buf[:n_slab].reshape((z1 - z0, ny, nx))
+                out_slab = out[z0:z1]
+                np.maximum(
+                    out_slab,
+                    sampled_zyx,
+                    out=out_slab,
+                    where=mask_zyx[z0:z1],
+                )
+
+            del SX, SY, SZ, SX_read, SY_read, SZ_read, mask_zyx, out_buf
+
+        return out
     
     def avg_blend(self, final_blocks, images_dict, X, Y, Z, max_slab_n, slab, nz, ny, nx, numerator, denominator):
         """
@@ -336,7 +413,10 @@ class FuseCell:
             return self.avg_blend(final_blocks, images_dict, X, Y, Z, max_slab_n, slab, nz, ny, nx, numerator, denominator)
         
         elif self.overlap_strategy == "lowest_view_wins":
-            return self.lowest_view_wins(out_shape_zyx, final_blocks, images_dict, X, Y, Z, max_slab_n, slab, nz, ny, nx)        
+            return self.lowest_view_wins(out_shape_zyx, final_blocks, images_dict, X, Y, Z, max_slab_n, slab, nz, ny, nx)
+
+        elif self.overlap_strategy == "max_blend":
+            return self.max_blend(out_shape_zyx, final_blocks, images_dict, X, Y, Z, max_slab_n, slab, nz, ny, nx)
 
     def run(self):
         block_min = self.grid_block[0]
@@ -355,4 +435,3 @@ class FuseCell:
 
         fused_u16 = np.clip(np.rint(fused_block), 0, 65535).astype(np.uint16)
         self.write_block(fused_u16, self.grid_block[0])
-        
