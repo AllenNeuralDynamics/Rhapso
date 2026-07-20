@@ -1187,7 +1187,7 @@ class GlobalOptimization:
                     model,
                 )
 
-            self.sync_tile_array_to_matches(tile)
+            self.sync_tile_array_to_matches(tile) 
 
     def optimize_silently(self):
         """
@@ -1267,3 +1267,4 @@ class GlobalOptimization:
         print("Global Optimization Complete")
 
         return self.tiles, self.validation_stats
+    

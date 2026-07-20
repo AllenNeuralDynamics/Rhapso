@@ -10,7 +10,7 @@ import ray
 ray.init()
 
 # Point to param file
-PARAM_FILE_PATH = "Rhapso/pipelines/ray/param/alignment/exaSPIM_791116.yml"
+PARAM_FILE_PATH = "Rhapso/pipelines/ray/param/alignment/exaSPIM_794495.yml"
 
 # Load param file
 with open(PARAM_FILE_PATH, "r") as file:
@@ -36,6 +36,7 @@ interest_point_detection = InterestPointDetection(
     run_type=config['run_type'],
     max_spots=config['max_spots'],
     median_filter=config['median_filter'],
+    overlap_only=config['overlap_only']
 ) 
 
 # INTEREST POINT MATCHING RIGID
@@ -100,59 +101,59 @@ interest_point_matching_split_affine = InterestPointMatching(
 
 # SOLVER RIGID
 solver_rigid = Solver(
-    xml_file_path_output=config['xml_file_path_output_rigid'],
-    n5_input_path=config['n5_input_path'],
-    xml_file_path=config['xml_file_path_solver_rigid'],
-    run_type=config['run_type_solver_rigid'],   
-    relative_threshold=config['relative_threshold_rigid'],
-    absolute_threshold=config['absolute_threshold_rigid'],
-    max_cleanup_rounds=config['max_cleanup_rounds_rigid'],
-    min_matches=config['min_matches'],
-    damp=config['damp'],
-    regularization_weight=config['regularization_weight_solver_rigid'],
-    max_iterations=config['max_iterations'],
-    max_allowed_error=config['max_allowed_error'],
-    max_plateauwidth=config['max_plateauwidth'],
-    metrics_output_path=config['metrics_output_path'],
-    fixed_tile=config['fixed_tile']
+    xml_file_path_output=config["xml_file_path_output_rigid"],
+    n5_input_path=config["n5_input_path"],
+    xml_file_path=config["xml_file_path_solver_rigid"],
+    run_type=config["run_type_solver_rigid"],
+    relative_threshold=config["relative_threshold_rigid"],
+    absolute_threshold=config["absolute_threshold_rigid"],
+    max_cleanup_rounds=config["max_cleanup_rounds_rigid"],
+    min_matches=config["min_matches"],
+    damp=config["damp"],
+    regularization_weight=config["regularization_weight_solver_rigid"],
+    max_iterations=config["max_iterations"],
+    max_allowed_error=config["max_allowed_error"],
+    max_plateauwidth=config["max_plateauwidth"],
+    metrics_output_path=config["metrics_output_path_rigid"],
+    fixed_tile=config["fixed_tile_rigid"],
 )
 
 # SOLVER AFFINE
 solver_affine = Solver(
-    xml_file_path_output=config['xml_file_path_output_affine'],
-    n5_input_path=config['n5_input_path'],
-    xml_file_path=config['xml_file_path_solver_affine'],
-    run_type=config['run_type_solver_affine'],  
-    relative_threshold=config['relative_threshold_affine'],
-    absolute_threshold=config['absolute_threshold_affine'],
-    max_cleanup_rounds=config['max_cleanup_rounds_affine'],
-    min_matches=config['min_matches'],
-    damp=config['damp'],
-    regularization_weight=config['regularization_weight_solver_affine'],
-    max_iterations=config['max_iterations'],
-    max_allowed_error=config['max_allowed_error'],
-    max_plateauwidth=config['max_plateauwidth'],
-    metrics_output_path=config['metrics_output_path'],
-    fixed_tile=config['fixed_tile']
+    xml_file_path_output=config["xml_file_path_output_affine"],
+    n5_input_path=config["n5_input_path"],
+    xml_file_path=config["xml_file_path_solver_affine"],
+    run_type=config["run_type_solver_affine"],
+    relative_threshold=config["relative_threshold_affine"],
+    absolute_threshold=config["absolute_threshold_affine"],
+    max_cleanup_rounds=config["max_cleanup_rounds_affine"],
+    min_matches=config["min_matches"],
+    damp=config["damp"],
+    regularization_weight=config["regularization_weight_solver_affine"],
+    max_iterations=config["max_iterations"],
+    max_allowed_error=config["max_allowed_error"],
+    max_plateauwidth=config["max_plateauwidth"],
+    metrics_output_path=config["metrics_output_path_affine"],
+    fixed_tile=config["fixed_tile_affine"],
 )
 
 # SOLVER SPLIT AFFINE
 solver_split_affine = Solver(
-    xml_file_path_output=config['xml_file_path_output_split_affine'],
-    n5_input_path=config['n5_input_path'],
-    xml_file_path=config['xml_file_path_solver_split_affine'],
-    run_type=config['run_type_solver_split_affine'],  
-    relative_threshold=config['relative_threshold_split_affine'],
-    absolute_threshold=config['absolute_threshold_split_affine'],
-    max_cleanup_rounds=config['max_cleanup_rounds_split_affine'],
-    min_matches=config['min_matches'],
-    damp=config['damp'],
-    regularization_weight=config['regularization_weight_solver_split_affine'],
-    max_iterations=config['max_iterations'],
-    max_allowed_error=config['max_allowed_error'],
-    max_plateauwidth=config['max_plateauwidth'],
-    metrics_output_path=config['metrics_output_path'],
-    fixed_tile=config['fixed_tile']
+    xml_file_path_output=config["xml_file_path_output_split_affine"],
+    n5_input_path=config["n5_input_path"],
+    xml_file_path=config["xml_file_path_solver_split_affine"],
+    run_type=config["run_type_solver_split_affine"],
+    relative_threshold=config["relative_threshold_split_affine"],
+    absolute_threshold=config["absolute_threshold_split_affine"],
+    max_cleanup_rounds=config["max_cleanup_rounds_split_affine"],
+    min_matches=config["min_matches"],
+    damp=config["damp"],
+    regularization_weight=config["regularization_weight_solver_split_affine"],
+    max_iterations=config["max_iterations"],
+    max_allowed_error=config["max_allowed_error"],
+    max_plateauwidth=config["max_plateauwidth"],
+    metrics_output_path=config["metrics_output_path_split_affine"],
+    fixed_tile=config["fixed_tile_split_affine"],
 )
 
 # SPLIT DATASETS
@@ -170,28 +171,31 @@ split_dataset = SplitDataset(
 )
 
 metrics_rigid = MatchingMetrics(
-    pre_xml_path=config['pre_xml_path_rigid'],
-    post_xml_path=config['post_xml_path_rigid'],
-    alignment_base=config['alignment_base'],
-    downsample_xyz=config['downsample_xyz'],
-    match_type=config['match_type_rigid']
+    pre_xml_path=config["pre_xml_path_rigid"],
+    post_xml_path=config["post_xml_path_rigid"],
+    alignment_base=config["alignment_base"],
+    downsample_xyz=config["downsample_xyz"],
+    match_type=config["match_type_rigid"],
+    solver_history_path=config["solver_history_path_rigid"],
 )
 
 metrics_affine = MatchingMetrics(
-    pre_xml_path=config['pre_xml_path_affine'],
-    post_xml_path=config['post_xml_path_affine'],
-    alignment_base=config['alignment_base'],
-    downsample_xyz=config['downsample_xyz'],
-    match_type=config['match_type_affine']
+    pre_xml_path=config["pre_xml_path_affine"],
+    post_xml_path=config["post_xml_path_affine"],
+    alignment_base=config["alignment_base"],
+    downsample_xyz=config["downsample_xyz"],
+    match_type=config["match_type_affine"],
+    solver_history_path=config["solver_history_path_affine"],
 )
 
 metrics_split_affine = MatchingMetrics(
-    pre_xml_path=config['pre_xml_path_split_affine'],
-    post_xml_path=config['post_xml_path_split_affine'],
-    alignment_base=config['alignment_base'],
-    split_xml_path=config['split_xml_path_split_affine'],
-    downsample_xyz=config['downsample_xyz'],
-    match_type=config['match_type_split_affine']
+    pre_xml_path=config["pre_xml_path_split_affine"],
+    post_xml_path=config["post_xml_path_split_affine"],
+    alignment_base=config["alignment_base"],
+    downsample_xyz=config["downsample_xyz"],
+    match_type=config["match_type_split_affine"],
+    split_xml_path=config["split_xml_path_split_affine"],
+    solver_history_path=config["solver_history_path_split_affine"],
 )
 
 # Pipeline Entry
@@ -211,4 +215,3 @@ interest_point_matching_split_affine.run()
 solver_split_affine.run()
 metrics_split_affine.run()
 print("-----ALIGNMENT PIPELINE DONE------")
-

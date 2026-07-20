@@ -23,10 +23,11 @@ class ComputeGridRules:
         
         return int(a + b - (a % b))
     
-    def find_min_step_size(self, lowest_resolution=(1.0, 1.0, 1.0)):
+    def find_min_step_size(self):
         """
         Compute the minimal integer step size per axis (X,Y,Z) that is compatible with the chosen lowest resolution
         """
+        lowest_resolution=(64.0, 64.0, 64.0)
         min_step_size = [1, 1, 1]
         
         for d, r in enumerate(lowest_resolution):
@@ -63,7 +64,6 @@ class ComputeGridRules:
         """
         Executes the entry point of the script.
         """
-        # image_sizes, min_size = self.collect_image_sizes()
         min_step_size = self.find_min_step_size()
         
         sx = self.closest_larger_long_divisible_by(self.target_image_size[0], min_step_size[0])

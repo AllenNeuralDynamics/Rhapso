@@ -18,8 +18,8 @@ from matplotlib.widgets import Slider
 from scipy import ndimage as ndi
 from scipy.spatial import cKDTree
 
-XML_PATH = "/Users/sean.fite/Desktop/exaSPIM_791116_2tiles.xml"
-ALIGNMENT_STORE_BASE = "/Users/sean.fite/Desktop/exaSPIM-test"
+XML_PATH = "s3://aind-scratch-data/sean.fite/align_fused_HCR_831990/rhapso-detection.xml"
+ALIGNMENT_STORE_BASE = "s3://aind-scratch-data/sean.fite/align_fused_HCR_831990"
 POINT_LABEL = "beads"
 
 SCALE_LEVEL = "4"
@@ -369,38 +369,49 @@ def parse_zarr_tile_records(root: ET.Element, transform_name: str):
     if image_loader is None:
         raise RuntimeError("No <ImageLoader> found in XML")
 
-    s3bucket = image_loader.findtext("s3bucket")
-    zarr_base = image_loader.findtext("zarr")
+    s3bucket = (image_loader.findtext("s3bucket") or "").strip()
+    zarr_base = (image_loader.findtext("zarr") or "").strip()
 
     if not zarr_base:
         raise RuntimeError("No <zarr> base path found in XML ImageLoader")
 
     if zarr_base.startswith("s3://"):
-        zarr_base = zarr_base.rstrip("/") + "/"
+        zarr_base = zarr_base.rstrip("/")
     elif s3bucket:
-        zarr_base = f"s3://{s3bucket}/{zarr_base.lstrip('/')}".rstrip("/") + "/"
+        zarr_base = f"s3://{s3bucket}/{zarr_base.lstrip('/')}".rstrip("/")
     elif XML_PATH.startswith("s3://"):
         parsed = urlparse(XML_PATH)
-        zarr_base = f"s3://{parsed.netloc}/{zarr_base.lstrip('/')}".rstrip("/") + "/"
+        zarr_base = f"s3://{parsed.netloc}/{zarr_base.lstrip('/')}".rstrip("/")
     else:
-        zarr_base = zarr_base.rstrip("/") + "/"
+        zarr_base = zarr_base.rstrip("/")
 
     records = []
 
     for zg in image_loader.findall(".//zgroup"):
-        rel_path = zg.get("path") or zg.findtext("path")
+        rel_path = (zg.get("path") or zg.findtext("path") or "").strip()
 
         if not rel_path:
-            continue
+            raise RuntimeError(
+                f"Missing Zarr path for zgroup setup={zg.get('setup')}. "
+                "Expected either a path attribute or nested <path> element."
+            )
 
         setup = int(zg.get("setup"))
-        tp = int(zg.get("tp", zg.get("timepoint", 0)))
+        tp = int(zg.get("timepoint", zg.get("tp", 0)))
 
         if setup not in setup_sizes:
             raise RuntimeError(f"Missing ViewSetup size for setup {setup}")
 
-        if setup not in nominal_transforms:
-            raise RuntimeError(f"Missing transform '{transform_name}' for setup {setup}")
+        nominal = nominal_transforms.get(setup)
+
+        if nominal is None:
+            # Fused/single-view XML files often contain only a calibration
+            # transform. Calibration is voxel scaling, not tile placement.
+            nominal = np.eye(4, dtype=np.float64)
+            print(
+                f"Setup {setup} has no '{transform_name}' transform; "
+                "using identity nominal placement."
+            )
 
         sx, sy, sz = setup_sizes[setup]
 
@@ -409,15 +420,15 @@ def parse_zarr_tile_records(root: ET.Element, transform_name: str):
                 setup=setup,
                 tp=tp,
                 rel_path=rel_path,
-                full_path=zarr_base + rel_path,
+                full_path=f"{zarr_base}/{rel_path.lstrip('/')}",
                 size_x=sx,
                 size_y=sy,
                 size_z=sz,
-                nominal=nominal_transforms[setup],
+                nominal=nominal,
             )
         )
 
-    return sorted(records, key=lambda r: r.setup)
+    return sorted(records, key=lambda r: (r.tp, r.setup))
 
 
 def open_ome_zarr_level(zarr_path: str, scale_level: str):
@@ -1473,6 +1484,125 @@ def view_points_on_a_crop(
     plt.show()
 
 
+def prepare_single_image_data(rec: TileRecord, point_store: ParquetPointStore):
+    print(f"Opening setup {rec.setup} image: {rec.full_path}")
+
+    vol = open_tile_volume_zyx(rec)
+    scale = infer_scale_info(rec, vol)
+
+    print(
+        f"  setup {rec.setup} scaled image shape zyx={vol.shape}, "
+        f"scale xyz=({scale.scale_x:.3f}, {scale.scale_y:.3f}, {scale.scale_z:.3f})"
+    )
+
+    image_zyx = vol.compute().astype(np.float32, copy=False)
+
+    print(f"Loading setup {rec.setup} points from Parquet")
+    pts_full = point_store.read_points(setup=rec.setup, timepoint=rec.tp, label=POINT_LABEL)
+    print(f"  setup {rec.setup} total points: {len(pts_full):,}")
+
+    pts_display = np.empty((len(pts_full), 3), dtype=np.float32)
+
+    if len(pts_full):
+        pts_display[:, 0] = pts_full[:, 0] / scale.scale_x
+        pts_display[:, 1] = pts_full[:, 1] / scale.scale_y
+        pts_display[:, 2] = pts_full[:, 2] / scale.scale_z
+
+        z_size, y_size, x_size = image_zyx.shape
+        mask = (
+            (pts_display[:, 0] >= 0) & (pts_display[:, 0] < x_size)
+            & (pts_display[:, 1] >= 0) & (pts_display[:, 1] < y_size)
+            & (pts_display[:, 2] >= 0) & (pts_display[:, 2] < z_size)
+        )
+        pts_display = pts_display[mask]
+
+    print(f"  setup {rec.setup} points inside image: {len(pts_display):,}")
+
+    return {"image_zyx": image_zyx, "scale": scale, "pts_display": pts_display}
+
+
+def view_points_on_single_image(
+    image_zyx: np.ndarray,
+    pts_display: np.ndarray,
+    setup: int,
+    title: str = "",
+    point_z_radius_scaled: float = 1.5,
+):
+    assert image_zyx.ndim == 3
+
+    z_size, _, _ = image_zyx.shape
+    lo, hi = compute_global_display_range(image_zyx)
+
+    def norm(z):
+        return normalize_for_display(image_zyx[z], lo, hi, DISPLAY_NORM_MODE)
+
+    z0 = 0
+
+    fig, ax = plt.subplots(1, 1, figsize=(15, 10))
+    fig.suptitle(title or f"Setup {setup} point overlay", fontsize=14)
+
+    im = ax.imshow(norm(z0), cmap="gray", interpolation="nearest", aspect=IMAGE_ASPECT)
+    ax.axis("off")
+
+    pts0 = get_visible_points_for_slice(pts_display, z0, point_z_radius_scaled)
+
+    scatter = ax.scatter(
+        pts0[:, 0] if len(pts0) else [],
+        pts0[:, 1] if len(pts0) else [],
+        s=POINT_A_SIZE,
+        c=POINT_A_COLOR,
+        alpha=POINT_ALPHA,
+        edgecolors=POINT_EDGE_COLOR,
+        linewidths=POINT_LINEWIDTH,
+        label=f"setup {setup}",
+    )
+
+    ax.legend(loc="upper right")
+
+    plt.subplots_adjust(bottom=0.16)
+    slider_ax = fig.add_axes([0.15, 0.06, 0.7, 0.04])
+    slider = Slider(slider_ax, "Z", 0, z_size - 1, valinit=z0, valstep=1)
+
+    def update(val):
+        z = int(slider.val)
+        im.set_data(norm(z))
+
+        pts_now = get_visible_points_for_slice(pts_display, z, point_z_radius_scaled)
+        scatter.set_offsets(pts_now[:, :2] if len(pts_now) else np.empty((0, 2)))
+
+        ax.set_title(f"z={z} | setup {setup}: {len(pts_now):,} points", fontsize=12)
+        fig.canvas.draw_idle()
+
+    slider.on_changed(update)
+    update(z0)
+    plt.show()
+
+
+def run_single_image(rec: TileRecord, point_store: ParquetPointStore):
+    print("\nSingle-image XML detected; using the full image instead of overlap mode.")
+
+    data = prepare_single_image_data(rec, point_store)
+
+    print_texture_and_point_qc(
+        label=f"setup {rec.setup} full image",
+        vol_zyx=data["image_zyx"],
+        pts_display_xyz=data["pts_display"],
+    )
+
+    title = (
+        f"Full-image IP overlay | setup {rec.setup} | "
+        f"scale level {SCALE_LEVEL} | ±{POINT_Z_RADIUS_SCALED} Z slices"
+    )
+
+    view_points_on_single_image(
+        image_zyx=data["image_zyx"],
+        pts_display=data["pts_display"],
+        setup=rec.setup,
+        title=title,
+        point_z_radius_scaled=POINT_Z_RADIUS_SCALED,
+    )
+
+
 # ----------------------------
 # Main
 # ----------------------------
@@ -1484,15 +1614,30 @@ def main():
     records = parse_zarr_tile_records(root, TRANSFORM_NAME)
     print(f"Found tile records: {len(records)}")
 
-    if len(records) == 0:
+    if not records:
         print("No tile records found.")
+        return
+
+    point_store_storage_options = {}
+
+    if ALIGNMENT_STORE_BASE.startswith("s3://"):
+        point_store_storage_options = {"anon": S3_ANON, "skip_instance_cache": True}
+
+    point_store = ParquetPointStore(
+        base_path=ALIGNMENT_STORE_BASE,
+        label=POINT_LABEL,
+        storage_options=point_store_storage_options,
+    )
+
+    if len(records) == 1:
+        run_single_image(records[0], point_store)
         return
 
     by_setup = {r.setup: r for r in records}
     overlaps = list_overlapping_pairs(records)
 
-    if len(overlaps) == 0:
-        print("No overlapping pairs found.")
+    if not overlaps:
+        print("Multiple setups found, but no overlapping pairs were detected.")
         return
 
     print("\nOverlapping pairs:")
@@ -1507,32 +1652,17 @@ def main():
         setup_a, setup_b, overlap_box = overlaps[0]
         print(f"\nTARGET_PAIR is None, using first overlap: ({setup_a}, {setup_b})")
     else:
-        a, b = TARGET_PAIR
+        setup_a, setup_b = TARGET_PAIR
 
-        if a not in by_setup or b not in by_setup:
+        if setup_a not in by_setup or setup_b not in by_setup:
             raise RuntimeError(f"TARGET_PAIR {TARGET_PAIR} not found in XML records")
 
-        overlap_box = compute_pairwise_overlap_fullres(by_setup[a], by_setup[b])
+        overlap_box = compute_pairwise_overlap_fullres(by_setup[setup_a], by_setup[setup_b])
 
         if overlap_box is None:
             raise RuntimeError(f"TARGET_PAIR {TARGET_PAIR} does not overlap in XY")
 
-        setup_a, setup_b = a, b
         print(f"\nUsing TARGET_PAIR: ({setup_a}, {setup_b})")
-
-    point_store_storage_options = {}
-
-    if ALIGNMENT_STORE_BASE.startswith("s3://"):
-        point_store_storage_options = {
-            "anon": S3_ANON,
-            "skip_instance_cache": True,
-        }
-
-    point_store = ParquetPointStore(
-        base_path=ALIGNMENT_STORE_BASE,
-        label=POINT_LABEL,
-        storage_options=point_store_storage_options,
-    )
 
     rec_a = by_setup[setup_a]
     rec_b = by_setup[setup_b]
@@ -1541,26 +1671,18 @@ def main():
     data_b = prepare_pair_data(rec_b, overlap_box, point_store)
 
     pts_a_display = global_points_to_a_crop_display(
-        pts_global_xyz=data_a["pts_global_scaled"],
-        rec_a=rec_a,
-        crop_a_full=data_a["crop_full"],
-        scale_a=data_a["scale"],
-        image_a_crop_shape=data_a["vol_crop"].shape,
+        data_a["pts_global_scaled"], rec_a, data_a["crop_full"],
+        data_a["scale"], data_a["vol_crop"].shape,
     )
 
     pts_b_display = global_points_to_a_crop_display(
-        pts_global_xyz=data_b["pts_global_scaled"],
-        rec_a=rec_a,
-        crop_a_full=data_a["crop_full"],
-        scale_a=data_a["scale"],
-        image_a_crop_shape=data_a["vol_crop"].shape,
+        data_b["pts_global_scaled"], rec_a, data_a["crop_full"],
+        data_a["scale"], data_a["vol_crop"].shape,
     )
 
-    print("")
-    print("A-crop display point counts:")
+    print("\nA-crop display point counts:")
     print(f"  setup {setup_a} red points:  {len(pts_a_display):,}")
     print(f"  setup {setup_b} blue points: {len(pts_b_display):,}")
-    print("")
 
     print_texture_and_point_qc(
         label=f"setup {setup_a} crop",
@@ -1584,8 +1706,7 @@ def main():
     title = (
         f"IP overlay in setup {setup_a} crop frame | "
         f"red setup {setup_a} vs blue setup {setup_b} | "
-        f"scale level {SCALE_LEVEL} | "
-        f"±{POINT_Z_RADIUS_SCALED} Z slices"
+        f"scale level {SCALE_LEVEL} | ±{POINT_Z_RADIUS_SCALED} Z slices"
     )
 
     view_points_on_a_crop(
@@ -1597,6 +1718,127 @@ def main():
         title=title,
         point_z_radius_scaled=POINT_Z_RADIUS_SCALED,
     )
+
+# def main():
+#     print("Loading XML...")
+#     root = load_xml_root(XML_PATH)
+
+#     records = parse_zarr_tile_records(root, TRANSFORM_NAME)
+#     print(f"Found tile records: {len(records)}")
+
+#     if len(records) == 0:
+#         print("No tile records found.")
+#         return
+
+#     by_setup = {r.setup: r for r in records}
+#     overlaps = list_overlapping_pairs(records)
+
+#     if len(overlaps) == 0:
+#         print("No overlapping pairs found.")
+#         return
+
+#     print("\nOverlapping pairs:")
+
+#     for a, b, (ox0, ox1, oy0, oy1) in overlaps:
+#         print(
+#             f"  ({a}, {b}) overlap full-res "
+#             f"x[{ox0:.1f}:{ox1:.1f}] y[{oy0:.1f}:{oy1:.1f}]"
+#         )
+
+#     if TARGET_PAIR is None:
+#         setup_a, setup_b, overlap_box = overlaps[0]
+#         print(f"\nTARGET_PAIR is None, using first overlap: ({setup_a}, {setup_b})")
+#     else:
+#         a, b = TARGET_PAIR
+
+#         if a not in by_setup or b not in by_setup:
+#             raise RuntimeError(f"TARGET_PAIR {TARGET_PAIR} not found in XML records")
+
+#         overlap_box = compute_pairwise_overlap_fullres(by_setup[a], by_setup[b])
+
+#         if overlap_box is None:
+#             raise RuntimeError(f"TARGET_PAIR {TARGET_PAIR} does not overlap in XY")
+
+#         setup_a, setup_b = a, b
+#         print(f"\nUsing TARGET_PAIR: ({setup_a}, {setup_b})")
+
+#     point_store_storage_options = {}
+
+#     if ALIGNMENT_STORE_BASE.startswith("s3://"):
+#         point_store_storage_options = {
+#             "anon": S3_ANON,
+#             "skip_instance_cache": True,
+#         }
+
+#     point_store = ParquetPointStore(
+#         base_path=ALIGNMENT_STORE_BASE,
+#         label=POINT_LABEL,
+#         storage_options=point_store_storage_options,
+#     )
+
+#     rec_a = by_setup[setup_a]
+#     rec_b = by_setup[setup_b]
+
+#     data_a = prepare_pair_data(rec_a, overlap_box, point_store)
+#     data_b = prepare_pair_data(rec_b, overlap_box, point_store)
+
+#     pts_a_display = global_points_to_a_crop_display(
+#         pts_global_xyz=data_a["pts_global_scaled"],
+#         rec_a=rec_a,
+#         crop_a_full=data_a["crop_full"],
+#         scale_a=data_a["scale"],
+#         image_a_crop_shape=data_a["vol_crop"].shape,
+#     )
+
+#     pts_b_display = global_points_to_a_crop_display(
+#         pts_global_xyz=data_b["pts_global_scaled"],
+#         rec_a=rec_a,
+#         crop_a_full=data_a["crop_full"],
+#         scale_a=data_a["scale"],
+#         image_a_crop_shape=data_a["vol_crop"].shape,
+#     )
+
+#     print("")
+#     print("A-crop display point counts:")
+#     print(f"  setup {setup_a} red points:  {len(pts_a_display):,}")
+#     print(f"  setup {setup_b} blue points: {len(pts_b_display):,}")
+#     print("")
+
+#     print_texture_and_point_qc(
+#         label=f"setup {setup_a} crop",
+#         vol_zyx=data_a["vol_crop"],
+#         pts_display_xyz=pts_a_display,
+#     )
+
+#     print_texture_and_point_qc(
+#         label=f"setup {setup_b} projected into setup {setup_a} crop frame",
+#         vol_zyx=data_b["vol_crop"],
+#         pts_display_xyz=pts_b_display,
+#     )
+
+#     print_match_readiness_qc(
+#         pts_a_display=pts_a_display,
+#         pts_b_display=pts_b_display,
+#         image_shape_zyx=data_a["vol_crop"].shape,
+#         scale=data_a["scale"],
+#     )
+
+#     title = (
+#         f"IP overlay in setup {setup_a} crop frame | "
+#         f"red setup {setup_a} vs blue setup {setup_b} | "
+#         f"scale level {SCALE_LEVEL} | "
+#         f"±{POINT_Z_RADIUS_SCALED} Z slices"
+#     )
+
+#     view_points_on_a_crop(
+#         image_a_crop=data_a["vol_crop"],
+#         pts_a_display=pts_a_display,
+#         pts_b_display=pts_b_display,
+#         setup_a=setup_a,
+#         setup_b=setup_b,
+#         title=title,
+#         point_z_radius_scaled=POINT_Z_RADIUS_SCALED,
+#     )
 
 
 if __name__ == "__main__":

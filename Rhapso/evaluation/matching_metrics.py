@@ -10,34 +10,16 @@ import pandas as pd
 class MatchingMetrics:
     """Evaluate rigid, affine, or split-affine saved-match progression."""
 
-    def __init__(
-        self,
-        pre_xml_path,
-        post_xml_path,
-        alignment_base,
-        downsample_xyz,
-        match_type,
-        split_xml_path=None,
-    ):
+    def __init__(self, pre_xml_path, post_xml_path, alignment_base, downsample_xyz, match_type,
+             split_xml_path=None, solver_history_path=None):
         self.pre_xml_path = str(pre_xml_path)
         self.post_xml_path = str(post_xml_path)
         self.alignment_base = str(alignment_base)
         self.split_xml_path = None if split_xml_path is None else str(split_xml_path)
+        self.solver_history_path = None if solver_history_path is None else str(solver_history_path)
         self.metric_downsample_xyz = tuple(float(value) for value in downsample_xyz)
         self.match_type = str(match_type).strip().lower()
 
-        if len(self.metric_downsample_xyz) != 3:
-            raise ValueError("downsample_xyz must contain exactly three xyz values")
-
-        if self.match_type not in {"rigid", "affine", "split-affine"}:
-            raise ValueError(
-                "match_type must be 'rigid', 'affine', or 'split-affine', " f"got {match_type!r}"
-            )
-
-        if self.match_type == "split-affine" and self.split_xml_path is None:
-            raise ValueError("split_xml_path is required for split-affine metrics")
-
-        # Everything below remains fixed for all runs.
         self.timepoint = 0
         self.match_label = "beads"
         self.split_real_label = "beads_split"
@@ -51,11 +33,7 @@ class MatchingMetrics:
 
         self.loop_max_path_edges = 6
         self.loop_max_paths_per_edge = 4
-
-        # Diagnostic thresholds only. They do not remove edges.
-        self.loop_translation_warning_px = max(
-            self.metric_downsample_xyz
-        )
+        self.loop_translation_warning_px = max(self.metric_downsample_xyz)
         self.loop_rotation_warning_degrees = 0.10
 
         self.affine_distance_targets_scaled = {
@@ -68,6 +46,8 @@ class MatchingMetrics:
         self.affine_sanity_scale_deviation_scale = 0.05
         self.affine_sanity_shear_scale = 0.05
         self.affine_sanity_condition_excess_scale = 0.20
+
+        self.rejected_edge_keys = set()
 
     # ==============================================================================
     # IO
@@ -276,26 +256,108 @@ class MatchingMetrics:
         if not a_parts:
             return (np.empty((0, 3)), np.empty((0, 3)))
         return (np.vstack(a_parts), np.vstack(b_parts))
+    
+    def edge_key(self, setup_a, setup_b):
+        return tuple(sorted((int(setup_a), int(setup_b))))
 
+    def load_rejected_edge_keys(self):
+        if self.solver_history_path is None:
+            return set()
+
+        history_path = self.resolve_uri(
+            self.alignment_base,
+            self.solver_history_path,
+        )
+
+        history = self.read_json(history_path)
+        history = history.get("validation_stats", history)
+
+        weak_edge_history = (
+            history
+            .get("solve_metrics_per_tile", {})
+            .get("weak_edge_rejection", {})
+        )
+
+        rejected_edges = set()
+
+        for edge in weak_edge_history.get("rejected_edges", []):
+            edge_value = edge.get("edge_key")
+
+            if edge_value is None or len(edge_value) != 2:
+                continue
+
+            rejected_edges.add(
+                self.edge_key(edge_value[0], edge_value[1])
+            )
+
+        print(
+            f"Loaded {len(rejected_edges)} solver-rejected edges "
+            f"from {history_path}"
+        )
+
+        for edge in sorted(rejected_edges):
+            print(f"  Excluding solver-rejected edge {edge}")
+
+        return rejected_edges
+    
     def saved_pairs(self, index, label=None):
         label = self.match_label if label is None else str(label)
         pairs = set()
+
         rows = index[
             (index["timepoint"].astype(int) == self.timepoint)
             & (index["label"].astype(str) == label)
         ]
+
         for _, row in rows.iterrows():
             setup = int(row["setup"])
+
             corr = self.read_parquet(
-                self.resolve_uri(self.alignment_base, row["correspondences_path"])
+                self.resolve_uri(
+                    self.alignment_base,
+                    row["correspondences_path"],
+                )
             )
+
             if len(corr) == 0:
                 continue
-            corr = corr[corr["target_timepoint"].astype(int) == self.timepoint]
+
+            corr = corr[
+                corr["target_timepoint"].astype(int) == self.timepoint
+            ]
+
             for target in corr["target_setup"].astype(int).unique():
-                if target != setup:
-                    pairs.add(tuple(sorted((setup, int(target)))))
+                if target == setup:
+                    continue
+
+                edge = self.edge_key(setup, target)
+
+                if edge in self.rejected_edge_keys:
+                    continue
+
+                pairs.add(edge)
+
         return sorted(pairs)
+
+    # def saved_pairs(self, index, label=None):
+    #     label = self.match_label if label is None else str(label)
+    #     pairs = set()
+    #     rows = index[
+    #         (index["timepoint"].astype(int) == self.timepoint)
+    #         & (index["label"].astype(str) == label)
+    #     ]
+    #     for _, row in rows.iterrows():
+    #         setup = int(row["setup"])
+    #         corr = self.read_parquet(
+    #             self.resolve_uri(self.alignment_base, row["correspondences_path"])
+    #         )
+    #         if len(corr) == 0:
+    #             continue
+    #         corr = corr[corr["target_timepoint"].astype(int) == self.timepoint]
+    #         for target in corr["target_setup"].astype(int).unique():
+    #             if target != setup:
+    #                 pairs.add(tuple(sorted((setup, int(target)))))
+    #     return sorted(pairs)
 
     def matching_labels(self, index, prefix):
         """
@@ -3617,6 +3679,8 @@ class MatchingMetrics:
                 "or 'split-affine', "
                 f"got {self.match_type!r}"
             )
+
+        self.rejected_edge_keys = self.load_rejected_edge_keys()
 
         pre_root = self.load_xml(
             self.pre_xml_path

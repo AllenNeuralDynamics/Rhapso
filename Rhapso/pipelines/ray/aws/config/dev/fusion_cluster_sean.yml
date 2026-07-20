@@ -60,8 +60,8 @@ setup_commands:
   - /home/ubuntu/rhapso-py311/bin/python -m pip install "ray[default]==2.9.1" protobuf==4.23.4
   - sudo ln -sf /home/ubuntu/rhapso-py311/bin/pip /usr/local/bin/pip
   - sudo ln -sf /home/ubuntu/rhapso-py311/bin/ray /usr/local/bin/ray
-  - aws s3 cp s3://aind-scratch-data/sean.fite/Rhapso-0.2.8-py3-none-any.whl /tmp/Rhapso-0.2.8-py3-none-any.whl
-  - /home/ubuntu/rhapso-py311/bin/python -m pip install /tmp/Rhapso-0.2.8-py3-none-any.whl
+  - aws s3 cp s3://aind-scratch-data/sean.fite/Rhapso-0.4.3-py3-none-any.whl /tmp/Rhapso-0.4.3-py3-none-any.whl
+  - /home/ubuntu/rhapso-py311/bin/python -m pip install /tmp/Rhapso-0.4.3-py3-none-any.whl
 
 head_start_ray_commands:
   - ray stop
