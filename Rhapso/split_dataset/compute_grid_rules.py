@@ -73,5 +73,6 @@ class ComputeGridRules:
         ox = self.closest_larger_long_divisible_by(self.target_overlap[0], min_step_size[0])
         oy = self.closest_larger_long_divisible_by(self.target_overlap[1], min_step_size[1])
         oz = self.closest_larger_long_divisible_by(self.target_overlap[2], min_step_size[2])
+        print("Grid Rules Computed")
 
         return (sx, sy, sz), (ox, oy, oz), min_step_size

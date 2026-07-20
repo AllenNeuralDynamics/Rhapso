@@ -1,6 +1,6 @@
-cluster_name: rhapso-ray-fusion-cluster-sean-0
-max_workers: 10
-min_workers: 10
+cluster_name: rhapso-fusion-cluster-sean-001
+max_workers: 40
+min_workers: 0
 
 provider:
   type: aws
@@ -10,57 +10,62 @@ provider:
 
 auth:
   ssh_user: ubuntu
-  ssh_private_key: /Users/seanfite/Desktop/AllenInstitute/Rhapso/Auth/AWS/EC2-SSH-Key/sean-rhapso.pem
-  # ssh_private_key: /Users/seanfite/Desktop/AllenInstitute/Rhapso/Auth/AWS/EC2-SSH-Key/aind-ray-cluster.pem
+  ssh_private_key: /Users/sean.fite/Desktop/AllenInstitute/Auth/AWS/EC2-SSH-KEY/aind-ray-cluster.pem
 
 available_node_types:
   ray.head.default:
     node_config:
       InstanceType: r5.4xlarge
       ImageId: ami-0ec1bf4a8f92e7bd1
-      KeyName: sean-rhapso
+      KeyName: aind-ray-cluster
       IamInstanceProfile:
-        Name: RhapsoInstanceProfile
+        Name: AindRayClusterIamInstanceProfile
       TagSpecifications:
         - ResourceType: instance
           Tags:
-            - Key: project
-              Value: rhapso
+            - Key: Owner
+              Value: sean.fite@alleninstitute.org
+            - Key: PROJECT
+              Value: exaSPIM
 
   ray.worker.default:
     node_config:
       InstanceType: r5.4xlarge
       ImageId: ami-0ec1bf4a8f92e7bd1 
-      KeyName: sean-rhapso
+      KeyName: aind-ray-cluster
       IamInstanceProfile:
-        Name: RhapsoInstanceProfile
+        Name: AindRayClusterIamInstanceProfile
       TagSpecifications:
         - ResourceType: instance
           Tags:
-            - Key: project
-              Value: rhapso
+            - Key: Owner
+              Value: sean.fite@alleninstitute.org
+            - Key: PROJECT
+              Value: exaSPIM
 
 head_node_type: ray.head.default
 
 setup_commands:
   - sudo sed -i -e 's|http://archive.ubuntu.com/ubuntu|https://us-west-2.ec2.archive.ubuntu.com/ubuntu|g' -e 's|http://security.ubuntu.com/ubuntu|https://us-west-2.ec2.archive.ubuntu.com/ubuntu|g' /etc/apt/sources.list
   - sudo rm -rf /var/lib/apt/lists/* && sudo mkdir -p /var/lib/apt/lists/partial
-  - sudo apt-get update -y 
-  - sudo DEBIAN_FRONTEND=noninteractive apt install -y python3-pip 
-  - sudo python3 -m pip install awscli
-  - sudo python3 -m pip install "ray[default]==2.9.1"  
-  - sudo python3 -m pip install protobuf==4.23.4 
-  - sudo -E python3 -m pip install --no-cache-dir torch --index-url https://download.pytorch.org/whl/cpu
-  - aws s3 cp s3://rhapso-whl-v2/Rhapso-0.1.8-py3-none-any.whl /tmp/Rhapso-0.1.8-py3-none-any.whl
-  # - aws s3 cp s3://aind-scratch-data/sean.fite/Rhapso-0.1.8-py3-none-any.whl /tmp/Rhapso-0.1.8-py3-none-any.whl  
-  - echo 'export PATH=$HOME/.local/bin:$PATH' >> ~/.bashrc
-  - source ~/.bashrc
-  - pip install --force-reinstall /tmp/Rhapso-0.1.8-py3-none-any.whl 
+  - sudo apt-get update -y
+  - sudo apt-get -o Acquire::ForceIPv4=true -o Acquire::Retries=5 update -y
+  - sudo apt-get remove -y python3-openssl || true
+  - sudo DEBIAN_FRONTEND=noninteractive apt install -y software-properties-common curl awscli
+  - sudo add-apt-repository -y ppa:deadsnakes/ppa
+  - sudo apt-get update -y
+  - sudo DEBIAN_FRONTEND=noninteractive apt install -y python3.11 python3.11-venv python3.11-dev
+  - python3.11 -m venv /home/ubuntu/rhapso-py311
+  - /home/ubuntu/rhapso-py311/bin/python -m pip install --upgrade "pip<26" "setuptools==69.5.1" wheel
+  - /home/ubuntu/rhapso-py311/bin/python -m pip install "ray[default]==2.9.1" protobuf==4.23.4
+  - sudo ln -sf /home/ubuntu/rhapso-py311/bin/pip /usr/local/bin/pip
+  - sudo ln -sf /home/ubuntu/rhapso-py311/bin/ray /usr/local/bin/ray
+  - aws s3 cp s3://aind-scratch-data/sean.fite/Rhapso-0.2.8-py3-none-any.whl /tmp/Rhapso-0.2.8-py3-none-any.whl
+  - /home/ubuntu/rhapso-py311/bin/python -m pip install /tmp/Rhapso-0.2.8-py3-none-any.whl
 
 head_start_ray_commands:
   - ray stop
   - ray start --head --port=6379 --dashboard-host=0.0.0.0 --autoscaling-config=~/ray_bootstrap_config.yaml 
-  - python3 -m Rhapso.fusion.worker
 
 worker_start_ray_commands:
   - ray stop
@@ -69,18 +74,19 @@ worker_start_ray_commands:
 # SETUP
 # ---------------------
 # CREATE WHL FILE
-# python setup.py bdist_wheel 
+# python3 setup.py bdist_wheel 
 
 # RAY UP / DOWN / CLEAR CACHE COMMANDS
 # ray up fusion_cluster_sean.yml --no-config-cache
 # ray down fusion_cluster_sean.yml
+# ray get-head-ip fusion_cluster_sean.yml
 # rm -rf ~/.cache/ray
 
 # ACCESS RAY DASHBOARD
-# ssh -i /Users/seanfite/Desktop/AllenInstitute/Rhapso/Auth/AWS/EC2-SSH-Key/sean-rhapso.pem -L 8265:localhost:8265 ubuntu@54.148.40.59
+# ssh -i /Users/sean.fite/Desktop/AllenInstitute/Auth/AWS/EC2-SSH-KEY/aind-ray-cluster.pem -L 8265:localhost:8265 ubuntu@34.212.51.106 
 # http://localhost:8265
 
 # TO FIX
 # ---------------------
 # awscli 1.40.25 requires botocore==1.38.26, but you have botocore 1.35.93 which is incompatible
-# awscli 1.40.25 requires s3transfer<0.14.0,>=0.13.0, but you have s3transfer 0.10.4 which is incompatible 
+# awscli 1.40.25 requires s3transfer<0.14.0,>=0.13.0, but you have s3transfer 0.10.4 which is incompatible

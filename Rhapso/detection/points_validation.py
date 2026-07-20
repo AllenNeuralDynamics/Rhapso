@@ -28,6 +28,7 @@ class PointsValidation:
             intensities = np.array([p[1] for p in sorted_points])
 
             # Print metrics on interest points
+            print(f"\nView ID: {view_id}")
             print("\n--- Detection Stats ---")
             print(f"Total Points: {len(coords)}")
             print(f"Intensity: min={intensities.min():.2f}, max={intensities.max():.2f}, mean={intensities.mean():.2f}, std={intensities.std():.2f}")

@@ -33,7 +33,8 @@ class MetadataBuilder:
             if not self.sub_region_chunking:
                 lb_fixed = tuple(int(x) for x in lb)
                 ub_fixed = tuple(int(x) for x in ub)
-                span = tuple(int(ub_fixed[i] - lb_fixed[i]) for i in range(3))
+                # span = tuple(int(ub_fixed[i] - lb_fixed[i]) for i in range(3))
+                span = tuple(int(ub_fixed[i] - lb_fixed[i] + 1) for i in range(3))
                 interval_key = (lb_fixed, ub_fixed, span)
 
                 self.metadata.append({
@@ -63,9 +64,9 @@ class MetadataBuilder:
                         z_end = min(chunk[-1] + 1 + self.overlap, cropped_shape[0])
 
                         actual_lb = (x_start, y_start, z_start + z)
-                        actual_ub = (x_stop, y_stop, z_start + z_end)
+                        actual_ub = (x_stop - 1, y_stop - 1, z_start + z_end - 1)
+                        span = tuple(actual_ub[i] - actual_lb[i] + 1 for i in range(3))
 
-                        span = tuple(actual_ub[i] - actual_lb[i] for i in range(3))
                         interval_key = (actual_lb, actual_ub, span)
 
                         self.metadata.append({
@@ -91,10 +92,10 @@ class MetadataBuilder:
                         z = max(0, chunk[0] - self.overlap)
                         z_end = min(chunk[-1] + 1 + self.overlap, z_stop - z_start)
 
-                        actual_lb = (lb[0], lb[1], z_start + z)        
-                        actual_ub = (ub[0], ub[1], z_start + z_end)
+                        actual_lb = (lb[0], lb[1], z_start + z)
+                        actual_ub = (ub[0], ub[1], z_start + z_end - 1)
+                        span = tuple(actual_ub[i] - actual_lb[i] + 1 for i in range(3))
 
-                        span = tuple(actual_ub[i] - actual_lb[i] for i in range(3))
                         interval_key = (actual_lb, actual_ub, span)
 
                         self.metadata.append({
@@ -127,4 +128,6 @@ class MetadataBuilder:
 
     def run(self):
         self.build_paths()
+        print("Image Metadata Computed")
+
         return self.metadata

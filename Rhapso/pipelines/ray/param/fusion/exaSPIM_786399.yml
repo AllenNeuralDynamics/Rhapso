@@ -1,0 +1,32 @@
+# AFFINE FUSION
+# -----------------------------------
+aligned_xml_path: "s3://aind-open-data/exaSPIM_786399_2026-04-14_17-47-27_processed_2026-04-27_17-20-10/tile_alignment/ip_affine_alignment/bigstitcher_affine.xml"
+zarr_input_prefix: "s3://aind-open-data/exaSPIM_786399_2026-04-14_17-47-27_processed_2026-04-27_17-20-10/flatfield_correction/SPIM.ome.zarr"
+output_path: "s3://aind-scratch-data/sean.fite/exaSPIM_786399-2/fusion/fused.zarr" 
+block_size: [256, 256, 384]           # xyz
+intensity_range: [0, 65535]           # UINT16 default
+block_scale: [2, 2, 1]                # xyz
+overlap_strategy: "lowest_view_wins"
+output_zarr_version: 2
+
+# MULTISCALE
+# -----------------------------------
+multiscale_zarr_path: "s3://aind-scratch-data/sean.fite/exaSPIM_786399-2/fusion/fused.zarr"
+multiscale_chunk_size: [128, 128, 128]
+voxel_size: [1.0, 0.748, 0.748]                                                            # ZYX
+n_lvls: 7                                                                                  # Including base level
+scale_factor: [[2, 2, 2], [2, 2, 2], [2, 2, 2], [2, 2, 2], [2, 2, 2], [2, 2, 2]]           # ZYX
+target_block_size_mb: 256
+base_level: 0
+
+# NG LINK GENERATOR
+# -----------------------------------
+zarr_paths: [
+    "s3://aind-scratch-data/sean.fite/exaSPIM_optimizations/720164-5/fusion/fused.zarr/",
+]
+json_upload_path: "s3://aind-scratch-data/sean.fite/new-test/HCR_000000-s107-ls1_2026-01-23_00-00-00_processed_2026-01-24_06-00-53/fusion/fused_ng.json"
+vmin: 90
+vmax: 400
+
+
+        

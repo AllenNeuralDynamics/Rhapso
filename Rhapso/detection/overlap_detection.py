@@ -3,9 +3,12 @@ from bioio import BioImage
 import bioio_tifffile
 import zarr
 import s3fs
-import dask.array as da
 import math
-import os
+import json
+import boto3
+from botocore import UNSIGNED
+from botocore.config import Config
+from botocore.exceptions import ClientError
 
 """
 Overlap Detection figures out where image tile overlap. 
@@ -46,49 +49,125 @@ class OverlapDetection():
         
         return scale_matrix
     
+    def read_s3_json(self, s3_path):
+        no_scheme = s3_path.replace("s3://", "", 1)
+        bucket, key = no_scheme.split("/", 1)
+
+        s3 = boto3.client("s3", config=Config(signature_version=UNSIGNED))
+
+        keys_to_try = [key]
+
+        # If caller asks for v3 metadata, fallback to v2 metadata in same folder.
+        if key.endswith("/zarr.json"):
+            base = key[: -len("/zarr.json")]
+            keys_to_try.append(base + "/.zarray")  # v2 array metadata
+            keys_to_try.append(base + "/.zattrs")  # v2 group/root attrs
+
+        last_error = None
+
+        for candidate_key in keys_to_try:
+            try:
+                response = s3.get_object(Bucket=bucket, Key=candidate_key)
+                body = response["Body"]
+
+                try:
+                    return json.loads(body.read().decode("utf-8"))
+                finally:
+                    body.close()
+
+            except ClientError as e:
+                code = e.response.get("Error", {}).get("Code")
+                if code in ("NoSuchKey", "404", "NotFound"):
+                    last_error = e
+                    continue
+                raise
+
+        raise last_error
+
+    def normalize_zarr_shape(self, raw_shape):
+        if len(raw_shape) == 5:
+            t, c, z, y, x = raw_shape
+            return (t, c, 1, z, y, x)
+
+        if len(raw_shape) == 3:
+            z, y, x = raw_shape
+            return (1, 1, 1, z, y, x)
+
+        return tuple(raw_shape)
+    
+    def close_s3(self, s3):
+        if s3 is None: return
+        try:
+            s3creator = getattr(s3, "_s3creator", None)
+            if s3creator is not None:
+                s3.close_session(s3.loop, s3creator)
+        except Exception:
+            pass
+    
+    def open_zarr(self, full_path):
+        full_path = str(full_path).rstrip("/")
+        root_path = full_path.replace("s3://", "", 1)
+
+        def has_aws_credentials():
+            import os
+            return bool(
+                os.environ.get("AWS_ACCESS_KEY_ID")
+                and os.environ.get("AWS_SECRET_ACCESS_KEY")
+            )
+
+        def open_with_anon(anon):
+            s3 = s3fs.S3FileSystem(
+                anon=anon,
+                skip_instance_cache=True,
+            )
+
+            try:
+                mapper = s3fs.S3Map(
+                    root=root_path,
+                    s3=s3,
+                    check=False,
+                )
+
+                if hasattr(zarr.storage, "FsspecStore"):
+                    store = zarr.storage.FsspecStore.from_mapper(mapper)
+                    return zarr.open(store, mode="r"), s3
+
+                return zarr.open(mapper, mode="r"), s3
+
+            except Exception:
+                self.close_s3(s3)
+                raise
+
+        try:
+            return open_with_anon(anon=True)
+        except Exception as anon_error:
+            if not has_aws_credentials():
+                raise RuntimeError(
+                    f"Anonymous S3 access failed for public Zarr store: {full_path}"
+                ) from anon_error
+
+            return open_with_anon(anon=False)
+
     def load_image_metadata(self, file_path):
+        file_path = str(file_path).rstrip("/")
+
         if file_path in self.image_shape_cache:
             return self.image_shape_cache[file_path]
-        
-        if self.file_type == 'zarr':
-            s3 = s3fs.S3FileSystem(anon=True)
-            store = s3fs.S3Map(root=file_path, s3=s3)
-            zarr_array = zarr.open(store, mode='r')
-            dask_array = da.from_zarr(zarr_array)
-            dask_array = da.expand_dims(dask_array, axis=2)
+
+        if self.file_type == "zarr":
+            meta = self.read_s3_json(file_path + "/zarr.json")
+            shape = self.normalize_zarr_shape(meta["shape"])
+            self.image_shape_cache[file_path] = shape
+            return shape
+
+        if self.file_type == "tiff":
+            img = CustomBioImage(file_path, reader=bioio_tifffile.Reader)
+            dask_array = img.get_dask_stack()
             shape = dask_array.shape
             self.image_shape_cache[file_path] = shape
+            return shape
 
-        elif self.file_type == 'tiff':
-            img = CustomBioImage(file_path, reader=bioio_tifffile.Reader)
-            data = img.get_dask_stack()
-            shape = data.shape
-            self.image_shape_cache[file_path] = shape
-        
-        return shape
-    
-    # def open_and_downsample(self, shape):
-    #     X = int(shape[5])
-    #     Y = int(shape[4])
-    #     Z = int(shape[3])
-
-    #     dsx = int(self.dsxy)
-    #     dsy = int(self.dsxy)
-    #     dsz = int(self.dsz)
-
-    #     def ceil_half_chain(n, f):
-    #         out = int(n)
-    #         while f >= 2:
-    #             out = (out + 1) // 2  # ceil(n/2)
-    #             f //= 2
-    #         return out
-
-    #     x_new = ceil_half_chain(X, dsx)
-    #     y_new = ceil_half_chain(Y, dsy)
-    #     z_new = ceil_half_chain(Z, dsz)
-
-    #     mipmap_transform = self.create_mipmap_transform()
-    #     return ((0, 0, 0), (x_new, y_new, z_new)), mipmap_transform
+        raise ValueError(f"Unsupported file_type: {self.file_type}")
     
     def open_and_downsample(self, shape, dsxy, dsz):
         """
@@ -198,12 +277,25 @@ class OverlapDetection():
         Return ⌊log2(n)⌋ - clamps n ≤ 1 to 1 so the result is 0 for n ≤ 1
         """
         return max(0, int(math.floor(math.log2(max(1, n)))))
+    
+    def get_zarr_num_levels(self, zarr_root_path):
+        """
+        Read number of saved OME-Zarr pyramid levels from root zarr.json.
+        """
+        meta = self.read_s3_json(str(zarr_root_path).rstrip("/") + "/zarr.json")
+        attrs = meta.get("attributes", meta)
 
-    def choose_zarr_level(self):
+        multiscales = attrs.get("multiscales") or attrs.get("ome", {}).get("multiscales")
+        if not multiscales:
+            raise ValueError(f"No multiscales metadata found at {zarr_root_path}")
+
+        return len(multiscales[0]["datasets"])
+
+    def choose_zarr_level(self, zarr_root_path):
         """
-        pick the highest power-of-two pyramid level ( ≤ 7) compatible with dsxy/dsz
+        pick the highest power-of-two pyramid level compatible with dsxy/dsz
         """
-        max_level = 7
+        max_level = self.get_zarr_num_levels(zarr_root_path) - 1
         lvl_xy = self.floor_log2(self.dsxy)
         lvl_z  = self.floor_log2(self.dsz)
         best = min(lvl_xy, lvl_z, max_level)
@@ -246,9 +338,9 @@ class OverlapDetection():
             # get inverted matrice of downsampling
             all_intervals = []        
             if self.file_type == 'zarr':
-                level, leftovers = self.choose_zarr_level()
-
-                dim_base = self.load_image_metadata(os.path.join(self.prefix, row_i['file_path']))
+                zarr_root_path = self.prefix + row_i['file_path']
+                level, leftovers = self.choose_zarr_level(zarr_root_path)
+                dim_base = self.load_image_metadata(zarr_root_path + f'/{0}')
 
                 # isotropic pyramid
                 s = float(2 ** level)  
@@ -326,4 +418,6 @@ class OverlapDetection():
         Executes the entry point of the script.
         """
         dsxy, dsz, level, mipmap_of_dowsample = self.find_overlapping_area()
+        print("Overlapping Area Detected")
+        
         return self.to_process, dsxy, dsz, level, self.max_interval_size, mipmap_of_dowsample

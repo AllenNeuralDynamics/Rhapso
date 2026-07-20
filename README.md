@@ -1,15 +1,14 @@
 # Rhapso
 
-This is the official code base for **Rhapso**, a modular Python toolkit for the alignment and stitching of large-scale microscopy datasets. 
+This is the official code base for **Rhapso**, a modular Python toolkit for stitching (alignment and fusion) large-scale microscopy datasets. 
 
-Available on [PyPI](https://pypi.org/project/Rhapso/)
+Now Supporting Zarr v3
 
 [![License](https://img.shields.io/badge/license-MIT-brightgreen)](LICENSE)
-[![Python Version](https://img.shields.io/badge/python-3.10-blue.svg)](https://www.python.org/downloads/release/python-3100/)
+[![Python Version](https://img.shields.io/badge/python-3.11-blue.svg)](https://www.python.org/downloads/)
 [![Documentation](https://img.shields.io/badge/docs-wiki-blue)](https://github.com/AllenNeuralDynamics/Rhapso/wiki)
 
-<!-- ## Example Usage Media Content Coming Soon....
--- -->
+> Rhapso is published on PyPI and developed by the Allen Institute.
 
 <br>
 
@@ -33,18 +32,12 @@ Available on [PyPI](https://pypi.org/project/Rhapso/)
 
 ---
 
-<br>
-
-**Update 1/12/26** 
---------
-Rhapso is still loading... and while we wrap up development, a couple things to know if you are outside the Allen Institute: 
-   - This process requires a very specific XML structure to work.
-   - Fusion/Mutliscale is included but still under testing and development
-
-<br>
-
 ## Summary
-Rhapso is a set of Python components used to register, align, and stitch large-scale, overlapping, tile-based, multiscale microscopy datasets. Its stateless components can run on a single machine or scale out across cloud-based clusters. Rhapso was developed by the Allen Institute for Neural Dynamics.
+Rhapso is a set of Python components used to register, align, and fuse large-scale images. Its stateless components can run on a single machine or scale out across cloud-based clusters. 
+
+The core Rhapso components are not tied to any specific cloud service, infrastructure, image type, or imaging modality. The only requirement is 3D image data in NumPy arrays. The initial use case is large-scale, overlapping, tile-based, multiscale 3D microscopy datasets (OME Zarr) hosted in S3, but the same components can be adapted to many other large image workflows.
+
+**Looking forward, we are developing an automated QC system for alignment.**
 
 <br>
 
@@ -57,11 +50,13 @@ Questions or want to contribute? Please open an issue..
 - **Interest Point Detection** - DOG based feature detection
 - **Interest Point Matching** - Descriptor based RANSAC to match feature points
 - **Global Optimization** - Align matched features between tile pairs globally
+- **Affine Fusion** - Fuse tiles using generated alignments up to affine
+- **Multiscale** - Add lower resolution scaling to dataset
 - **Validation and Visualization Tools** - Validate component specific results for the best output
 - **ZARR** - Zarr data as input
 - **TIFF** - TIFF data as input
 - **AWS** - AWS S3 based input/output and Ray based EC2 instances
-- **Scale** - Tested on 200 TB of data without downsampling
+- **Scale** - Tested on 130 TB of data without downsampling
 
 ---
 
@@ -72,26 +67,27 @@ Questions or want to contribute? Please open an issue..
 
 ```
 Rhapso/
-└── Rhapso/
-    ├── data_prep/                          # Custom data loaders
-    ├── detection/
-    ├── evaluation/
-    ├── fusion/
-    ├── image_split/
-    ├── matching/
-    ├── pipelines/
-    │   └── ray/
-    │       ├── aws/
-    │       │   ├── config/                 # Cluster templates (edit for your account)
-    │       │   └── alignment_pipeline.py   # AWS Ray pipeline entry point
-    │       ├── local/
-    │       │   └── alignment_pipeline.py   # Local Ray pipeline entry point
-    │       ├── param/                      # Run parameter files (customize per run)
-    │       ├── interest_point_detection.py # Detection pipeline script
-    │       ├── interest_point_matching.py  # Matching pipeline script
-    │       └── solver.py                   # Global solver script
-    ├── solver/
-    └── visualization/                      # Validation tools
+└── rhapso/
+    ├── data_prep/        # Data readers and XML/DataFrame preparation
+    ├── detection/        # Difference-of-Gaussian interest point detection
+    ├── matching/         # RANSAC-based interest point matching
+    ├── solver/           # Global optimization and transform solving
+    ├── affine_fusion/    # Affine fusion 
+    ├── multiscale/       # Multiscale OME-Zarr pyramid generation
+    ├── split_dataset/    # Dataset splitting utilities
+    ├── evaluation/       # QC and visualization helpers
+    ├── util/             # Miscellaneous XML/QC/Neuroglancer utilities
+    └── pipelines/
+        └── ray/
+            ├── aws/      # AWS Ray cluster entry points and config templates
+            ├── local/    # Local Ray entry points
+            ├── param/    # Example/template YAML parameter files
+            ├── interest_point_detection.py
+            ├── interest_point_matching.py
+            ├── solver.py
+            ├── affine_fusion.py
+            ├── multiscale.py
+            └── split_dataset.py
 ```
 
 ---
@@ -101,30 +97,54 @@ Rhapso/
 
 ## Installation
 
+Rhapso requires Python 3.11 or newer. The examples below use Python 3.11.
+
 ### Option 1: Install from PyPI (recommended)
 
-```bash
-# create and activate a virtual environment
-python -m venv .venv && source .venv/bin/activate
-# or: conda create -n rhapso python=3.10 && conda activate rhapso
+#### macOS and Linux
 
-# install Rhapso from PyPI
-pip install Rhapso
+```bash
+python3.11 -m venv .venv
+source .venv/bin/activate
+
+python -m pip install --upgrade pip
+python -m pip install Rhapso
+```
+
+#### Windows PowerShell
+
+```powershell
+py -3.11 -m venv .venv
+.\.venv\Scripts\Activate.ps1
+
+python -m pip install --upgrade pip
+python -m pip install Rhapso
+```
+
+#### Conda
+
+```bash
+conda create -n rhapso python=3.11
+conda activate rhapso
+
+python -m pip install Rhapso
 ```
 
 ### Option 2: Install from GitHub (developers)
 
- ```sh
-# clone the repo
+```bash
 git clone https://github.com/AllenNeuralDynamics/Rhapso.git
+cd Rhapso
 
-# create and activate a virtual environment
-python -m venv .venv && source .venv/bin/activate
-# or: conda create -n rhapso python=3.11 && conda activate rhapso
+python3.11 -m venv .venv
+source .venv/bin/activate
 
-# install deps
-pip install -r requirements.txt
+python -m pip install --upgrade pip
+python -m pip install -e .
 ```
+
+On Windows, use the PowerShell environment creation and activation commands shown above, then run `python -m pip install -e .` from the repository root. The editable install includes the dependencies declared by Rhapso.
+
 ---
 
 <br>
@@ -142,6 +162,8 @@ A good way to get started:
    For example:
    - `Rhapso/pipelines/ray/local/alignment_pipeline.py` (local)
    - `Rhapso/pipelines/ray/aws/alignment_pipeline.py` (AWS/Ray cluster)
+   - `Rhapso/pipelines/ray/local/fusion_pipeline.py` (local)
+   - `Rhapso/pipelines/ray/aws/fusion_pipeline.py` (AWS/Ray cluster)
 
 3. **Point it to your param file**  
    Update the `with open("...param.yml")` line so it reads your own parameter YAML.
@@ -173,51 +195,11 @@ Image prefix (referenced by the XML)
 
 <br>
 
+Use the [Parameters](#parameters) table and [Tuning Guide](#tuning-guide) if you need help picking params.
+
+<br>
+
 **Note:** Occasionally we clean up our aind-open-data bucket. If you find this dataset does not exist, please create an issue and we will replace it.
-
----
-
-<br>
-
-## High Level Approach to Registration, Alignment, and Fusion
-
-This process has a lot of knobs and variations, and when used correctly, can work for a broad range of datasets.
-
-**First, figure out what type of alignment you need.**  
-- Are there translations to shift to?  
-- If so, you’ll likely want to start with a rigid alignment.
-
-Once you’ve run the rigid step, how does your data look?  
-- Did the required translations shrink to an acceptable level?  
-- If not, try again with new parameters, keeping the questions above in mind.
-
-At this point, the translational part of your alignment should be in good shape. Now ask: **are transformations needed?** If so, you likely need an affine alignment next.
-
-Your dataset should be correctly aligned at this point. If not, there are a number of reasons why, and we have listed some common recurrences and will keep this up to date.
-
-There is a special case in some datasets where the z-stack is very large. In this case, you can use the split-dataset utility, which splits each tile into chunks. Then you can run split-affine alignment, allowing for more precise transformations without such imposing global rails.
-
-**Common Causes of Poor Alignment**
-- Not enough quality matches (adjust sigma threshold until you do)
-- Data is not consistent looking (we take a global approach to params)
-- Large translations needed (extend search radius)
-- Translations that extend beyond overlapping span (increase overlap)
-
----
-
-<br>
-
-## Performance
-
-**Interest Point Detection Performance Example (130TB Zarr dataset)**
-
-| Environment           | Resources            | Avg runtime |
-|:----------------------|:---------------------|:-----------:|
-| Local single machine  | 10 CPU,  10 GB RAM   | ~120 min    |
-| AWS Ray cluster       | 560 CPU, 4.4 TB RAM  | ~30 min     |
-
-<br>
-*Actual times vary by pipeline components, dataset size, tiling, and parameter choices.*
 
 ---
 
@@ -261,7 +243,7 @@ There is a special case in some datasets where the z-stack is very large. In thi
 
 ### 1. Edit or create param file (templates in codebase)
 ```python
-Rhapso/Rhapso/pipelines/param/
+Rhapso/pipelines/ray/param/
 ```
 
 ### 2. Update alignment pipeline script to point to param file
@@ -334,58 +316,102 @@ python Rhapso/pipelines/ray/aws/alignment_pipeline.py
 
 ## Parameters
 
+There is no single set of parameters that will work well for every dataset. The optimal values depend on the characteristics of the data, the dataset size, and the accuracy required for alignment.
+
+The ranges below are examples intended to explain the available parameters, what they control, and the values commonly used for some of our light-sheet datasets. They should be treated as starting points and adjusted based on the quality of the detected peaks, matches, and final alignment.
+
+<br>
+
 ### Detection
 ```
-| Parameter          | Feature / step         | What it does                                                                                  | Typical range\*                   |
-| :----------------- | :--------------------- | :-------------------------------------------------------------------------------------------- | :-------------------------------- |
-| `dsxy`             | Downsampling (XY)      | Reduces XY resolution before detection; speeds up & denoises, but raises minimum feature size | 16                                |
-| `dsz`              | Downsampling (Z)       | Reduces Z resolution; often lower than XY due to anisotropy                                   | 16                                |
-| `min_intensity`    | Normalization          | Lower bound for intensity normalization prior to DoG                                          | 1                                 |
-| `max_intensity`    | Normalization          | Upper bound for intensity normalization prior to DoG                                          | 5                                 |
-| `sigma`            | DoG blur               | Gaussian blur scale (sets feature size); higher = smoother, fewer peaks                       | 1.5 - 2.5                         |
-| `threshold`        | Peak detection (DoG)   | Peak threshold (initial min peak ≈ `threshold / 3`); higher = fewer, stronger peaks           | 0.0008 - .05                      |
-| `median_filter`    | Pre-filter (XY)        | Median filter size to suppress speckle/isolated noise before DoG                              | 1-10                              |
-| `combine_distance` | Post-merge (DoG peaks) | Merge radius (voxels) to de-duplicate nearby detections                                       | 0.5                               |
-| `chunks_per_bound` | Tiling/parallelism     | Sub-partitions per tile/bound; higher improves parallelism but adds overhead                  | 12-18                             |
-| `max_spots`        | Post-cap               | Maximum detections per bound to prevent domination by dense regions                           | 8,0000 - 10,000                   |
+| Parameter          | Feature / step         | What it does                                                            | Example range\*      |
+| :----------------- | :--------------------- | :---------------------------------------------------------------------- | :------------------- |
+| `dsxy`             | Downsampling (XY)      | Reduces XY resolution                                                   | 1, 2, 4, 8, or 16    |
+| `dsz`              | Downsampling (Z)       | Reduces Z resolution                                                    | 1, 2, 4, 8, or 16    |
+| `min_intensity`    | Normalization          | Lower bound for intensity normalization prior to DoG                    | 0                    |
+| `max_intensity`    | Normalization          | Upper bound for intensity normalization prior to DoG                    | 100                  |
+| `sigma`            | DoG blur               | Gaussian blur scale (sets feature size), higher = smoother              | 1.1 - 2.8            |
+| `threshold`        | Peak detection (DoG)   | Peak gating threshold, higher = fewer points                            | 0.0001 - .9          |
+| `median_filter`    | Pre-filter (XY)        | Median filter size to suppress speckle/isolated noise before DoG        | 8                    |
+| `combine_distance` | Post-merge (DoG peaks) | Merge radius (voxels) to de-duplicate nearby detections                 | 1-16                 |
+| `chunks_per_bound` | Tiling/parallelism     | Amount of chunks per overlap bound, to optimize mem usage and run time  | 1 - 50               |
+| `max_spots`        | Post-cap               | Maximum detections per bound to prevent domination by dense regions     | 0 - 100,000          |
 ```
 <br>
 
 ### Matching
 ```
-# Candidate Selection
-| Parameter                      | Feature / step      | What it does                                                      | Typical range  |
-| :----------------------------- | :------------------ | :---------------------------------------------------------------- | :------------- |
-| `num_neighbors`                | Candidate search    | Number of nearest neighbors to consider per point                 | 3              |
-| `redundancy`                   | Candidate search    | Extra neighbors added for robustness beyond `num_neighbors`       | 0 - 1          |
-| `significance`                 | Ratio test          | Strictness of descriptor ratio test; larger = stricter acceptance | 3              |
-| `search_radius`                | Spatial gating      | Max spatial distance for candidate matches (in downsampled units) | 100 - 300      |
-| `num_required_neighbors`       | Candidate filtering | Minimum neighbors required to keep a candidate point              | 3              |
-
-# Ransac
-| Parameter                     | Feature / step       | What it does                                                      | Typical range  |
-| :---------------------------- | :------------------- | :---------------------------------------------------------------- | :------------- |
-| `model_min_matches`           | RANSAC               | Minimum correspondences to estimate a rigid transform             | 18 – 32        |
-| `inlier_threshold`            | RANSAC               | Inlier tolerance scaling; larger = looser inlier threshold        | 50 – 100       |
-| `min_inlier_ratio`            | RANSAC               | Regularization strength during model fitting                      | 0.1 – 0.05     |
-| `num_iterations`              | RANSAC               | Number of RANSAC trials; higher = more robust, slower             | 10,0000        |
-| `regularization_weight`       | RANSAC               | Weight applied to the regularization term                         | 0.05 - 1.0     |
+| Parameter                 | Feature / step      | What it does                                                      | Example range  |
+| :------------------------ | :------------------ | :---------------------------------------------------------------- | :------------- |
+| `num_neighbors`           | Candidate search    | Number of nearest neighbors to consider per point                 | 3              |
+| `redundancy`              | Candidate search    | Extra neighbors added for robustness beyond `num_neighbors`       | 0 - 1          |
+| `significance`            | Ratio test          | Strictness of descriptor ratio test; larger = stricter acceptance | 3 - 5          |
+| `search_radius`           | Spatial gating      | Max spatial distance for candidate matches (in downsampled units) | 100 - 600      |
+| `num_required_neighbors`  | Candidate filtering | Minimum neighbors required to keep a candidate point              | 3              |
+| `ransac_sample_size`      | RANSAC              | Minimum sample size                                               | 3 - 5          |
+| `model_min_inliers`       | RANSAC              | Minimum correspondences to estimate a transform                   | 18 – 32        |
+| `inlier_factor`           | RANSAC              | Inlier tolerance scaling; larger = looser inlier threshold        | 30 – 100       |
+| `lambda_value`            | RANSAC              | Regularization strength during model fitting                      | 0.1 – 0.05     |
+| `num_iterations`          | RANSAC              | Number of RANSAC trials; higher = more robust, slower             | 10,0000        |
+| `regularization_weight`   | RANSAC              | Weight applied to the regularization term                         | .05 - 1.0      |
 
 ```
 <br>
 
 ### Solver
 ```
-| Parameter                | Feature / step | What it does                                                       | Typical range       |
-| :----------------------- | :------------- | :----------------------------------------------------------------- | :------------------ |
-| `relative_threshold`     | Graph pruning  | Reject edges with residuals above dataset-relative cutoff          | 3.5                 |
-| `absolute_threshold`     | Graph pruning  | Reject edges above an absolute error bound (detection-space units) | 7.0                 |
-| `min_matches`            | Graph pruning  | Minimum matches required to retain an edge between tiles           | 3                   |
-| `damp`                   | Optimization   | Damping for iterative solver; higher can stabilize tough cases     | 1.0                 |
-| `max_iterations`         | Optimization   | Upper bound on solver iterations                                   | 10,0000             |
-| `max_allowed_error`      | Optimization   | Overall error cap; `inf` disables hard stop by error               | `inf`               |
-| `max_plateauwidth`       | Early stopping | Stagnation window before stopping on no improvement                | 200                 |
-| `regularization_weight`  | RANSAC         | Weight applied to the regularization term                          | 0.05 - 1.0          |
+| Parameter            | Feature / step | What it does                                                       | Example range       |
+| :------------------- | :------------- | :----------------------------------------------------------------- | :------------------ |
+| `relative_threshold` | Graph pruning  | Reject edges with residuals above dataset-relative cutoff          | 3.5                 |
+| `absolute_threshold` | Graph pruning  | Reject edges above an absolute error bound (detection-space units) | 7.0                 |
+| `max_cleanup_rounds` | Graph pruning  | Number of cleanup rounds                                           | 3 - 5               |
+| `min_matches`        | Graph pruning  | Minimum matches required to retain an edge between tiles           | 3                   |
+| `damp`               | Optimization   | Damping for iterative solver; higher can stabilize tough cases     | 1.0                 |
+| `max_iterations`     | Optimization   | Upper bound on solver iterations                                   | 10,0000             |
+| `max_allowed_error`  | Optimization   | Overall error cap; `inf` disables hard stop by error               | `inf`               |
+| `max_plateauwidth`   | Early stopping | Stagnation window before stopping on no improvement                | 200                 |
+
+```
+<br>
+
+### Split
+```
+| Parameter            | Feature / step | What it does                                       | Example range       |
+| :------------------- | :------------- | :------------------------------------------------- | :------------------ |
+| `point_density`      | Fake points    | Controls overlap point count                       | 1.0                 |
+| `min_points`         | Fake points    | Min points per overlap                             | 20                  |
+| `max_points`         | Fake points    | Max points per overlap                             | 800                 |
+| `error`              | Fake points    | Adds random coordinate jitter                      | 0.5                 |
+| `exclude_radius`     | Fake points    | Prevents points from being too close               | 200                 |
+| `target_image_size`  | Grid split     | Desired split tile size                            | [5000, 5000, 3400]  |
+| `target_overlap`     | Grid split     | Desire tile overlap size                           | [128, 128, 128]     |
+
+```
+<br>
+
+### Fusion
+```
+| Parameter            | Feature / step | What it does                                 | Example range                             |
+| :------------------- | :------------- | :--------------------------------------------| :---------------------------------------- |
+| `block_size`         | Fusion opt     | Cell size per task xyz                       | 256, 256, 256                             |
+| `intensity_range`    | Fusion config  | Range of intensity values                    | 0, 65535                                  |
+| `block_scale`        | Fusion opt     | Scaling of cell size                         | 2, 2, 1                                   |
+| `overlap_strategy`   | Edge handling  | Strategy for competing pixels                | avg_blend, lowest_view_wins, or max_blend |
+| `output_zarr_version`| Zarr version   | Set which zarr version you want for output   | 2 or 3                                    |
+
+```
+<br>
+
+### Multiscale
+```
+| Parameter               | Feature / step         | What it does                                            | Example range       |
+| :---------------------- | :----------------------| :------------------------------------------------------ | :------------------ |
+| `multiscale_chunk_size` | Optimization           | Output cell size                                        | 128, 128, 128       |
+| `voxel_size`            | Data config            | Voxel size of data in zyx                               | 1.0, .748, .748     |
+| `n_lvls`                | Output scale handling  | Num levels to multiscale including base level           | 7                   |
+| `scale_factor`          | Entropy config         | Scaling factor per level for entropy                    | [2,2,2],...num lvls |
+| `target_block_size_mb`  | Optimization           | Per worker block size                                   | 256                 |
+| `base_level`            | Output scale config    | Existing base res level                                 | 0                   |
 
 ```
 
@@ -395,17 +421,34 @@ python Rhapso/pipelines/ray/aws/alignment_pipeline.py
 
 ## Tuning Guide
 
-- **Start with Detection.** The quality and density of interest points strongly determine alignment outcomes.
+The alignment workflow has three main components: **peak detection, matching, and solving**. These components are tuned together, and the matching and solver stages can be run progressively through **rigid, affine, and split-affine alignment**.
 
-- **Target Counts (exaSPIM):** ~25–35k points per tile in dense regions; ~10k for sparser tiles. Going much higher usually increases runtime without meaningful accuracy gains.
+### 1. Peak Detection
 
-- **Inspect Early.** After detection, run the visualization script and verify that peaks form **clustered shapes/lines** with a **good spatial spread**—a good sign for robust rigid matches.
+* **Inspect Your Data:** Start by understanding what your data looks like and what type of registration it requires. Determine whether feature-based registration is appropriate and whether the misalignment can be corrected with a rigid transformation or requires affine deformation.
 
-- **Rigid → Affine Dependency.** Weak rigid matches produce poor rigid transforms, which then degrade affine matching (points don’t land close enough). If tiles fail to align:
-  - Check **match counts** for the problem tile and its neighbors.
-  - Adjust high-impact detection knobs—`sigma`, `threshold`, and `median_filter`—within sensible ranges.
-  - Revisit `max_spots` and `combine_distance` to balance density vs. duplicate detections.
+* **Tune Peak Detection:** Choose a downsampling level that balances dataset size, runtime, and the precision required for alignment. Sigma should correspond to the expected size of the features you want to detect, while the threshold controls how much noise is allowed through. Interest-point quality and spatial coverage are equally important and have the greatest impact on alignment performance.
 
+* **Inspect the Peaks:** Use `evaluation/ip_metrics_and_viz.py` to visualize the detected peaks and confirm that they provide sufficient spatial coverage across the dataset.
+
+### 2. Matching
+
+The key matching metrics are correspondence quality, match quantity, spatial coverage, and the residual error between matched points after alignment.
+
+* **Rigid Matching:** Because the rigid model has fewer degrees of freedom, you can generally allow more matches to produce a robust estimate of translation and rotation.
+
+* **Affine Matching:** Match quality becomes more important because incorrect correspondences can introduce unwanted scaling, shear, or deformation. Stricter filtering is typically required.
+
+* **Split-Affine Matching:** Spatial coverage is critical. Ensure that each split contains enough real correspondences and synthetic points to remain connected and well constrained during optimization.
+
+* **Inspect the Matches:** Use `evaluation/match_viz.py` to visualize the matches. Confirm that they span the regions being aligned and provide sufficient coverage throughout the dataset.
+
+### 3. Solver
+
+The solver iteratively optimizes the alignment through the rigid, affine, and split-affine stages. Each stage begins from the result of the previous stage and introduces additional model flexibility.
+
+During optimization, the solver can remove poor correspondences based on their residual error. Use the absolute and relative error thresholds to control this outlier rejection. If the maximum error is significantly higher than the average error, the thresholds may need to be stricter.
+  
 ---
 
 <br>
@@ -414,13 +457,13 @@ python Rhapso/pipelines/ray/aws/alignment_pipeline.py
 
 ### Using the Built `.whl` File
 
-1. **Build the `.whl` File in the root of this repo:**
+1. **Build the source distribution and `.whl` file from the repository root:**
   ```sh
   cd /path/to/Rhapso
-  pip install setuptools wheel
-  python setup.py sdist bdist_wheel
+  python -m pip install --upgrade build
+  python -m build
   ```
-  The `.whl` file will appear in the `dist` directory. Do not rename it to ensure compatibility (e.g., `rhapso-0.1-py3-none-any.whl`).
+  The distributions will appear in the `dist` directory. Do not rename the wheel because its filename contains package compatibility metadata (for example, `rhapso-<version>-py3-none-any.whl`).
 
 ---
 

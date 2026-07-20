@@ -1,67 +1,91 @@
-import pandas as pd
+from __future__ import annotations
+
+from typing import Any
+
 import numpy as np
+import pandas as pd
 
 """
-View Transform Models parses and combines view registrations matrices
+View Transform Models parses and combines view registrations matrices.
 """
 
 class ViewTransformModels:
-    def __init__(self, df):
-        self.view_registrations_df = df.get("view_registrations", pd.DataFrame())
-        self.calibration_matrices = {}
-        self.rotation_matrices = {}
-        self.concatenated_matrices = {}
+    def __init__(self, df: dict[str, Any]):
+        self.view_registrations_df = df.get(
+            "view_registrations", pd.DataFrame()
+        )
+        self.calibration_matrices: dict[str, dict[str, np.ndarray]] = {}
+        self.rotation_matrices: dict[str, dict[str, np.ndarray]] = {}
+        self.concatenated_matrices: dict[str, np.ndarray] = {}
+    
+    @staticmethod
+    def _parse_affine_3x4(affine_text: Any, *, view_id: str) -> np.ndarray:
+        """
+        Parse an affine string containing 12 values into a 4x4 matrix.
+        """
+        clean_text = str(affine_text).replace(",", " ").strip()
 
-    def create_transform_matrices(self):
+        vals = np.fromstring(
+            clean_text,
+            sep=" ",
+            dtype=np.float64,
+        )
+
+        if len(vals) != 12:
+            raise ValueError(
+                f"{view_id}: expected 12 affine values, got {len(vals)}. "
+                f"affine_text={affine_text!r}"
+            )
+
+        m = np.eye(4, dtype=np.float64)
+        m[:3, :4] = vals.reshape(3, 4)
+        return m
+
+    def _view_id(self, timepoint: Any, setup: Any) -> str:
+        return f"timepoint: {timepoint}, setup: {setup}"
+
+    def compose_all_view_transforms(self) -> None:
         """
-        Extracts transformation matrices from a dataframe and organizes them into appropriate data structures
-        based on their types and intended usage.
+        Compose a per-view 4x4 by chaining all affine transforms in order.
+        Running chain per view: M = M @ Ti
         """
-        if self.view_registrations_df.empty: raise ValueError("view_registrations_df is empty")
+        if self.view_registrations_df.empty:
+            raise ValueError("view_registrations_df is empty")
+
+        df = self.view_registrations_df[
+            self.view_registrations_df["type"] == "affine"
+        ].copy()
+
+        sort_cols = ["timepoint", "setup"]
+        if "order" in df.columns:
+            sort_cols.append("order")
+        df = df.sort_values(sort_cols)
+
+        out: dict[str, np.ndarray] = {}
+
+        for (tp, setup), g in df.groupby(
+            ["timepoint", "setup"],
+            sort=False,
+        ):
+            view_id = self._view_id(tp, setup)
+            m = np.eye(4, dtype=np.float64)
+
+            for _, row in g.iterrows():
+                ti = self._parse_affine_3x4(
+                    row.get("affine"),
+                    view_id=view_id,
+                )
+                m = m @ ti
+
+            out[view_id] = m
+
+        self.concatenated_matrices = out
+
+    def run(self) -> dict[str, np.ndarray]:
+        """
+        Execute the entry point of the script.
+        """
+        self.compose_all_view_transforms()
+        print("Transposed View Based Transformation Models")
         
-        # parse DF for view_transform matrices
-        for _, row in self.view_registrations_df.iterrows():
-            if row["type"] == "affine":
-
-                # create affine matrix
-                affine_values = np.fromstring(row["affine"], sep=",").astype(np.float64)
-                if len(affine_values) == 12:
-                    affine_values = np.append(affine_values, [0, 0, 0, 1])  # append homogeneous coordinates
-                affine_matrix = affine_values.reshape(4, 4)
-
-                # append matrix by row name
-                view_id = f"timepoint: {row['timepoint']}, setup: {row['setup']}"
-                if "calibration" in row["name"].lower():
-                    self.calibration_matrices[view_id] = {"affine_matrix": affine_matrix}
-                else:
-                    self.rotation_matrices[view_id] = {"affine_matrix": affine_matrix}
-
-    def concatenate_matrices_by_view_id(self):
-        """
-        Concatenates calibration and rotation matrices for each view ID, if available.
-        """
-        if not self.calibration_matrices and not self.rotation_matrices: raise ValueError("No matrices to concatenate")
-        
-        # Zarr
-        if not self.calibration_matrices:
-            self.concatenated_matrices = {
-                key: self.rotation_matrices[key]["affine_matrix"]
-                for key in self.rotation_matrices
-            }
-        
-        # TIFF
-        else:
-            for key in self.calibration_matrices:
-                if key in self.rotation_matrices:
-                    calibration_matrix = self.calibration_matrices[key]["affine_matrix"]
-                    rotation_matrix = self.rotation_matrices[key]["affine_matrix"]
-                    concatenated_matrix = np.dot(rotation_matrix, calibration_matrix)
-                    self.concatenated_matrices[key] = concatenated_matrix
-
-    def run(self):
-        """
-        Executes the entry point of the script.
-        """
-        self.create_transform_matrices()
-        self.concatenate_matrices_by_view_id()
         return self.concatenated_matrices

@@ -1,205 +1,328 @@
-from collections import OrderedDict
-from scipy.spatial import cKDTree
+from collections import OrderedDict, defaultdict
 import numpy as np
-from collections import defaultdict, OrderedDict
+from scipy.spatial import cKDTree
 
 """
-Advanced Refinement is the final pass over detected interest points: it groups chunks by view/overlap interval, keeps only the 
-strongest points scaled to interval size, then merges and de-duplicates nearby points with a KD-tree.
+Final interest-point refinement:
+
+1. Combine chunks by view.
+2. Keep points inside overlap intervals.
+3. Apply a spatially balanced point cap using refined DoG peak scores.
+4. Suppress nearby duplicates strongest-first using DoG peak scores.
+5. Preserve raw image intensity in the downstream output.
 """
 
 class AdvancedRefinement:
     def __init__(self, interest_points, combine_distance, dataframes, overlapping_area, max_interval_size, max_spots):
         self.interest_points = interest_points
-        self.consolidated_data = {}
-        self.combine_distance = combine_distance
-        self.image_loader_df = dataframes['image_loader']
+        self.combine_distance = float(combine_distance)
+        self.image_loader_df = dataframes["image_loader"]
         self.overlapping_area = overlapping_area
-        self.max_interval_size = max_interval_size
-        self.max_spots = max_spots
-        self.overlapping_only = True
-        self.sorted_view_ids = None
-        self.result = interest_points  
-        self.store_intensities = False
-        self._max_spots = 0
-        self.max_spots_per_overlap = False
-        self.to_process = interest_points
-        self.interest_points_per_view_id = {}
-        self.intensities_per_view_id = {}
-        self.intervals_per_view_id = {}
+        self.max_interval_size = float(max_interval_size)
+        self.max_spots = int(max_spots)
+        self.max_grid_bins_per_axis = 8
+        self.consolidated_data = OrderedDict()
+        self.consolidated_peak_scores = OrderedDict()
+        self.stats = OrderedDict()
 
-    def kd_tree(self, ips_lists_by_view, ints_lists_by_view):
-        """
-        KD-tree implementation to filter out duplicates. Merging into the tree per bound, per iteration
-        """
-        radius = float(self.combine_distance)
-        out = OrderedDict()
+    @staticmethod
+    def size(interval):
+        lb, ub = (np.asarray(v, dtype=np.float64) for v in interval)
+        return float(np.prod(np.maximum(ub - lb + 1.0, 0.0)))
 
-        for view_id in sorted(ips_lists_by_view.keys()):
-            ips_lists = ips_lists_by_view[view_id]
-            ints_lists = ints_lists_by_view[view_id]
+    @staticmethod
+    def _coerce(points, intensities, peak_scores):
+        points = np.asarray(points, dtype=np.float32)
 
-            my_ips: list = []
-            my_ints: list = []
+        if points.size == 0:
+            empty_points = np.empty((0, 3), dtype=np.float32)
+            empty_values = np.empty((0,), dtype=np.float32)
+            return empty_points, empty_values, empty_values.copy()
 
-            for l, ips in enumerate(ips_lists):
-                intens = ints_lists[l]
+        points = points.reshape(-1, 3)
+        n = len(points)
 
-                # First list - accept all 
-                if not my_ips:
-                    my_ips.extend(ips)
-                    my_ints.extend(intens)
-                    continue
+        intensities = (
+            np.zeros(n, dtype=np.float32)
+            if intensities is None
+            else np.asarray(intensities, dtype=np.float32).reshape(-1)
+        )
 
-                # Build KDTree from the CURRENT accepted points for this view
-                base = np.asarray(my_ips, dtype=np.float32)
-                tree = cKDTree(base)
+        peak_scores = (
+            intensities.copy()
+            if peak_scores is None
+            else np.asarray(peak_scores, dtype=np.float32).reshape(-1)
+        )
 
-                # Batch query all new points against the tree
-                cand = np.asarray(ips, dtype=np.float32)
-                
-                if cand.size == 0:
-                    continue
-                
-                dists, _ = tree.query(cand, k=1)  
+        n = min(len(points), len(intensities), len(peak_scores))
+        points, intensities, peak_scores = points[:n], intensities[:n], peak_scores[:n]
 
-                # Keep only points farther than combineDistance
-                mask = dists > radius
-                if np.any(mask):
-                    for p, val in zip(cand[mask], np.asarray(intens)[mask]):
-                        my_ips.append(p.tolist())   
-                        my_ints.append(float(val))
+        finite = (
+            np.all(np.isfinite(points), axis=1)
+            & np.isfinite(intensities)
+            & np.isfinite(peak_scores)
+        )
 
-            out[view_id] = list(zip(my_ips, my_ints))
+        return points[finite], intensities[finite], peak_scores[finite]
 
-        self.consolidated_data = out
-    
-    def size(self, interval):
-        """
-        Finds the number of voxels in a 3D interval
-        """
-        lb, ub = interval[0], interval[1]
-        prod = 1
-        for l, u in zip(lb, ub):
-            prod *= (int(u) - int(l) + 1)
-        return prod
-    
-    def contains(self, containing, contained):
-        """
-        Boolean check if the 3D interval `contained` lies fully inside the 3D interval `containing`
-        """
-        lc, uc = containing[0], containing[1]
-        li, ui = contained[0],  contained[1]
-        return all(lc[d] <= li[d] and uc[d] >= ui[d] for d in range(3))
-    
-    def filter_lists(self, ips, intensities, my_max_spots):
-        """
-        Pick the top-N interest points by intensity and return them
-        """
-        if intensities is None or len(ips) == 0 or my_max_spots <= 0:
-            return ips, intensities
+    def _ordered_view_ids(self, available):
+        available = set(available)
+        ordered, seen = [], set()
 
-        intens_arr = np.asarray(intensities)
-        n = min(len(ips), intens_arr.shape[0])
-        if n == 0:
-            return ips, intensities
-
-        # indices of top-N by descending intensity
-        top_idx = np.argsort(intens_arr[:n])[::-1][:my_max_spots]
-
-        if isinstance(ips, np.ndarray):
-            ips_filtered = ips[top_idx]
-        else:
-            ips_filtered = [ips[i] for i in top_idx]
-
-        intens_filtered = intens_arr[top_idx]
-        if isinstance(intensities, list):
-            intens_filtered = intens_filtered.tolist()
-
-        return ips_filtered, intens_filtered
-        
-    def filter(self):
-        """
-        Merge all interest-point chunks that fall inside the requested overlap intervals, 
-        then keep only the strongest points per interval (scaled by interval size)
-        """
-        ips_lists_by_view = defaultdict(list)
-        ints_lists_by_view = defaultdict(list)
-        intervals_by_view = defaultdict(list)
-
-        # Group incoming interest-point chunks by view
-        for entry in self.interest_points:
-            vid = entry["view_id"]
-            ips = entry["interest_points"]      
-            intens = entry["intensities"] 
-            interval = entry["interval_key"]     
-            ips_lists_by_view[vid].append(ips)
-            ints_lists_by_view[vid].append(intens)
-            intervals_by_view[vid].append(interval)
-
-        # Process each view from the image metadata table.
-        for i, row_i in self.image_loader_df.iterrows():
-            view_id = f"timepoint: {row_i['timepoint']}, setup: {row_i['view_setup']}"
-
-            ips_list = ips_lists_by_view[view_id]
-            intensities_list = ints_lists_by_view[view_id]
-            interval_list = intervals_by_view[view_id]
-
-            if not interval_list or not ips_list:
+        for _, row in self.image_loader_df.iterrows():
+            try:
+                view_id = f"timepoint: {int(row['timepoint'])}, setup: {int(row['view_setup'])}"
+            except (TypeError, ValueError):
                 continue
 
-            interval_data = []
+            if view_id in available and view_id not in seen:
+                ordered.append(view_id)
+                seen.add(view_id)
 
-            # Build the set of intervals to process from overlap metadata.
-            to_process = [
-                {'view_id': vid, **d}
-                for vid, lst in self.overlapping_area.items()
-                for d in lst
+        ordered.extend(sorted(available - seen))
+        return ordered
+
+    def _collect_points_by_view(self):
+        points_by_view = defaultdict(list)
+        intensities_by_view = defaultdict(list)
+        scores_by_view = defaultdict(list)
+        intervals_by_view = defaultdict(list)
+
+        for entry in self.interest_points:
+            points, intensities, scores = self._coerce(
+                entry.get("interest_points", []),
+                entry.get("intensities"),
+                entry.get("peak_scores"),
+            )
+
+            if len(points) == 0:
+                continue
+
+            view_id = entry["view_id"]
+            points_by_view[view_id].append(points)
+            intensities_by_view[view_id].append(intensities)
+            scores_by_view[view_id].append(scores)
+            intervals_by_view[view_id].append(entry["interval_key"])
+
+        return points_by_view, intensities_by_view, scores_by_view, intervals_by_view
+    
+    @staticmethod
+    def _contains(containing, contained):
+        outer_lb, outer_ub = containing[:2]
+        inner_lb, inner_ub = contained[:2]
+
+        return all(
+            outer_lb[d] <= inner_lb[d] and outer_ub[d] >= inner_ub[d]
+            for d in range(3)
+        )
+    
+    @staticmethod
+    def _point_space_interval(points):
+        return (
+            np.min(points, axis=0).astype(np.float64),
+            np.max(points, axis=0).astype(np.float64),
+        )
+
+    def _collect_overlaps_by_view(self):
+        overlaps = defaultdict(list)
+
+        for view_id, entries in self.overlapping_area.items():
+            for entry in entries:
+                lb = np.asarray(entry["lower_bound"], dtype=np.float64)
+                ub = np.asarray(entry["upper_bound"], dtype=np.float64)
+
+                if lb.shape != (3,) or ub.shape != (3,):
+                    raise ValueError(f"Invalid overlap bounds for {view_id}: {lb.shape}, {ub.shape}")
+
+                overlaps[view_id].append((lb, ub))
+
+        return overlaps
+
+    @staticmethod
+    def _inside(points, interval):
+        lb, ub = interval
+        return np.all((points >= lb) & (points <= ub), axis=1)
+
+    def _max_spots_for_interval(self, interval):
+        if self.max_spots <= 0:
+            return None
+        if self.max_interval_size <= 0:
+            return self.max_spots
+
+        return max(1, int(round(self.max_spots * self.size(interval) / self.max_interval_size)))
+
+    def _grid_shape(self, interval):
+        lb, ub = interval
+        span = np.maximum(ub - lb, 1.0)
+        return np.clip(
+            np.rint(self.max_grid_bins_per_axis * span / np.max(span)).astype(np.int64),
+            1,
+            self.max_grid_bins_per_axis,
+        )
+
+    def _spatial_top_n(self, points, intensities, scores, max_spots, interval):
+        if max_spots is None or max_spots <= 0 or len(points) <= max_spots:
+            return points, intensities, scores
+
+        lb, ub = interval
+        grid_shape = self._grid_shape(interval)
+        normalized = (points.astype(np.float64) - lb) / np.maximum(ub - lb, 1.0)
+        cells = np.floor(normalized * grid_shape).astype(np.int64)
+        cells = np.clip(cells, 0, grid_shape - 1)
+
+        by_cell = defaultdict(list)
+        for i, cell in enumerate(cells):
+            by_cell[tuple(int(v) for v in cell)].append(i)
+
+        for indices in by_cell.values():
+            indices.sort(key=lambda i: (-float(scores[i]), -float(intensities[i]), i))
+
+        selected, depth = [], 0
+
+        while len(selected) < max_spots:
+            candidates = []
+
+            for cell, indices in by_cell.items():
+                if depth < len(indices):
+                    i = indices[depth]
+                    candidates.append((-float(scores[i]), -float(intensities[i]), cell, i))
+
+            if not candidates:
+                break
+
+            candidates.sort()
+
+            for _, _, _, i in candidates:
+                selected.append(i)
+                if len(selected) >= max_spots:
+                    break
+
+            depth += 1
+
+        selected = np.asarray(selected, dtype=np.int64)
+        return points[selected], intensities[selected], scores[selected]
+
+    def filter(self):
+        points_by_view, intensities_by_view, scores_by_view, intervals_by_view = self._collect_points_by_view()
+        overlaps_by_view = self._collect_overlaps_by_view()
+
+        selected_points = OrderedDict()
+        selected_intensities = OrderedDict()
+        selected_scores = OrderedDict()
+
+        for view_id in self._ordered_view_ids(points_by_view):
+            point_chunks = points_by_view[view_id]
+            intensity_chunks = intensities_by_view[view_id]
+            score_chunks = scores_by_view[view_id]
+            chunk_intervals = intervals_by_view[view_id]
+            overlap_intervals = overlaps_by_view.get(view_id, [])
+
+            self.stats[view_id] = {
+                "input_points": sum(len(points) for points in point_chunks),
+                "overlap_selected_before_dedup": 0,
+                "final_points": 0,
+            }
+
+            if not overlap_intervals:
+                continue
+
+            point_lists, intensity_lists, score_lists = [], [], []
+
+            for overlap_interval in overlap_intervals:
+                overlap_points = []
+                overlap_intensities = []
+                overlap_scores = []
+
+                for points, intensities, scores, chunk_interval in zip(
+                    point_chunks, intensity_chunks, score_chunks, chunk_intervals
+                ):
+                    # Both intervals are in detection/mipmap coordinates.
+                    if not self._contains(overlap_interval, chunk_interval):
+                        continue
+
+                    overlap_points.append(points)
+                    overlap_intensities.append(intensities)
+                    overlap_scores.append(scores)
+
+                if not overlap_points:
+                    continue
+
+                points = np.concatenate(overlap_points)
+                intensities = np.concatenate(overlap_intensities)
+                scores = np.concatenate(overlap_scores)
+
+                points, intensities, scores = self._spatial_top_n(
+                    points,
+                    intensities,
+                    scores,
+                    self._max_spots_for_interval(overlap_interval),
+                    self._point_space_interval(points),
+                )
+
+                point_lists.append(points)
+                intensity_lists.append(intensities)
+                score_lists.append(scores)
+
+            if not point_lists:
+                continue
+
+            points = np.concatenate(point_lists)
+            intensities = np.concatenate(intensity_lists)
+            scores = np.concatenate(score_lists)
+
+            selected_points[view_id] = points
+            selected_intensities[view_id] = intensities
+            selected_scores[view_id] = scores
+            self.stats[view_id]["overlap_selected_before_dedup"] = len(points)
+
+        return selected_points, selected_intensities, selected_scores
+
+    def _suppress_duplicates(self, points, intensities, scores):
+        if len(points) == 0:
+            return points, intensities, scores
+        if self.combine_distance < 0:
+            raise ValueError("combine_distance must be non-negative")
+
+        order = np.lexsort((np.arange(len(scores)), -intensities, -scores))
+        tree = cKDTree(points)
+        suppressed = np.zeros(len(points), dtype=bool)
+        kept = []
+
+        for i in order:
+            if suppressed[i]:
+                continue
+
+            kept.append(i)
+            nearby = tree.query_ball_point(points[i], r=self.combine_distance)
+            suppressed[np.asarray(nearby, dtype=np.int64)] = True
+
+        kept = np.asarray(kept, dtype=np.int64)
+        return points[kept], intensities[kept], scores[kept]
+
+    def kd_tree(self, points_by_view, intensities_by_view, scores_by_view):
+        output, output_scores = OrderedDict(), OrderedDict()
+
+        for view_id in self._ordered_view_ids(points_by_view):
+            points, intensities, scores = self._suppress_duplicates(
+                points_by_view[view_id],
+                intensities_by_view[view_id],
+                scores_by_view[view_id],
+            )
+
+            output[view_id] = [
+                (point.tolist(), float(intensity))
+                for point, intensity in zip(points, intensities)
             ]
-            
-            # Collect all chunks fully contained in each target interval
-            for row in to_process:
-                vid = row['view_id']
-                lb = row['lower_bound']
-                ub = row['upper_bound']
-                if vid == view_id:
+            output_scores[view_id] = scores.astype(float).tolist()
+            self.stats[view_id]["final_points"] = len(points)
 
-                    ub_inclusive = (ub[0]+1, ub[1]+1, ub[2]+1)
-                    to_process_interval = (lb, ub_inclusive)
-                    ips_block = []
-                    intensities_block = []
-
-                    for i in range(len(ips_list)): 
-                        block_interval = interval_list[i]
-                        
-                        # Merge all blocks that fall inside the target interval
-                        if self.contains(to_process_interval, block_interval):
-                            ips_block.extend(ips_list[i])
-                            intensities_block.extend(intensities_list[i])
-                    
-                    interval_data.append((to_process_interval, ips_block, intensities_block))
-            
-            ips_lists_by_view[view_id] = []
-            ints_lists_by_view[view_id] = []
-
-            # Cap the number of spots by interval size, then keep best
-            for interval, ips, intensities in interval_data:
-                size = self.size(interval)
-                my_max_spots = int(round(self.max_spots * (size / self.max_interval_size)))
-                
-                if my_max_spots > 0 and my_max_spots < len(ips):
-                    ips, intensities = self.filter_lists(ips, intensities, my_max_spots)
-
-                ips_lists_by_view[view_id].append(ips)
-                ints_lists_by_view[view_id].append(intensities)
-        
-        return ips_lists_by_view, ints_lists_by_view
+        self.consolidated_data = output
+        self.consolidated_peak_scores = output_scores
 
     def run(self):
-        """
-        Executes the entry point of the script.
-        """
-        ips_lists_by_view, ints_lits_by_view = self.filter()
-        self.kd_tree(ips_lists_by_view, ints_lits_by_view)
-        
+        points_by_view, intensities_by_view, scores_by_view = self.filter()
+        self.kd_tree(points_by_view, intensities_by_view, scores_by_view)
+
+        print("Advanced Refinement Done")
+
         return self.consolidated_data

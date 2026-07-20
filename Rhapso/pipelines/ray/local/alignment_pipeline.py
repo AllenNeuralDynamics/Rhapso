@@ -2,6 +2,7 @@ from Rhapso.pipelines.ray.interest_point_detection import InterestPointDetection
 from Rhapso.pipelines.ray.interest_point_matching import InterestPointMatching
 from Rhapso.pipelines.ray.solver import Solver
 from Rhapso.pipelines.ray.split_dataset import SplitDataset
+from Rhapso.evaluation.matching_metrics import MatchingMetrics
 import yaml
 import ray
 
@@ -9,7 +10,10 @@ import ray
 ray.init()
 
 # Point to param file
-with open("Rhapso/pipelines/ray/param/exaSPIM_794495.yml", "r") as file:
+PARAM_FILE_PATH = "Rhapso/pipelines/ray/param/alignment/exaSPIM_791116.yml"
+
+# Load param file
+with open(PARAM_FILE_PATH, "r") as file:
     config = yaml.safe_load(file)
 
 # -- INITIALIZE EACH COMPONENT --
@@ -29,10 +33,10 @@ interest_point_detection = InterestPointDetection(
     n5_output_file_prefix=config['n5_output_file_prefix'],
     combine_distance=config['combine_distance'],
     chunks_per_bound=config['chunks_per_bound'],
-    run_type=config['detection_run_type'],
+    run_type=config['run_type'],
     max_spots=config['max_spots'],
     median_filter=config['median_filter'],
-)
+) 
 
 # INTEREST POINT MATCHING RIGID
 interest_point_matching_rigid = InterestPointMatching(
@@ -45,7 +49,8 @@ interest_point_matching_rigid = InterestPointMatching(
     significance=config['significance_rigid'],
     search_radius=config['search_radius_rigid'],
     num_required_neighbors=config['num_required_neighbors_rigid'],
-    model_min_matches=config['model_min_matches_rigid'],
+    ransac_sample_size=config['ransac_sample_size_rigid'],
+    model_min_inliers=config['model_min_inliers_rigid'],
     inlier_threshold=config['inlier_threshold_rigid'],
     min_inlier_ratio=config['min_inlier_ratio_rigid'],
     num_iterations=config['num_iterations_rigid'],
@@ -64,7 +69,8 @@ interest_point_matching_affine = InterestPointMatching(
     significance=config['significance_affine'],
     search_radius=config['search_radius_affine'],
     num_required_neighbors=config['num_required_neighbors_affine'],
-    model_min_matches=config['model_min_matches_affine'],
+    ransac_sample_size=config['ransac_sample_size_affine'],
+    model_min_inliers=config['model_min_inliers_affine'],
     inlier_threshold=config['inlier_threshold_affine'],
     min_inlier_ratio=config['min_inlier_ratio_affine'],
     num_iterations=config['num_iterations_affine'],
@@ -83,7 +89,8 @@ interest_point_matching_split_affine = InterestPointMatching(
     significance=config['significance_split_affine'],
     search_radius=config['search_radius_split_affine'],
     num_required_neighbors=config['num_required_neighbors_split_affine'],
-    model_min_matches=config['model_min_matches_split_affine'],
+    ransac_sample_size=config['ransac_sample_size_split_affine'],
+    model_min_inliers=config['model_min_inliers_split_affine'],
     inlier_threshold=config['inlier_threshold_split_affine'],
     min_inlier_ratio=config['min_inlier_ratio_split_affine'],
     num_iterations=config['num_iterations_split_affine'],
@@ -97,8 +104,9 @@ solver_rigid = Solver(
     n5_input_path=config['n5_input_path'],
     xml_file_path=config['xml_file_path_solver_rigid'],
     run_type=config['run_type_solver_rigid'],   
-    relative_threshold=config['relative_threshold'],
-    absolute_threshold=config['absolute_threshold'],
+    relative_threshold=config['relative_threshold_rigid'],
+    absolute_threshold=config['absolute_threshold_rigid'],
+    max_cleanup_rounds=config['max_cleanup_rounds_rigid'],
     min_matches=config['min_matches'],
     damp=config['damp'],
     regularization_weight=config['regularization_weight_solver_rigid'],
@@ -115,8 +123,9 @@ solver_affine = Solver(
     n5_input_path=config['n5_input_path'],
     xml_file_path=config['xml_file_path_solver_affine'],
     run_type=config['run_type_solver_affine'],  
-    relative_threshold=config['relative_threshold'],
-    absolute_threshold=config['absolute_threshold'],
+    relative_threshold=config['relative_threshold_affine'],
+    absolute_threshold=config['absolute_threshold_affine'],
+    max_cleanup_rounds=config['max_cleanup_rounds_affine'],
     min_matches=config['min_matches'],
     damp=config['damp'],
     regularization_weight=config['regularization_weight_solver_affine'],
@@ -133,8 +142,9 @@ solver_split_affine = Solver(
     n5_input_path=config['n5_input_path'],
     xml_file_path=config['xml_file_path_solver_split_affine'],
     run_type=config['run_type_solver_split_affine'],  
-    relative_threshold=config['relative_threshold'],
-    absolute_threshold=config['absolute_threshold'],
+    relative_threshold=config['relative_threshold_split_affine'],
+    absolute_threshold=config['absolute_threshold_split_affine'],
+    max_cleanup_rounds=config['max_cleanup_rounds_split_affine'],
     min_matches=config['min_matches'],
     damp=config['damp'],
     regularization_weight=config['regularization_weight_solver_split_affine'],
@@ -159,12 +169,46 @@ split_dataset = SplitDataset(
     target_overlap=config['target_overlap'],
 )
 
-# -- ALIGNMENT PIPELINE --
+metrics_rigid = MatchingMetrics(
+    pre_xml_path=config['pre_xml_path_rigid'],
+    post_xml_path=config['post_xml_path_rigid'],
+    alignment_base=config['alignment_base'],
+    downsample_xyz=config['downsample_xyz'],
+    match_type=config['match_type_rigid']
+)
+
+metrics_affine = MatchingMetrics(
+    pre_xml_path=config['pre_xml_path_affine'],
+    post_xml_path=config['post_xml_path_affine'],
+    alignment_base=config['alignment_base'],
+    downsample_xyz=config['downsample_xyz'],
+    match_type=config['match_type_affine']
+)
+
+metrics_split_affine = MatchingMetrics(
+    pre_xml_path=config['pre_xml_path_split_affine'],
+    post_xml_path=config['post_xml_path_split_affine'],
+    alignment_base=config['alignment_base'],
+    split_xml_path=config['split_xml_path_split_affine'],
+    downsample_xyz=config['downsample_xyz'],
+    match_type=config['match_type_split_affine']
+)
+
+# Pipeline Entry
+print("-----STARTING ALIGNMENT PIPELINE------")
 interest_point_detection.run()
+print("-----STARTING RIGID-----")
 interest_point_matching_rigid.run()
 solver_rigid.run()
+metrics_rigid.run()
+print("-----STARTING AFFINE-----")
 interest_point_matching_affine.run()
 solver_affine.run()
+metrics_affine.run()
+print("-----STARTING SPLIT AFFINE-----")
 split_dataset.run()
 interest_point_matching_split_affine.run()
 solver_split_affine.run()
+metrics_split_affine.run()
+print("-----ALIGNMENT PIPELINE DONE------")
+
