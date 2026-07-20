@@ -2,7 +2,6 @@ from scipy.ndimage import gaussian_filter
 from scipy.ndimage import map_coordinates
 from scipy.ndimage import median_filter
 from scipy.ndimage import maximum_filter
-from scipy.linalg import lu_factor, lu_solve
 import numpy as np
 
 """
@@ -102,66 +101,125 @@ class DifferenceOfGaussian:
                 H[d, e] = H[e, d] = v
 
         return g, H, a1
-
+    
     def refine_peaks(self, peaks, image):
         """
-        Quadratic peak refinement - iteratively refine integer-voxel peaks to subpixel locations using a 
-        quadratic (Newton) update from the local gradient/Hessian, with step capping and boundary checks
+        Refine integer DoG maxima to sub-voxel locations
         """
-        max_moves=10
-        maxima_tolerance=0.1
-        threshold=0.0        
-        return_invalid_peaks=False
-        allowed_to_move_in_dim=None
-
-        if allowed_to_move_in_dim is None:
-            allowed_to_move_in_dim = [True] * image.ndim
+        max_moves = 10
+        threshold_move = 0.5
+        max_condition_number = 1e6
+        negative_eigenvalue_tolerance = -1e-8
 
         refined_positions = []
+        refined_scores = []
+        accepted_offsets = []
+
         shape = np.asarray(image.shape, dtype=np.int64)
         n = image.ndim
 
-        def solve_Hg(H, g):
-            lu, piv = lu_factor(H)
-            return -lu_solve((lu, piv), g)
+        rejected_boundary = 0
+        rejected_nonfinite = 0
+        rejected_not_maximum = 0
+        rejected_condition = 0
+        rejected_solve = 0
+        rejected_below_threshold = 0
+        rejected_max_moves = 0
+        voxel_moves = 0
 
         for peak in peaks:
-            base = getattr(peak, "location", peak)       
-            position = np.array(base, dtype=np.int64)    
-            stable = False
+            base = getattr(peak, "location", peak)
+            position = np.asarray(base, dtype=np.int64).copy()
+            finished = False
 
-            for move in range(max_moves):
-                # need interior neighborhood (±1 available)
+            for _ in range(max_moves):
                 if np.any(position < 1) or np.any(position >= shape - 1):
+                    rejected_boundary += 1
+                    finished = True
                     break
 
                 g, H, a1 = self.quadratic_fit(image, position)
-                offset = solve_Hg(H, g)
 
-                threshold_move = 0.5 + move * float(maxima_tolerance)
-
-                stable = True
-                for d in range(n):
-                    if allowed_to_move_in_dim[d] and abs(offset[d]) > threshold_move:
-                        position[d] += 1 if offset[d] > 0.0 else -1
-                        stable = False
-
-                if stable:
-                    # value at subpixel = center + 0.5 * g^T * offset
-                    value = float(a1 + 0.5 * np.dot(g, offset))
-                    if abs(value) > float(threshold):
-                        refined_positions.append(position.astype(np.float64) + offset)
-                    # whether kept or filtered by threshold, we’re done with this peak
+                if not np.all(np.isfinite(g)) or not np.all(np.isfinite(H)):
+                    rejected_nonfinite += 1
+                    finished = True
                     break
 
-            if (not stable) and return_invalid_peaks:
-                # invalid handling: return original integer location
-                refined_positions.append(np.asarray(base, dtype=np.float64))
+                try:
+                    eigenvalues = np.linalg.eigvalsh(H)
+                except np.linalg.LinAlgError:
+                    rejected_solve += 1
+                    finished = True
+                    break
+
+                if not np.all(
+                    eigenvalues < negative_eigenvalue_tolerance
+                ):
+                    rejected_not_maximum += 1
+                    finished = True
+                    break
+
+                condition_number = np.linalg.cond(H)
+
+                if (
+                    not np.isfinite(condition_number)
+                    or condition_number > max_condition_number
+                ):
+                    rejected_condition += 1
+                    finished = True
+                    break
+
+                try:
+                    offset = np.linalg.solve(H, -g)
+                except np.linalg.LinAlgError:
+                    rejected_solve += 1
+                    finished = True
+                    break
+
+                if not np.all(np.isfinite(offset)):
+                    rejected_nonfinite += 1
+                    finished = True
+                    break
+
+                move_mask = np.abs(offset) > threshold_move
+
+                if np.any(move_mask):
+                    position[move_mask] += np.sign(
+                        offset[move_mask]
+                    ).astype(np.int64)
+
+                    voxel_moves += int(np.count_nonzero(move_mask))
+                    continue
+
+                refined_value = float(
+                    a1 + 0.5 * np.dot(g, offset)
+                )
+
+                if refined_value >= float(self.threshold):
+                    refined_positions.append(
+                        position.astype(np.float64) + offset
+                    )
+                    refined_scores.append(refined_value)
+                    accepted_offsets.append(offset.copy())
+                else:
+                    rejected_below_threshold += 1
+
+                finished = True
+                break
+
+            if not finished:
+                rejected_max_moves += 1
 
         if not refined_positions:
-            return np.empty((0, n), dtype=np.float32)
+            return (
+                np.empty((0, n), dtype=np.float32),
+                np.empty((0,), dtype=np.float32),
+            )
 
-        return np.vstack(refined_positions).astype(np.float32)
+        return (
+            np.vstack(refined_positions).astype(np.float32),
+            np.asarray(refined_scores, dtype=np.float32),
+        )
 
     def find_peaks(self, dog, min_initial_peak_value):
         """
@@ -243,40 +301,55 @@ class DifferenceOfGaussian:
     
     def normalize_image(self, image):
         """
-        Normalizes an image to the [0, 1] range using predefined minimum and maximum intensities.
+        Normalizes an image to the [0, n] range using predefined minimum and maximum intensities.
         """
         normalized_image = (image - self.min_intensity) / (self.max_intensity - self.min_intensity)
         return normalized_image
-
+    
     def compute_difference_of_gaussian(self, image):
         """
-        Computes feature points in an image using the Difference of Gaussian (DoG) method.
+        Compute feature points and print temporary DoG diagnostics.
         """
         shape = len(image.shape)
-        min_initial_peak_value = np.float32(self.threshold) / np.float32(3.0)
+        min_initial_peak_value = (
+            np.float32(self.threshold) / np.float32(3.0)
+        )
+
         k = 2 ** (1 / 4)
         k_min_1_inv = 1.0 / (k - 1.0)
 
-        # normalize image using min/max intensities
-        input_float = self.normalize_image(image)                                            
+        input_float = self.normalize_image(image)
 
-        # calculate gaussian blur levels 
-        sigma_1, sigma_2 = self.compute_sigmas(self.sigma, shape, k)                    
+        sigma_1, sigma_2 = self.compute_sigmas(
+            self.sigma,
+            shape,
+            k,
+        )
 
-        # apply gaussian blur
-        blurred_image_1 = self.apply_gaussian_blur(input_float, sigma_1)                
-        blurred_image_2 = self.apply_gaussian_blur(input_float, sigma_2)
+        blurred_image_1 = self.apply_gaussian_blur(
+            input_float,
+            sigma_1,
+        )
+        blurred_image_2 = self.apply_gaussian_blur(
+            input_float,
+            sigma_2,
+        )
 
-        # subtract blurred images
-        dog = (blurred_image_1 - blurred_image_2) * k_min_1_inv
+        dog = (
+            blurred_image_1 - blurred_image_2
+        ) * k_min_1_inv
 
-        # get all peaks
-        peaks = self.find_peaks(dog, min_initial_peak_value)
+        peaks = self.find_peaks(
+            dog,
+            min_initial_peak_value,
+        )
 
-        # localize peaks
-        final_peak_values = self.refine_peaks(peaks, dog)
-         
-        return final_peak_values
+        final_peak_values, peak_scores = self.refine_peaks(
+            peaks,
+            dog,
+        )
+
+        return final_peak_values, peak_scores
 
     def background_subtract_xy(self, image_chunk):
         """
@@ -300,25 +373,38 @@ class DifferenceOfGaussian:
         sub = img_pad - bg
         
         return sub[r:-r, r:-r, :]
-
+    
     def run(self, image_chunk, offset, lb):
         """
-        Executes the entry point of the script.
+        Execute detection with temporary inline debug prints.
         """
         image_chunk = self.background_subtract_xy(image_chunk)
-        peaks = self.compute_difference_of_gaussian(image_chunk)
+
+        peaks, peak_scores = self.compute_difference_of_gaussian(
+            image_chunk
+        )
 
         if peaks.size == 0:
-            intensities = np.empty((0,), dtype=image_chunk.dtype)
+            intensities = np.empty(
+                (0,),
+                dtype=image_chunk.dtype,
+            )
             final_peaks = peaks
 
         else:
-            intensities = map_coordinates(image_chunk, peaks.T, order=1, mode='reflect')
+            intensities = map_coordinates(
+                image_chunk,
+                peaks.T,
+                order=1,
+                mode="reflect",
+            )
+
             final_peaks = self.apply_lower_bounds(peaks, lb)
             final_peaks = self.apply_offset(final_peaks, offset)
             final_peaks = self.upsample_coordinates(final_peaks)
 
         return {
-            'interest_points': final_peaks,
-            'intensities': intensities
+            "interest_points": final_peaks,
+            "intensities": intensities,
+            "peak_scores": peak_scores,
         }

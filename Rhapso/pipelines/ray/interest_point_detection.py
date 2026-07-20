@@ -9,6 +9,8 @@ from Rhapso.detection.points_validation import PointsValidation
 from Rhapso.detection.save_interest_points import SaveInterestPoints
 import boto3
 import ray
+from botocore import UNSIGNED
+from botocore.config import Config
 
 # This class implements the interest point detection pipeline
 
@@ -35,14 +37,24 @@ class InterestPointDetection:
         self.overlapping_only = overlapping_only
 
     def detection(self):
+        print("Starting Interest Point Detection")
+
         # Get XML file
         if self.xml_file_path.startswith("s3://"):
             no_scheme = self.xml_file_path.replace("s3://", "", 1)
             bucket, key = no_scheme.split("/", 1)
-            s3 = boto3.client("s3")
-            response = s3.get_object(Bucket=bucket, Key=key)
-            xml_file = response["Body"].read().decode("utf-8")
+            last_error = None
 
+            for config in [None, Config(signature_version=UNSIGNED)]:
+                try:
+                    s3 = boto3.client("s3", config=config) if config else boto3.client("s3")
+                    response = s3.get_object(Bucket=bucket, Key=key)
+                    xml_file = response["Body"].read().decode("utf-8")
+                    break
+                except Exception as e:
+                    last_error = e
+            else:
+                raise last_error
         else:  
             with open(self.xml_file_path, "r", encoding="utf-8") as f:
                 xml_file = f.read()
@@ -50,23 +62,19 @@ class InterestPointDetection:
         # Load XML data into dataframes         
         processor = XMLToDataFrame(xml_file)
         dataframes = processor.run()
-        print("XML loaded")
 
         # Create view transform matrices 
         create_models = ViewTransformModels(dataframes)
         view_transform_matrices = create_models.run()
-        print("Transforms models have been created")
 
         # Use view transform matrices to find areas of overlap
         overlap_detection = OverlapDetection(view_transform_matrices, dataframes, self.dsxy, self.dsz, self.image_file_prefix, self.file_type, overlapping_only=self.overlapping_only)
         overlapping_area, new_dsxy, new_dsz, level, max_interval_size, mip_map_downsample = overlap_detection.run()
-        print("Overlap detection is done")
 
         # Implement image chunking strategy as list of metadata 
         metadata_loader = MetadataBuilder(dataframes, overlapping_area, self.image_file_prefix, self.file_type, new_dsxy, new_dsz, 
                                           self.chunks_per_bound, self.sigma, self.run_type, level)
         image_chunk_metadata = metadata_loader.run()
-        print("Metadata has loaded")
 
         # Use Ray to distribute peak detection to image chunking metadata 
         @ray.remote
@@ -82,7 +90,8 @@ class InterestPointDetection:
                     'view_id': view_id,
                     'interval_key': interval,
                     'interest_points': interest_points['interest_points'],
-                    'intensities': interest_points['intensities']
+                    'intensities': interest_points['intensities'],
+                    'peak_scores': interest_points['peak_scores']
                 }
             except Exception as e:
                 return {'error': str(e), 'view_id': chunk_metadata.get('view_id', 'unknown')}
@@ -96,23 +105,20 @@ class InterestPointDetection:
         # Gather and process results
         results = ray.get(futures)
         final_peaks = [r for r in results if 'error' not in r]
-        print("Peak detection is done")
 
         # Consolidate points and filter overlap duplicates using kd tree
         advanced_refinement = AdvancedRefinement(final_peaks, self.combine_distance, dataframes, overlapping_area, max_interval_size, self.max_spots)
         consolidated_data = advanced_refinement.run()
-        print("Advanced refinement is done")
 
         # Print points metrics / validation tools
         points_validation = PointsValidation(consolidated_data)
         points_validation.run()
-        print("Points metrics printed")
 
         # Save final interest points
         save_interest_points = SaveInterestPoints(dataframes, consolidated_data, self.xml_file_path, self.xml_output_file_path, self.n5_output_file_prefix, 
                                                   self.dsxy, self.dsz, self.min_intensity, self.max_intensity, self.sigma, self.threshold)
         save_interest_points.run()
-        print("Interest points saved")
+        print("Interest Point Detection is Done")
     
     def run(self):
         self.detection()

@@ -65,13 +65,14 @@ class SaveResults:
             affine = ET.SubElement(new_view_transform, 'affine')
                  
             tile = next((tile for tile in self.tiles if tile['view'] == view), None)
-            model = (tile or {}).get('model', {}).get('regularized', {})
+            # model = (tile or {}).get('model', {}).get('regularized', {})
+            model_key = "b" if self.run_type == "rigid" else "regularized"
+            model = (tile or {}).get("model", {}).get(model_key, {})
             
             if not model or all(float(v) == 0.0 for v in model.values()):
                 affine.text = '1.0 0.0 0.0 0.0 0.0 1.0 0.0 0.0 0.0 0.0 1.0 0.0'
             else:
                 affine.text = ' '.join(str(model.get(f'm{i}{j}', 0.0)) for i in range(3) for j in range(4))
-                print(f"tile: {view}, model: {affine.text}")
       
             view_registration.text = "\n\t\t\t"
             view_registration.insert(0, new_view_transform)
@@ -95,3 +96,4 @@ class SaveResults:
         self.add_new_view_transform()
         self.save_xml()
         self.save_ransac_metrics()
+        print("Saved Solver Results")

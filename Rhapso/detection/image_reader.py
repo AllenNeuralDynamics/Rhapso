@@ -80,14 +80,34 @@ class ImageReader:
         if self.file_type == "tiff":
             img = CustomBioImage(file_path, reader=bioio_tifffile.Reader)
             dask_array = img.get_dask_stack()[0, 0, 0, :, :, :]
-        
+
         elif self.file_type == "zarr":
-            s3 = s3fs.S3FileSystem(anon=False)  
-            full_path = f"{file_path}"
-            store = s3fs.S3Map(root=full_path, s3=s3)
-            zarr_array = zarr.open(store, mode='r')
+            full_path = str(file_path).rstrip("/")
+            root_path = full_path.replace("s3://", "", 1)
+
+            def open_zarr(anon):
+                # Zarr v3 path
+                if hasattr(zarr.storage, "FsspecStore"):
+                    store = zarr.storage.FsspecStore.from_url(
+                        full_path,
+                        storage_options={"anon": anon},
+                        read_only=True,
+                    )
+                    return zarr.open(store, mode="r")
+
+                # Zarr v2 path
+                s3 = s3fs.S3FileSystem(anon=anon)
+                store = s3fs.S3Map(root=root_path, s3=s3, check=False)
+                return zarr.open(store, mode="r")
+
+            try:
+                zarr_array = open_zarr(anon=False)
+            except Exception:
+                zarr_array = open_zarr(anon=True)
+
             dask_array = da.from_zarr(zarr_array)[0, 0, :, :, :]
 
+        # Transpose from zyx to xyz
         dask_array = dask_array.astype(np.float32)
         dask_array = dask_array.transpose()
 

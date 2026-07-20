@@ -11,24 +11,42 @@ class ComputeTiles:
         self.groups = groups
         self.dataframes = dataframes
         self.run_type = run_type
-    
+
     def flip_matches(self, matches):
         """
-        Swap endpoints of each match to create the reverse (B→A) correspondences
+        Swap match endpoints to create reverse B -> A correspondences.
         """
         flipped = []
-        for match in matches:
-            p1 = match['p2']
-            p2 = match['p1']
-            weight = match.get('weight', 1)
-            strength = match.get('strength', 1)
 
-            flipped.append({
-                'p1': p1,
-                'p2': p2,
-                'weight': weight,
-                'strength': strength
-            })
+        for match in matches:
+            flipped_match = dict(match)
+            flipped_match["p1"] = match["p2"]
+            flipped_match["p2"] = match["p1"]
+
+            if (
+                "source_view" in match
+                or "target_view" in match
+            ):
+                flipped_match["source_view"] = match.get(
+                    "target_view"
+                )
+                flipped_match["target_view"] = match.get(
+                    "source_view"
+                )
+
+            if (
+                "source_detection_id" in match
+                or "target_detection_id" in match
+            ):
+                flipped_match["source_detection_id"] = match.get(
+                    "target_detection_id"
+                )
+                flipped_match["target_detection_id"] = match.get(
+                    "source_detection_id"
+                )
+
+            flipped.append(flipped_match)
+
         return flipped
     
     def get_bounding_boxes(self, M, dims):
@@ -272,29 +290,61 @@ class ComputeTiles:
                     ta = next(m["model"]["regularized"] for m in self.pmc["models"] if m["view"] == key(view_a))
                     tb = next(m["model"]["regularized"] for m in self.pmc["models"] if m["view"] == key(view_b))
 
+                    weak_link_label = "weakLink"
+
+                    edge_key = (
+                        view_a["view"],
+                        view_b["view"],
+                        weak_link_label,
+                    )
+
                     for i in range(len(pa)):
                         points_a = self.apply(ta, pa[i], pa[i])
                         points_b = self.apply(tb, pb[i], pb[i])
-                        if points_a is None or points_b is None:
-                            print()
+                        # if points_a is None or points_b is None:
+                        #     print()
+
+                        match_key = (
+                            view_a["view"],
+                            weak_link_label,
+                            int(i),
+                            view_b["view"],
+                            weak_link_label,
+                            int(i),
+                        )
+
                         match = {
                             "p1": {
-                                "l": points_a,   
-                                "w": points_a,    
-                                "weight": 1,
-                                "strength": 1
+                                "l": points_a,
+                                "w": points_a,
+                                "weight": 1.0,
+                                "strength": 1.0,
                             },
                             "p2": {
                                 "l": points_b,
                                 "w": points_b,
-                                "weight": 1,
-                                "strength": 1
+                                "weight": 1.0,
+                                "strength": 1.0,
                             },
-                            "weight": 1,
-                            "strength": 1
+
+                            "base_weight": 1.0,
+                            "cleanup_weight": 1.0,
+                            "weight": 1.0,
+                            "strength": 1.0,
+
+                            "is_synthetic": True,
+                            "label": weak_link_label,
+
+                            "edge_key": edge_key,
+                            "match_key": match_key,
+
+                            "source_view": view_a["view"],
+                            "target_view": view_b["view"],
+
+                            "source_detection_id": int(i),
+                            "target_detection_id": int(i),
                         }
-                        pm.append(match)
-                    
+                        pm.append(match) 
 
                     idx = next((i for i, g in enumerate(groups) if view_a['view'] in g.get('views', ())), None)
                     views_a = groups[idx]['views'] if idx is not None else [view_a['view']]
@@ -553,10 +603,20 @@ class ComputeTiles:
             return None
         else:
             return tc, view_map
-
+        
     def run(self):
         """
         Executes the entry point of the script.
         """
-        tc, view_map = self.compute_tiles()
+        result = self.compute_tiles()
+
+        if result is None:
+            raise RuntimeError(
+                "Global optimization could not start because no connected tile graph was created; "
+                "re-run detection/matching with more or better interest points so enough valid inlier matches are produced."
+            )
+
+        tc, view_map = result
+        print("Tiles Computed")
+
         return tc, view_map

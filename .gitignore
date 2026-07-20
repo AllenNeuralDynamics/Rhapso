@@ -104,11 +104,16 @@ celerybeat.pid
 # SageMath parsed files
 *.sage.py
 
+# VS Code local settings
+.vscode/
+
 # Environments
 virtenv/
 virtEnv/
 .env
-.venv
+.env.*
+.venv/
+.venv*/
 env/
 venv/
 ENV/
@@ -143,3 +148,6 @@ dmypy.json
 # MacOs
 **/.DS_Store
 .zprofile
+
+# VS Code local settings
+.vscode/

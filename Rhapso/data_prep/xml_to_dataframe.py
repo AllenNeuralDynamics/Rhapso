@@ -11,24 +11,39 @@ class XMLToDataFrame:
 
     def parse_image_loader_zarr(self, root):
         """
-        Parses image loader configuration from a Zarr file's XML structure and constructs a DataFrame containing the 
-        metadata for each image group.
+        Parses image loader configuration from a Zarr file's XML 
         """
         image_loader_data = []
 
         for il in root.findall(".//ImageLoader/zgroups/zgroup"):
             view_setup = il.get("setup")
-            timepoint = il.get("timepoint")
-            file_path = il.get("path")
-            if file_path is None:
-                element_string = ET.tostring(il, encoding='unicode')
-                raise ValueError(f"zgroup element missing 'path' attribute: {element_string}")
+            timepoint = il.get("timepoint") or il.get("tp")
+            path_node = il.find("path")
+            file_path = (
+                il.get("path")
+                or (path_node.text if path_node is not None else None)
+            )
 
-            # default to channel 0 if not parseable from the path name
-            try:
-                channel = file_path.split("_ch_", 1)[1].split(".ome.zarr", 1)[0]
-            except (IndexError, AttributeError):
-                channel = 0
+            if not file_path:
+                raise ValueError(
+                    "[XMLToDataFrame] Missing zgroup path. Expected either "
+                    "<zgroup path='...'> or <zgroup><path>...</path></zgroup>. "
+                    f"zgroup attributes={il.attrib}"
+                )
+
+            if "_ch_" not in file_path:
+                raise ValueError(
+                    f"[XMLToDataFrame] Could not parse channel from zgroup path: {file_path!r}. "
+                    "Expected path to contain '_ch_'."
+                )
+
+            channel_part = file_path.split("_ch_", 1)[1]
+            channel = (
+                channel_part
+                .replace(".ome.zarr", "")
+                .replace(".zarr", "")
+                .split("/", 1)[0]
+            )
 
             image_loader_data.append(
                 {
@@ -239,10 +254,6 @@ class XMLToDataFrame:
         """
         view_interest_points_data = []
 
-        # if self.key == "detection":
-        #     if len(root.findall(".//ViewInterestPointsFile")) != 0:
-        #         raise Exception("There should be no interest points in this file yet.")
-
         for vip in root.findall(".//ViewInterestPointsFile"):
             timepoint = vip.get("timepoint")
             setup = vip.get("setup")
@@ -285,7 +296,7 @@ class XMLToDataFrame:
         length = True
         if len(root.findall(".//ImageLoader/files/FileMapping")) != len(root.findall(".//ViewRegistration")) or \
             len(root.findall(".//ViewSetup")) != len(root.findall(".//ViewRegistration")) * (1 / 2):
-            length = False  # Set to False if the relationships do not match expected counts
+            length = False  # relationships do not match expected counts
         return length
 
     def run(self):

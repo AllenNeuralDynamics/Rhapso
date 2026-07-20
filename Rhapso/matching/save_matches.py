@@ -1,120 +1,268 @@
-import zarr
+import json
 from collections import defaultdict
-import s3fs
-
-"""
-Save Matches saves (matched) corresponding interest points to N5 format
-"""
+import fsspec
+import pandas as pd
 
 class SaveMatches:
+    """
+    Save matched corresponding interest points into Parquet/JSON.
+    """
+
     def __init__(self, all_results, n5_output_path, data_global, match_type):
         self.all_results = all_results
-        self.n5_output_path = n5_output_path
+        self.alignment_output_prefix = str(n5_output_path).rstrip("/")
         self.data_global = data_global
         self.match_type = match_type
-    
-    def save_correspondences(self):
-        """
-        Save correspondences for each view/label, aggregating all matches involving that view/label.
-        Print a detailed summary with breakdowns.
-        """
-        def parse_view(v: str):
-            tp = int(v.split("tpId=")[1].split(",")[0])
-            vs = int(v.split("setupId=")[1].split(")")[0])
-            return tp, vs
+        self.match_index_rows = []
+        self.manifest_matches = {}
+        self.manifest_id_maps = {}
 
-        # Group results back per view
-        grouped_by_viewA = defaultdict(list)
-        for idxA, _, viewA, label_a, idxB, _, viewB, label_b in self.all_results:  
-            grouped_by_viewA[viewA].append((idxA, idxB, viewB, label_b))
-            grouped_by_viewA[viewB].append((idxB, idxA, viewA, label_a)) 
+    def join_uri(self, *parts):
+        return "/".join(
+            str(part).strip("/") if i > 0 else str(part).rstrip("/")
+            for i, part in enumerate(parts)
+            if part is not None
+        )
 
-        # Create idmap per view of all corresponding groups
-        idMaps = {}
-        for viewA, matches in grouped_by_viewA.items():
-            target_keys = sorted({
-                f"{tpB},{vsB},{labB}"
-                for (_iA, _iB, viewB, labB) in matches
-                for (tpB, vsB) in [parse_view(viewB)]
-            })
-            idMaps[viewA] = {k: i for i, k in enumerate(target_keys)}
+    def ensure_parent_dir(self, uri):
+        fs, path = fsspec.core.url_to_fs(uri)
+        parent = path.rsplit("/", 1)[0] if "/" in path else ""
 
-        # Format data for injection
-        grouped_with_ids = defaultdict(list)
-        for viewA, matches in grouped_by_viewA.items():
-            idMap = idMaps[viewA]
-            for idxA, idxB, viewB, label in matches:
-                tp = int(viewB.split("tpId=")[1].split(",")[0])
-                vs = int(viewB.split("setupId=")[1].split(")")[0])
-                key = f"{tp},{vs},{label}"
-                view_id = idMap[key]
-                grouped_with_ids[viewA, label].append((idxA, idxB, view_id))
+        if parent:
+            fs.makedirs(parent, exist_ok=True)
 
-        # Save idmap and corr points per view
-        for (viewA, labelA), corr_list in grouped_with_ids.items():
-            tpA = int(viewA.split("tpId=")[1].split(",")[0])
-            vsA = int(viewA.split("setupId=")[1].split(")")[0])
-            idMap = idMaps[viewA]
+        return fs, path
 
-            if len(corr_list) == 0:
-                continue
+    def write_json(self, uri, obj):
+        fs, path = self.ensure_parent_dir(uri)
 
-            # Output path
-            full_path = f"{self.n5_output_path}interestpoints.n5/tpId_{tpA}_viewSetupId_{vsA}/{labelA}/correspondences/"
+        with fs.open(path, "w") as f:
+            json.dump(obj, f, indent=2, sort_keys=True)
+            f.write("\n")
 
-            if full_path.startswith("s3://"):
-                path = full_path.replace("s3://", "")
-                self.s3_filesystem = s3fs.S3FileSystem()
-                store = s3fs.S3Map(root=path, s3=self.s3_filesystem, check=False) 
-                root = zarr.open_group(store=store, mode='a')
-            else:
-                # Write to Zarr N5
-                store = zarr.N5Store(full_path)
-                root = zarr.group(store=store, overwrite="true")
+    def write_parquet(self, uri, df):
+        fs, path = self.ensure_parent_dir(uri)
 
-            # Delete existing 'data' array
-            if "data" in root:
-                del root["data"]
+        with fs.open(path, "wb") as f:
+            df.to_parquet(f, engine="pyarrow", index=False)
 
-            # Set group-level attributes
-            root.attrs.update({
-                "correspondences": "1.0.0",
-                "idMap": idMap
-            })
+    def parse_view(self, view):
+        view = str(view)
+        timepoint = int(view.split("tpId=")[1].split(",")[0])
+        setup = int(view.split("setupId=")[1].split(")")[0])
 
-            # Create dataset inside the group
-            root.create_dataset(
-                name="data",  
-                data=corr_list,
-                dtype='u8',
-                chunks=(min(300000, len(corr_list)), 1),
-                compressor=zarr.GZip()
+        return timepoint, setup
+
+    def format_view(self, timepoint, setup):
+        return f"(tpId={int(timepoint)}, setupId={int(setup)})"
+
+    def view_label_key(self, timepoint, setup, label):
+        return f"{int(timepoint)}/{int(setup)}/{label}"
+
+    def target_key(self, timepoint, setup, label):
+        return f"{int(timepoint)},{int(setup)},{label}"
+
+    def correspondence_relative_path(self, timepoint, setup, label):
+        return (
+            f"matches/"
+            f"timepoint={int(timepoint)}/"
+            f"setup={int(setup)}/"
+            f"label={label}/"
+            f"correspondences.parquet"
+        )
+
+    def id_map_relative_path(self, timepoint, setup, label):
+        return (
+            f"matches/"
+            f"timepoint={int(timepoint)}/"
+            f"setup={int(setup)}/"
+            f"label={label}/"
+            f"id_map.json"
+        )
+
+    def labels_for_view(self, timepoint, setup):
+        labels = self.data_global["viewsInterestPoints"][(timepoint, setup)]["label"]
+        return labels if isinstance(labels, list) else [labels]
+
+    def group_results(self):
+        grouped = defaultdict(list)
+
+        for idx_a, _, view_a, label_a, idx_b, _, view_b, label_b in self.all_results:
+            tp_a, setup_a = self.parse_view(view_a)
+            tp_b, setup_b = self.parse_view(view_b)
+
+            grouped[(view_a, label_a)].append(
+                {
+                    "source_point_id": int(idx_a),
+                    "target_point_id": int(idx_b),
+                    "target_timepoint": int(tp_b),
+                    "target_setup": int(setup_b),
+                    "target_label": str(label_b),
+                }
             )
 
-    def clear_correspondence(self):
-        if self.n5_output_path.startswith("s3://"):
-            root_path = self.n5_output_path.replace("s3://", "") + "interestpoints.n5"
-            s3 = s3fs.S3FileSystem()
-            store = s3fs.S3Map(root=root_path, s3=s3, check=False)
-        else:
-            root_path = self.n5_output_path + "interestpoints.n5"
-            store = zarr.N5Store(root_path)
+            grouped[(view_b, label_b)].append(
+                {
+                    "source_point_id": int(idx_b),
+                    "target_point_id": int(idx_a),
+                    "target_timepoint": int(tp_a),
+                    "target_setup": int(setup_a),
+                    "target_label": str(label_a),
+                }
+            )
 
-        root = zarr.open_group(store=store, mode="a")
+        return grouped
 
-        views = list(self.data_global['viewsInterestPoints'].keys())  
-        for tp, vs in views:
-            labels = self.data_global['viewsInterestPoints'][(tp, vs)]['label']
-            for label in labels:
-                corr_path = f"tpId_{tp}_viewSetupId_{vs}/{label}/correspondences"
-                try:
-                    if corr_path in root:
-                        del root[corr_path]                
-                    elif f"{corr_path}/data" in root:
-                        del root[f"{corr_path}/data"]       
-                except Exception as e:
-                    print(f"⚠️ Could not delete {corr_path}: {e}")
+    def build_id_map(self, matches):
+        target_keys = sorted(
+            {
+                self.target_key(
+                    match["target_timepoint"],
+                    match["target_setup"],
+                    match["target_label"],
+                )
+                for match in matches
+            }
+        )
+
+        return {key: i for i, key in enumerate(target_keys)}
+
+    def correspondence_dataframe(self, matches, id_map):
+        columns = {
+            "source_point_id": pd.Series(dtype="uint64"),
+            "target_point_id": pd.Series(dtype="uint64"),
+            "target_view_id": pd.Series(dtype="uint32"),
+            "target_timepoint": pd.Series(dtype="int32"),
+            "target_setup": pd.Series(dtype="int32"),
+            "target_label": pd.Series(dtype="string"),
+        }
+
+        if len(matches) == 0:
+            return pd.DataFrame(columns)
+
+        rows = []
+
+        for match in matches:
+            key = self.target_key(
+                match["target_timepoint"],
+                match["target_setup"],
+                match["target_label"],
+            )
+
+            rows.append(
+                {
+                    "source_point_id": match["source_point_id"],
+                    "target_point_id": match["target_point_id"],
+                    "target_view_id": id_map[key],
+                    "target_timepoint": match["target_timepoint"],
+                    "target_setup": match["target_setup"],
+                    "target_label": match["target_label"],
+                }
+            )
+
+        df = pd.DataFrame(rows)
+
+        df["source_point_id"] = df["source_point_id"].astype("uint64")
+        df["target_point_id"] = df["target_point_id"].astype("uint64")
+        df["target_view_id"] = df["target_view_id"].astype("uint32")
+        df["target_timepoint"] = df["target_timepoint"].astype("int32")
+        df["target_setup"] = df["target_setup"].astype("int32")
+        df["target_label"] = df["target_label"].astype("string")
+
+        return df
+
+    def save_one_view_label(self, timepoint, setup, label, matches):
+        id_map = self.build_id_map(matches)
+        corr_df = self.correspondence_dataframe(matches, id_map)
+
+        corr_rel_path = self.correspondence_relative_path(timepoint, setup, label)
+        id_map_rel_path = self.id_map_relative_path(timepoint, setup, label)
+
+        self.write_parquet(
+            self.join_uri(self.alignment_output_prefix, corr_rel_path),
+            corr_df,
+        )
+
+        self.write_json(
+            self.join_uri(self.alignment_output_prefix, id_map_rel_path),
+            id_map,
+        )
+
+        key = self.view_label_key(timepoint, setup, label)
+        self.manifest_matches[key] = corr_rel_path
+        self.manifest_id_maps[key] = id_map_rel_path
+
+        self.match_index_rows.append(
+            {
+                "timepoint": int(timepoint),
+                "setup": int(setup),
+                "label": str(label),
+                "correspondences_path": corr_rel_path,
+                "id_map_json_path": id_map_rel_path,
+                "num_correspondences": int(len(corr_df)),
+                "num_target_views": int(len(id_map)),
+            }
+        )
+
+    def save_correspondences(self):
+        grouped = self.group_results()
+
+        self.match_index_rows = []
+        self.manifest_matches = {}
+        self.manifest_id_maps = {}
+
+        for timepoint, setup in self.data_global["viewsInterestPoints"].keys():
+            view = self.format_view(timepoint, setup)
+
+            for label in self.labels_for_view(timepoint, setup):
+                matches = grouped.get((view, label), [])
+                self.save_one_view_label(timepoint, setup, label, matches)
+
+        index_df = pd.DataFrame(
+            self.match_index_rows,
+            columns=[
+                "timepoint",
+                "setup",
+                "label",
+                "correspondences_path",
+                "id_map_json_path",
+                "num_correspondences",
+                "num_target_views",
+            ],
+        )
+
+        index_df["timepoint"] = index_df["timepoint"].astype("int32")
+        index_df["setup"] = index_df["setup"].astype("int32")
+        index_df["label"] = index_df["label"].astype(str)
+        index_df["correspondences_path"] = index_df["correspondences_path"].astype(str)
+        index_df["id_map_json_path"] = index_df["id_map_json_path"].astype(str)
+        index_df["num_correspondences"] = index_df["num_correspondences"].astype("int64")
+        index_df["num_target_views"] = index_df["num_target_views"].astype("int64")
+
+        self.write_parquet(
+            self.join_uri(self.alignment_output_prefix, "matches", "match_index.parquet"),
+            index_df,
+        )
+
+    def save_manifest(self):
+        manifest = {
+            "format": "rhapso-matches",
+            "format_version": 1,
+            "match_type": self.match_type,
+            "storage": {
+                "match_index": "matches/match_index.parquet",
+                "matches_root": "matches/",
+            },
+            "correspondences": self.manifest_matches,
+            "id_maps": self.manifest_id_maps,
+        }
+
+        self.write_json(
+            self.join_uri(self.alignment_output_prefix, "matches", "manifest.json"),
+            manifest,
+        )
 
     def run(self):
-        self.clear_correspondence()
         self.save_correspondences()
+        self.save_manifest()
+        print("Matches Saved")

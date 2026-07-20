@@ -1,5 +1,7 @@
 import xml.etree.ElementTree as ET
 import boto3
+from botocore import UNSIGNED
+from botocore.config import Config
 
 """
 XML Parser Matching parses xml content into memory
@@ -276,20 +278,24 @@ class XMLParserMatching:
             return None
     
     def get_xml_content(self):
-        if self.xml_input_path.startswith('s3://'):
-            s3_path = self.xml_input_path[5:]  
-            parts = s3_path.split('/', 1)
-            bucket_name = parts[0]
-            file_key = parts[1]
-            s3_client = boto3.client('s3')
-            response = s3_client.get_object(Bucket=bucket_name, Key=file_key)
+        if self.xml_input_path.startswith("s3://"):
+            s3_path = self.xml_input_path[5:]
+            bucket_name, file_key = s3_path.split("/", 1)
+
+            try:
+                s3_client = boto3.client("s3")
+                response = s3_client.get_object(Bucket=bucket_name, Key=file_key)
+            except Exception:
+                s3_client = boto3.client("s3", config=Config(signature_version=UNSIGNED))
+                response = s3_client.get_object(Bucket=bucket_name, Key=file_key)
+
             xml_content = response["Body"].read().decode("utf-8")
-            
+
         else:
             xml_content = self.fetch_local_xml(self.xml_input_path)
             if xml_content is None:
                 return None, None
-        
+
         return xml_content
     
     def run(self):
@@ -298,5 +304,7 @@ class XMLParserMatching:
         """
         xml_content = self.get_xml_content()
         data_global = self.parse(xml_content)
+        print("XML Data Parsed")
+        
         return data_global
 

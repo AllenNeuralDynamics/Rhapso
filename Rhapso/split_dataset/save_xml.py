@@ -339,18 +339,16 @@ class SaveXML:
                 el = root.find(tag)
             return el
 
-        def parse_tp_setup(n5_path, key=None):
-            if isinstance(n5_path, str):
-                m = re.search(r'tpId_(\d+)_viewSetupId_(\d+)', n5_path)
-                if m:
-                    return str(m.group(1)), int(m.group(2))
+        def parse_tp_setup_from_key(key):
             if isinstance(key, (tuple, list)) and len(key) == 2:
                 t, s = key
-                return str(t), int(s)
+                return str(int(t)), int(s)
+
             if isinstance(key, str):
                 m = re.search(r'timepoint:\s*(\d+).*setup:\s*(\d+)', key)
                 if m:
-                    return str(m.group(1)), int(m.group(2))
+                    return str(int(m.group(1))), int(m.group(2))
+
             return "0", 0
 
         # Ensure <ViewInterestPoints> exists
@@ -363,9 +361,14 @@ class SaveXML:
         for child in list(vip):
             vip.remove(child)
 
+        vip.text = "\n    "
+
         # Write new entries
         seen = set()
+
         for key, label_entries in self.new_split_interest_points.items():
+            t, s = parse_tp_setup_from_key(key)
+
             for entry in label_entries:
                 if isinstance(entry, dict) and 'ip_list' in entry:
                     label = entry.get('label') or entry.get('key') or entry.get('name')
@@ -376,16 +379,18 @@ class SaveXML:
                     ip_list = entry
                     label = None
 
-                # Pull fields
-                n5_path = ip_list.get('xml_n5_path') or ip_list.get('path') or ''
                 params = ip_list.get('parameters', None)
-                if label is None and isinstance(n5_path, str) and '/' in n5_path:
-                    label = n5_path.rsplit('/', 1)[-1] 
 
-                t, s = parse_tp_setup(n5_path, key)
-                label = "" if label is None else str(label)
+                if label is None:
+                    label = "beads"
 
-                sig = (t, s, label, n5_path, params)
+                label = str(label)
+
+                # Keep XML old-style. XML is just metadata / run tracking.
+                # Actual Parquet paths live in manifest.json and point_index.parquet.
+                xml_path = f"tpId_{t}_viewSetupId_{s}/{label}"
+
+                sig = (t, s, label, params)
                 if sig in seen:
                     continue
                 seen.add(sig)
@@ -395,17 +400,21 @@ class SaveXML:
                     'setup': str(s),
                     'label': label,
                 }
+
                 if params is not None:
                     attrs['params'] = str(params)
 
                 elem = ET.SubElement(vip, 'ViewInterestPointsFile', attrs)
-                elem.text = n5_path
+                elem.text = xml_path
+                elem.tail = "\n    "
+
+        vip.tail = "\n  "
 
         try:
             ET.indent(root, space="  ")
         except Exception:
             pass
-        
+
         return ET.tostring(root, encoding='unicode')
 
     def save_view_registrations_to_xml(self, xml):
@@ -538,11 +547,13 @@ class SaveXML:
         # (Re)build ViewSetups for each new split view
         for view in self.self_definition:
             new_id = _norm_id(view['new_view'])
-            # old_id = _norm_id(view['old_view'])   # not strictly needed here
+            # THIS is the original tile id we want to use for illumination
+            old_id = _norm_id(view['old_view'])
 
             angle       = view['angle']
             channel     = view['channel']
-            illumination = view['illumination']
+            # 🔑 illumination = original tile id (OldId), NOT the old illumination=0
+            illumination = old_id
             tile        = new_id
             voxel_unit  = view['voxel_unit']
             voxel_size  = view['voxel_dim']
@@ -604,19 +615,6 @@ class SaveXML:
         return ET.tostring(root, encoding='unicode')
     
     def save_setup_id_definition_to_xml(self, xml):
-        """
-        Create/overwrite <SetupIds> for the split views.
-
-        In the desired final layout, SetupIds lives inside:
-          <SequenceDescription>
-            <ImageLoader format="split.viewerimgloader">
-              ...
-              <SequenceDescription> ... </SequenceDescription>
-              <SetupIds> ... </SetupIds>   <-- here
-            </ImageLoader>
-            ...
-          </SequenceDescription>
-        """
         root = ET.fromstring(xml)
 
         def tn(el):
@@ -712,4 +710,6 @@ class SaveXML:
                 boto3.client("s3").put_object(Bucket=bucket, Key=key, Body=xml.encode('utf-8'))
             else:
                 with open(self.xml_output_path, "w", encoding="utf-8") as f:
-                    f.write(xml)
+                    f.write(xml)     
+        
+        print("Split XML Saved")

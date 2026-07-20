@@ -108,4 +108,6 @@ class ConnectedGraphs:
                 groups_new.append(group)
         
         wlpmc = self.create_wlpmc()
+        print("Split Graphs Connected")
+        
         return wlpmc, groups_new

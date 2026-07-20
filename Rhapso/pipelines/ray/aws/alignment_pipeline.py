@@ -1,19 +1,22 @@
 from Rhapso.pipelines.ray.solver import Solver
+from Rhapso.evaluation.matching_metrics import MatchingMetrics
 import yaml
 import subprocess
 import json
 import base64, json
 from pathlib import Path
 
-with open("Rhapso/pipelines/ray/param/exaSPIM_802450.yml", "r") as file:
+with open("Rhapso/pipelines/ray/param/alignment/exaSPIM_791116.yml", "r") as file:
     config = yaml.safe_load(file)
+
+REMOTE_PYTHON = "/home/ubuntu/rhapso-py311/bin/python"
 
 serialized_config = base64.b64encode(json.dumps(config).encode()).decode()
 
 # Detection run command
 detection_cmd = (
     "bash -lc \""
-    "python3 - <<\\\"PY\\\"\n"
+    f"{REMOTE_PYTHON} - <<\\\"PY\\\"\n"
     "import sys, json, base64\n"
     "from Rhapso.pipelines.ray.interest_point_detection import InterestPointDetection\n"
     f"cfg = json.loads(base64.b64decode(\\\"{serialized_config}\\\").decode())\n"
@@ -25,7 +28,7 @@ detection_cmd = (
     "    image_file_prefix=cfg[\\\"image_file_prefix\\\"],\n"
     "    xml_output_file_path=cfg[\\\"xml_output_file_path\\\"], n5_output_file_prefix=cfg[\\\"n5_output_file_prefix\\\"],\n"
     "    combine_distance=cfg[\\\"combine_distance\\\"],\n"
-    "    chunks_per_bound=cfg[\\\"chunks_per_bound\\\"], run_type=cfg[\\\"detection_run_type\\\"],\n"
+    "    chunks_per_bound=cfg[\\\"chunks_per_bound\\\"], run_type=cfg[\\\"run_type\\\"],\n"
     "    max_spots=cfg[\\\"max_spots\\\"], median_filter=cfg[\\\"median_filter\\\"],\n"
     ")\n"
     "ipd.run()\n"
@@ -36,7 +39,7 @@ detection_cmd = (
 # Rigid Matching run command
 matching_cmd_rigid = (
     "bash -lc \""
-    "python3 - <<\\\"PY\\\"\n"
+    f"{REMOTE_PYTHON} - <<\\\"PY\\\"\n"
     "import json, base64\n"
     "from Rhapso.pipelines.ray.interest_point_matching import InterestPointMatching\n"
     f"cfg = json.loads(base64.b64decode(\\\"{serialized_config}\\\").decode())\n"
@@ -50,7 +53,8 @@ matching_cmd_rigid = (
     "    significance=cfg[\\\"significance_rigid\\\"],\n"
     "    search_radius=cfg[\\\"search_radius_rigid\\\"],\n"
     "    num_required_neighbors=cfg[\\\"num_required_neighbors_rigid\\\"],\n"
-    "    model_min_matches=cfg[\\\"model_min_matches_rigid\\\"],\n"
+    "    model_min_inliers=cfg[\\\"model_min_inliers_rigid\\\"],\n"
+    "    ransac_sample_size=cfg[\\\"ransac_sample_size_rigid\\\"],\n"
     "    inlier_threshold=cfg[\\\"inlier_threshold_rigid\\\"],\n"
     "    min_inlier_ratio=cfg[\\\"min_inlier_ratio_rigid\\\"],\n"
     "    num_iterations=cfg[\\\"num_iterations_rigid\\\"],\n"
@@ -65,7 +69,7 @@ matching_cmd_rigid = (
 # Affine matching run command
 matching_cmd_affine = (
     "bash -lc \""
-    "python3 - <<\\\"PY\\\"\n"
+    f"{REMOTE_PYTHON} - <<\\\"PY\\\"\n"
     "import json, base64\n"
     "from Rhapso.pipelines.ray.interest_point_matching import InterestPointMatching\n"
     f"cfg = json.loads(base64.b64decode(\\\"{serialized_config}\\\").decode())\n"
@@ -79,7 +83,8 @@ matching_cmd_affine = (
     "    significance=cfg[\\\"significance_affine\\\"],\n"
     "    search_radius=cfg[\\\"search_radius_affine\\\"],\n"
     "    num_required_neighbors=cfg[\\\"num_required_neighbors_affine\\\"],\n"
-    "    model_min_matches=cfg[\\\"model_min_matches_affine\\\"],\n"
+    "    model_min_inliers=cfg[\\\"model_min_inliers_affine\\\"],\n"
+    "    ransac_sample_size=cfg[\\\"ransac_sample_size_affine\\\"],\n"
     "    inlier_threshold=cfg[\\\"inlier_threshold_affine\\\"],\n"
     "    min_inlier_ratio=cfg[\\\"min_inlier_ratio_affine\\\"],\n"
     "    num_iterations=cfg[\\\"num_iterations_affine\\\"],\n"
@@ -94,7 +99,7 @@ matching_cmd_affine = (
 # Split affine matching run command
 matching_cmd_split_affine = (
     "bash -lc \""
-    "python3 - <<\\\"PY\\\"\n"
+    f"{REMOTE_PYTHON} - <<\\\"PY\\\"\n"
     "import json, base64\n"
     "from Rhapso.pipelines.ray.interest_point_matching import InterestPointMatching\n"
     f"cfg = json.loads(base64.b64decode(\\\"{serialized_config}\\\").decode())\n"
@@ -108,7 +113,8 @@ matching_cmd_split_affine = (
     "    significance=cfg[\\\"significance_split_affine\\\"],\n"
     "    search_radius=cfg[\\\"search_radius_split_affine\\\"],\n"
     "    num_required_neighbors=cfg[\\\"num_required_neighbors_split_affine\\\"],\n"
-    "    model_min_matches=cfg[\\\"model_min_matches_split_affine\\\"],\n"
+    "    model_min_inliers=cfg[\\\"model_min_inliers_split_affine\\\"],\n"
+    "    ransac_sample_size=cfg[\\\"ransac_sample_size_split_affine\\\"],\n"
     "    inlier_threshold=cfg[\\\"inlier_threshold_split_affine\\\"],\n"
     "    min_inlier_ratio=cfg[\\\"min_inlier_ratio_split_affine\\\"],\n"
     "    num_iterations=cfg[\\\"num_iterations_split_affine\\\"],\n"
@@ -123,7 +129,7 @@ matching_cmd_split_affine = (
 # Split run command
 split_cmd = (
     "bash -lc \""
-    "python3 - <<\\\"PY\\\"\n"
+    f"{REMOTE_PYTHON} - <<\\\"PY\\\"\n"
     "import sys, json, base64\n"
     "from Rhapso.pipelines.ray.split_dataset import SplitDataset\n"
     f"cfg = json.loads(base64.b64decode(\\\"{serialized_config}\\\").decode())\n"
@@ -141,14 +147,15 @@ split_cmd = (
     "\""
 )
 
-# Rigid solver run command
+# SOLVER RIGID
 solver_rigid = Solver(
     xml_file_path_output=config['xml_file_path_output_rigid'],
     n5_input_path=config['n5_input_path'],
     xml_file_path=config['xml_file_path_solver_rigid'],
     run_type=config['run_type_solver_rigid'],   
-    relative_threshold=config['relative_threshold'],
-    absolute_threshold=config['absolute_threshold'],
+    relative_threshold=config['relative_threshold_rigid'],
+    absolute_threshold=config['absolute_threshold_rigid'],
+    max_cleanup_rounds=config['max_cleanup_rounds_rigid'],
     min_matches=config['min_matches'],
     damp=config['damp'],
     regularization_weight=config['regularization_weight_solver_rigid'],
@@ -159,14 +166,15 @@ solver_rigid = Solver(
     fixed_tile=config['fixed_tile']
 )
 
-# Affine solver run command
+# SOLVER AFFINE
 solver_affine = Solver(
     xml_file_path_output=config['xml_file_path_output_affine'],
     n5_input_path=config['n5_input_path'],
     xml_file_path=config['xml_file_path_solver_affine'],
     run_type=config['run_type_solver_affine'],  
-    relative_threshold=config['relative_threshold'],
-    absolute_threshold=config['absolute_threshold'],
+    relative_threshold=config['relative_threshold_affine'],
+    absolute_threshold=config['absolute_threshold_affine'],
+    max_cleanup_rounds=config['max_cleanup_rounds_affine'],
     min_matches=config['min_matches'],
     damp=config['damp'],
     regularization_weight=config['regularization_weight_solver_affine'],
@@ -183,8 +191,9 @@ solver_split_affine = Solver(
     n5_input_path=config['n5_input_path'],
     xml_file_path=config['xml_file_path_solver_split_affine'],
     run_type=config['run_type_solver_split_affine'],  
-    relative_threshold=config['relative_threshold'],
-    absolute_threshold=config['absolute_threshold'],
+    relative_threshold=config['relative_threshold_split_affine'],
+    absolute_threshold=config['absolute_threshold_split_affine'],
+    max_cleanup_rounds=config['max_cleanup_rounds_split_affine'],
     min_matches=config['min_matches'],
     damp=config['damp'],
     regularization_weight=config['regularization_weight_solver_split_affine'],
@@ -193,6 +202,31 @@ solver_split_affine = Solver(
     max_plateauwidth=config['max_plateauwidth'],
     metrics_output_path=config['metrics_output_path'],
     fixed_tile=config['fixed_tile']
+)
+
+metrics_rigid = MatchingMetrics(
+    pre_xml_path=config['pre_xml_path_rigid'],
+    post_xml_path=config['post_xml_path_rigid'],
+    alignment_base=config['alignment_base'],
+    downsample_xyz=config['downsample_xyz'],
+    match_type=config['match_type_rigid']
+)
+
+metrics_affine = MatchingMetrics(
+    pre_xml_path=config['pre_xml_path_affine'],
+    post_xml_path=config['post_xml_path_affine'],
+    alignment_base=config['alignment_base'],
+    downsample_xyz=config['downsample_xyz'],
+    match_type=config['match_type_affine']
+)
+
+metrics_split_affine = MatchingMetrics(
+    pre_xml_path=config['pre_xml_path_split_affine'],
+    post_xml_path=config['post_xml_path_split_affine'],
+    alignment_base=config['alignment_base'],
+    split_xml_path=config['split_xml_path_split_affine'],
+    downsample_xyz=config['downsample_xyz'],
+    match_type=config['match_type_split_affine']
 )
 
 prefix = (Path(__file__).resolve().parent / "config/dev").as_posix()
@@ -211,12 +245,15 @@ try:
     exec_on_cluster("Detection", unified_yml, detection_cmd, prefix)
     exec_on_cluster("Matching (rigid)", unified_yml, matching_cmd_rigid, prefix)
     solver_rigid.run()
+    metrics_rigid.run()
     exec_on_cluster("Matching (affine)", unified_yml, matching_cmd_affine, prefix)
     solver_affine.run()
-    # exec_on_cluster("Split Dataset", unified_yml, split_cmd, prefix)
-    # exec_on_cluster("Matching (split_affine)", unified_yml, matching_cmd_split_affine, prefix)
-    # solver_split_affine.run()
-    # print("\n✅ Pipeline complete.")
+    metrics_affine.run()
+    exec_on_cluster("Split Dataset", unified_yml, split_cmd, prefix)
+    exec_on_cluster("Matching (split_affine)", unified_yml, matching_cmd_split_affine, prefix)
+    solver_split_affine.run()
+    metrics_split_affine.run()
+    print("\n✅ Pipeline complete.")
 
 except subprocess.CalledProcessError as e:
     print(f"❌ Pipeline error: {e}")
