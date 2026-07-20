@@ -586,9 +586,12 @@ class SaveXML:
                 outer_timepoints = ch
                 break
         if outer_timepoints is None:
-            outer_timepoints = ET.Element('Timepoints', {'type': 'pattern'})
-            ip = ET.SubElement(outer_timepoints, 'integerpattern')
-            ip.text = "0"
+            tps = sorted({int(v['old_view'][0]) for v in self.self_definition if v['old_view'][0] is not None})
+            first_tp = str(tps[0]) if tps else "0"
+            last_tp = str(tps[-1]) if tps else "0"
+            outer_timepoints = ET.Element('Timepoints', {'type': 'range'})
+            ET.SubElement(outer_timepoints, 'first').text = first_tp
+            ET.SubElement(outer_timepoints, 'last').text = last_tp
             # place right after ViewSetups
             children = list(outer_seq)
             insert_idx = children.index(view_setups) + 1 if view_setups in children else len(children)

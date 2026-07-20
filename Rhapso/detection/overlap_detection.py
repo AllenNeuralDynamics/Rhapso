@@ -350,7 +350,7 @@ class OverlapDetection():
                 _, dsxy, dsz = leftovers
                 
             elif self.file_type == 'tiff':
-                dim_base = self.load_image_metadata(self.prefix + row_i['file_path'])
+                dim_base = self.load_image_metadata(os.path.join(self.prefix, row_i['file_path']))
                 mipmap_of_downsample = self.create_mipmap_transform()
                 dsxy, dsz = self.dsxy, self.dsz
                 level = None
