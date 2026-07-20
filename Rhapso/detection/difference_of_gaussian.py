@@ -16,16 +16,13 @@ class DifferenceOfGaussian:
         self.threshold = threshold
         self.median_filter = median_filter
         self.mip_map_downsample = mip_map_downsample
-    
-    def apply_offset(self, peaks, offset_z):
-        """
-        Updates points with sub-regional offset
-        """
+
+    def apply_offset(self, peaks, offset):
         if peaks is None or peaks.size == 0:
             return peaks
 
         peaks = np.asarray(peaks, dtype=np.float32).copy()
-        peaks[:, 2] += offset_z
+        peaks += np.asarray(offset, dtype=np.float32)
 
         return peaks
 

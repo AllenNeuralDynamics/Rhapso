@@ -238,6 +238,7 @@ class RansacMatching:
             return [], None
 
         rng = random
+        # rng = random.Random(1234)
 
         for _ in range(self.num_iterations):
             indices = rng.sample(
@@ -566,3 +567,4 @@ class RansacMatching:
                 del points_b[i]
 
         return overlapping_a, overlapping_b
+    

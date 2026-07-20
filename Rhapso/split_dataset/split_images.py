@@ -314,122 +314,126 @@ class SplitImages:
                     )
 
                     new_view_id_key = self.view_key(t, new_setup_id)
-                    old_ip_l1 = interest_points[old_view_id]
+                    new_v_ip_l = []
 
-                    split_points = []
-                    point_id = 0
+                    
+                    if old_view_id in interest_points:
+                        old_ip_l1 = interest_points[old_view_id]
 
-                    for ip in deepcopy(old_ip_l1["points"]):
-                        if self.contains(ip, interval):
-                            local_point = deepcopy(ip)
+                        split_points = []
+                        point_id = 0
 
-                            for d in range(len(interval[0])):
-                                local_point[d] -= interval[0][d]
+                        for ip in deepcopy(old_ip_l1["points"]):
+                            if self.contains(ip, interval):
+                                local_point = deepcopy(ip)
 
-                            split_points.append((point_id, local_point))
-                            point_id += 1
+                                for d in range(len(interval[0])):
+                                    local_point[d] -= interval[0][d]
 
-                    split_label = "beads_split"
-                    new_v_ip_l = [
-                        {
-                            "label": split_label,
-                            "ip_list": {
-                                "interest_points": split_points,
-                                "point_path": self.xml_point_path(
-                                    t,
-                                    new_setup_id,
-                                    split_label,
-                                ),
-                                "parameters": old_ip_l1["parameters_split"],
-                            },
-                        }
-                    ]
+                                split_points.append((point_id, local_point))
+                                point_id += 1
 
-                    fake_points = []
-                    point_id = 0
+                        split_label = "beads_split"
+                        new_v_ip_l = [
+                            {
+                                "label": split_label,
+                                "ip_list": {
+                                    "interest_points": split_points,
+                                    "point_path": self.xml_point_path(
+                                        t,
+                                        new_setup_id,
+                                        split_label,
+                                    ),
+                                    "parameters": old_ip_l1["parameters_split"],
+                                },
+                            }
+                        ]
 
-                    for j in range(i):
-                        other_interval = intervals[j]
-                        intersection = self.intersect(interval, other_interval)
+                        fake_points = []
+                        point_id = 0
 
-                        if self.is_empty(intersection):
-                            continue
+                        for j in range(i):
+                            other_interval = intervals[j]
+                            intersection = self.intersect(interval, other_interval)
 
-                        other_setup_id = interval_to_setup_id[(tuple(other_interval[0]), tuple(other_interval[1]))]
-                        other_view_id = self.view_key(t, other_setup_id)
-                        other_ip_list = new_interest_points[other_view_id]
+                            if self.is_empty(intersection):
+                                continue
 
-                        n = len(interval[0])
-                        num_pixels = 1
+                            other_setup_id = interval_to_setup_id[(tuple(other_interval[0]), tuple(other_interval[1]))]
+                            other_view_id = self.view_key(t, other_setup_id)
+                            other_ip_list = new_interest_points[other_view_id]
 
-                        for k in range(n):
-                            num_pixels *= intersection[1][k] - intersection[0][k] + 1
+                            n = len(interval[0])
+                            num_pixels = 1
 
-                        num_points = min(
-                            self.max_points,
-                            max(self.min_points, math.ceil(self.point_density * num_pixels / (100.0 * 100.0 * 100.0))),
-                        )
+                            for k in range(n):
+                                num_pixels *= intersection[1][k] - intersection[0][k] + 1
 
-                        other_points = next(x for x in other_ip_list if x["label"] == fake_label)["ip_list"]["interest_points"]
-                        other_id = len(other_points)
+                            num_points = min(
+                                self.max_points,
+                                max(self.min_points, math.ceil(self.point_density * num_pixels / (100.0 * 100.0 * 100.0))),
+                            )
 
-                        search2 = None
+                            other_points = next(x for x in other_ip_list if x["label"] == fake_label)["ip_list"]["interest_points"]
+                            other_id = len(other_points)
 
-                        if self.exclude_radius > 0 and len(other_points) > 0:
-                            other_ip_global = []
+                            search2 = None
 
-                            for k, ip in enumerate(other_points):
-                                point_global = deepcopy(ip[1])
+                            if self.exclude_radius > 0 and len(other_points) > 0:
+                                other_ip_global = []
+
+                                for k, ip in enumerate(other_points):
+                                    point_global = deepcopy(ip[1])
+
+                                    for d in range(n):
+                                        point_global[d] += other_interval[0][d]
+
+                                    other_ip_global.append((k, point_global))
+
+                                tree2 = cKDTree(np.vstack([point for _, point in other_ip_global]))
+
+                                def search2(q_point_global, radius=self.exclude_radius):
+                                    idxs = tree2.query_ball_point(np.asarray(q_point_global, float), radius)
+                                    return [other_ip_global[k] for k in idxs]
+
+                            tmp = [0.0] * n
+
+                            for _ in range(num_points):
+                                p = [0.0] * n
+                                op = [0.0] * n
 
                                 for d in range(n):
-                                    point_global[d] += other_interval[0][d]
+                                    l = rnd.random() * (intersection[1][d] - intersection[0][d] + 1) + intersection[0][d]
 
-                                other_ip_global.append((k, point_global))
+                                    p[d] = (l + (rnd.random() - 0.5) * self.error) - interval[0][d]
+                                    op[d] = (l + (rnd.random() - 0.5) * self.error) - other_interval[0][d]
+                                    tmp[d] = l
 
-                            tree2 = cKDTree(np.vstack([point for _, point in other_ip_global]))
+                                num_neighbors = 0
 
-                            def search2(q_point_global, radius=self.exclude_radius):
-                                idxs = tree2.query_ball_point(np.asarray(q_point_global, float), radius)
-                                return [other_ip_global[k] for k in idxs]
+                                if search2 is not None:
+                                    num_neighbors = len(search2(np.asarray(tmp, dtype=float), self.exclude_radius))
 
-                        tmp = [0.0] * n
+                                if num_neighbors == 0:
+                                    fake_points.append((point_id, p))
+                                    other_points.append((other_id, op))
+                                    point_id += 1
+                                    other_id += 1
 
-                        for _ in range(num_points):
-                            p = [0.0] * n
-                            op = [0.0] * n
-
-                            for d in range(n):
-                                l = rnd.random() * (intersection[1][d] - intersection[0][d] + 1) + intersection[0][d]
-
-                                p[d] = (l + (rnd.random() - 0.5) * self.error) - interval[0][d]
-                                op[d] = (l + (rnd.random() - 0.5) * self.error) - other_interval[0][d]
-                                tmp[d] = l
-
-                            num_neighbors = 0
-
-                            if search2 is not None:
-                                num_neighbors = len(search2(np.asarray(tmp, dtype=float), self.exclude_radius))
-
-                            if num_neighbors == 0:
-                                fake_points.append((point_id, p))
-                                other_points.append((other_id, op))
-                                point_id += 1
-                                other_id += 1
-
-                    new_v_ip_l.append(
-                        {
-                            "label": fake_label,
-                            "ip_list": {
-                                "interest_points": fake_points,
-                                "point_path": self.xml_point_path(
-                                    t,
-                                    new_setup_id,
-                                    fake_label,
-                                ),
-                                "parameters": old_ip_l1["parameters_fake"],
-                            },
-                        }
-                    )
+                        new_v_ip_l.append(
+                            {
+                                "label": fake_label,
+                                "ip_list": {
+                                    "interest_points": fake_points,
+                                    "point_path": self.xml_point_path(
+                                        t,
+                                        new_setup_id,
+                                        fake_label,
+                                    ),
+                                    "parameters": old_ip_l1["parameters_fake"],
+                                },
+                            }
+                        )
 
                     self.setup_definition.append(
                         {
@@ -446,13 +450,19 @@ class SplitImages:
                         }
                     )
 
-                    new_interest_points[new_view_id_key] = new_v_ip_l
+                    # new_interest_points[new_view_id_key] = new_v_ip_l
+                    
+                    if new_v_ip_l:
+                        new_interest_points[new_view_id_key] = new_v_ip_l
 
                 new_id += 1
 
         return new_interest_points
 
     def load_interest_points(self):
+        if self.view_interest_points_df.empty:
+            return {}
+        
         self.load_point_manifest()
 
         interest_points = {}
@@ -489,3 +499,4 @@ class SplitImages:
         print("Tiles Split")
 
         return new_split_interest_points, self.setup_definition
+    

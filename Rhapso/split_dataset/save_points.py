@@ -246,5 +246,9 @@ class SavePoints:
         self.write_parquet(self.point_index_uri(), index_df)
 
     def run(self):
+        if not self.split_interest_points:
+            print("No split interest points to save")
+            return
+
         self.save_interest_points_to_parquet()
         print("Split Points Saved")

@@ -15,27 +15,44 @@ Overlap Detection figures out where image tile overlap.
 """
 
 # TIFF reader wants to be used as an abstract class
+# class CustomBioImage(BioImage):
+#     def standard_metadata(self):
+#         pass
+    
+#     def scale(self):
+#         pass
+    
+#     def time_interval(self):
+#         pass
+
 class CustomBioImage(BioImage):
+    @property
     def standard_metadata(self):
-        pass
-    
+        return self.reader.standard_metadata
+
+    @property
     def scale(self):
-        pass
-    
+        return self.reader.scale
+
+    @property
     def time_interval(self):
-        pass
+        return self.reader.time_interval
+
+    @property
+    def dimension_properties(self):
+        return self.reader.dimension_properties
 
 class OverlapDetection():
-    def __init__(self, transform_models, dataframes, dsxy, dsz, prefix, file_type, overlapping_only=True):
+    def __init__(self, transform_models, dataframes, dsxy, dsz, prefix, file_type, overlap_only):
         self.transform_models = transform_models
         self.image_loader_df = dataframes['image_loader']
         self.dsxy, self.dsz = dsxy, dsz
         self.prefix = prefix
         self.file_type = file_type
-        self.overlapping_only = overlapping_only
         self.to_process = {}
         self.image_shape_cache = {}
         self.max_interval_size = 0
+        self.overlap_only = overlap_only
     
     def create_mipmap_transform(self):
         """
@@ -169,31 +186,27 @@ class OverlapDetection():
             return shape
 
         raise ValueError(f"Unsupported file_type: {self.file_type}")
-    
+
     def open_and_downsample(self, shape, dsxy, dsz):
         """
-        Downsample a 3D volume by powers of two by repeatedly halving along each axis
+        Calculate the final XYZ shape after additional in-memory downsampling.
         """
-        dsx = dsxy
-        dsy = dsxy
+        x_new, y_new, z_new = shape[5], shape[4], shape[3]
 
-        # downsample x dimension
-        x_new = shape[5]
-        while dsx > 1:
-            x_new = x_new // 2 if x_new % 2 == 0 else (x_new // 2) + 1
-            dsx //= 2
+        f = dsxy
+        while f > 1:
+            x_new //= 2
+            f //= 2
 
-        # downsample y dimension
-        y_new = shape[4]
-        while dsy > 1:
-            y_new = y_new // 2 if y_new % 2 == 0 else (y_new // 2) + 1
-            dsy //= 2
+        f = dsxy
+        while f > 1:
+            y_new //= 2
+            f //= 2
 
-        # downsample z dimension
-        z_new = shape[3]
-        while dsz > 1:
-            z_new = z_new // 2 if z_new % 2 == 0 else (z_new // 2) + 1
-            dsz //= 2
+        f = dsz
+        while f > 1:
+            z_new //= 2
+            f //= 2
 
         return ((0, 0, 0), (x_new, y_new, z_new))
     
@@ -259,25 +272,25 @@ class OverlapDetection():
         intersect_max = np.minimum(bbox1[1], bbox2[1])
         
         return (intersect_min, intersect_max)
-
+    
     def calculate_new_dims(self, lower_bound, upper_bound):
-        """
-        Compute per-axis lengths from bounds
-        """
-        new_dims = []
-        for lb, ub in zip(lower_bound, upper_bound):
-            if lb == 0:
-                new_dims.append(ub + 1)
-            else:
-                new_dims.append(ub - lb)
-        
-        return new_dims
+        return [int(ub - lb + 1) for lb, ub in zip(lower_bound, upper_bound)]
     
     def floor_log2(self, n):
         """
         Return ⌊log2(n)⌋ - clamps n ≤ 1 to 1 so the result is 0 for n ≤ 1
         """
         return max(0, int(math.floor(math.log2(max(1, n)))))
+    
+    def get_zarr_multiscales(self, zarr_root_path):
+        meta = self.read_s3_json(str(zarr_root_path).rstrip("/") + "/zarr.json")
+        attrs = meta.get("attributes", meta)
+
+        multiscales = attrs.get("multiscales") or attrs.get("ome", {}).get("multiscales")
+        if not multiscales:
+            raise ValueError(f"No multiscales metadata found at {zarr_root_path}")
+
+        return multiscales[0]
     
     def get_zarr_num_levels(self, zarr_root_path):
         """
@@ -328,124 +341,128 @@ class OverlapDetection():
         return int((int(ub[0]) - int(lb[0]) + 1) *
                 (int(ub[1]) - int(lb[1]) + 1) *
                 (int(ub[2]) - int(lb[2]) + 1))
-
+    
     def find_overlapping_area(self):
         """
-        Compute XY Z overlap intervals against every other view, accounting for mipmap/downsampling and per-view affine transforms
+        Compute XYZ overlap intervals using the actual stored Zarr pyramid scaling
+        plus any remaining in-memory downsampling.
         """
-        is_split = 'crop_min' in self.image_loader_df.columns
-
         for i, row_i in self.image_loader_df.iterrows():
             view_id = f"timepoint: {row_i['timepoint']}, setup: {row_i['view_setup']}"
-            
-            # get inverted matrice of downsampling
             all_intervals = []
-            if self.file_type == 'zarr':
-                zarr_root_path = self.prefix + row_i['file_path']
+
+            if self.file_type == "zarr":
+                zarr_root_path = self.prefix + row_i["file_path"]
+
                 level, leftovers = self.choose_zarr_level(zarr_root_path)
-                dim_base = self.load_image_metadata(zarr_root_path + f'/{0}')
+                multiscale = self.get_zarr_multiscales(zarr_root_path)
+                base_path = str(multiscale["datasets"][0]["path"])
+                level_path = str(multiscale["datasets"][level]["path"])
 
-                # isotropic pyramid
-                s = float(2 ** level)  
+                dim_base = self.load_image_metadata(zarr_root_path + f"/{base_path}")
+                dim_selected_level = self.load_image_metadata(zarr_root_path + f"/{level_path}")
+
+                dsxy = leftovers[0]
+                dsz = leftovers[2]
+
+                s = float(2 ** level)
                 mipmap_of_downsample = self.affine_with_half_pixel_shift(s, s, s)
+                downsampled_dim_base = self.open_and_downsample(dim_selected_level, dsxy, dsz)
 
-                # TODO - update mipmap with leftovers if other than 1
-                _, dsxy, dsz = leftovers
-                
-            elif self.file_type == 'tiff':
-                dim_base = self.load_image_metadata(os.path.join(self.prefix, row_i['file_path']))
+            elif self.file_type == "tiff":
+                dim_base = self.load_image_metadata(self.prefix + row_i["file_path"])
                 mipmap_of_downsample = self.create_mipmap_transform()
                 dsxy, dsz = self.dsxy, self.dsz
                 level = None
-
-            downsampled_dim_base = self.open_and_downsample(dim_base, dsxy, dsz)
-            t1 = self.get_inverse_mipmap_transform(mipmap_of_downsample)
-
-            if self.overlapping_only:
-                # compare with all view_ids
-                for j, row_j in self.image_loader_df.iterrows():
-                    if i == j: continue
-
-                    view_id_other = f"timepoint: {row_j['timepoint']}, setup: {row_j['view_setup']}"
-
-                    if self.file_type == 'zarr':
-                        if is_split:
-                            dim_other = self._split_tile_shape(row_j)
-                        else:
-                            dim_other = self.load_image_metadata(os.path.join(self.prefix, row_j['file_path'], str(level)))
-                    elif self.file_type == 'tiff':
-                        dim_other = self.load_image_metadata(os.path.join(self.prefix, row_j['file_path']))
-
-                    # get transforms matrix from both view_ids and downsampling matrices
-                    matrix = self.transform_models.get(view_id)
-                    matrix_other = self.transform_models.get(view_id_other)
-
-                    if self.file_type == 'zarr':
-                        s = float(2 ** level)
-                        mipmap_of_downsample_other = self.affine_with_half_pixel_shift(s, s, s)
-                    elif self.file_type == 'tiff':
-                        mipmap_of_downsample_other = self.create_mipmap_transform()
-
-                    inverse_mipmap_of_downsample_other = self.get_inverse_mipmap_transform(mipmap_of_downsample_other)
-                    inverse_matrix = self.get_inverse_mipmap_transform(matrix)
-
-                    concatenated_matrix = np.dot(inverse_matrix, matrix_other)
-                    t2 = np.dot(inverse_mipmap_of_downsample_other, concatenated_matrix)
-
-                    intervals = self.estimate_bounds(t1, dim_base)
-                    intervals_other = self.estimate_bounds(t2, dim_other)
-
-                    bounding_boxes = tuple(map(lambda x: np.round(x).astype(int), intervals))
-                    bounding_boxes_other = tuple(map(lambda x: np.round(x).astype(int), intervals_other))
-
-                    # find upper and lower bounds of intersection
-                    if np.all((bounding_boxes[1] >= bounding_boxes_other[0]) & (bounding_boxes_other[1] >= bounding_boxes[0])):
-                        intersected_boxes = self.calculate_intersection(bounding_boxes, bounding_boxes_other)
-                        intersect = self.calculate_intersection(downsampled_dim_base, intersected_boxes)
-                        intersect_dict = {
-                            'lower_bound': intersect[0],
-                            'upper_bound': intersect[1],
-                            'span': self.calculate_new_dims(intersect[0], intersect[1])
-                        }
-
-                        lb, ub = intersect[0], intersect[1]
-                        sz = self.size_interval(lb, ub)
-                        if sz > self.max_interval_size:
-                            self.max_interval_size = sz
-
-                        # add max size
-                        all_intervals.append(intersect_dict)
-
-                # Single-view dataset: no pairwise overlaps exist, so use the
-                # full downsampled volume as the processing region.
-                if not all_intervals and len(self.image_loader_df) == 1:
-                    lb = np.array(downsampled_dim_base[0])
-                    ub = np.array(downsampled_dim_base[1])
-                    all_intervals.append({
-                        'lower_bound': lb,
-                        'upper_bound': ub,
-                        'span': self.calculate_new_dims(lb, ub),
-                    })
-                    sz = self.size_interval(lb, ub)
-                    if sz > self.max_interval_size:
-                        self.max_interval_size = sz
+                downsampled_dim_base = self.open_and_downsample(dim_base, dsxy, dsz)
 
             else:
-                # Full-volume mode: use the entire downsampled tile as the
-                # processing region (for registration, not stitching).
-                lb = np.array(downsampled_dim_base[0])
-                ub = np.array(downsampled_dim_base[1])
-                all_intervals.append({
-                    'lower_bound': lb,
-                    'upper_bound': ub,
-                    'span': self.calculate_new_dims(lb, ub),
-                })
-                sz = self.size_interval(lb, ub)
-                if sz > self.max_interval_size:
-                    self.max_interval_size = sz
+                raise ValueError(f"Unsupported file_type: {self.file_type}")
+
+            if not self.overlap_only:
+                lower_bound = np.array(downsampled_dim_base[0], dtype=int)
+                upper_bound = np.array(downsampled_dim_base[1], dtype=int) - 1
+
+                interval = {
+                    "lower_bound": lower_bound,
+                    "upper_bound": upper_bound,
+                    "span": (upper_bound - lower_bound + 1).tolist(),
+                }
+
+                self.to_process[view_id] = [interval]
+                self.max_interval_size = max(
+                    self.max_interval_size,
+                    self.size_interval(lower_bound, upper_bound),
+                )
+                continue
+
+            t1 = self.get_inverse_mipmap_transform(mipmap_of_downsample)
+
+            for j, row_j in self.image_loader_df.iterrows():
+                if i == j:
+                    continue
+
+                view_id_other = f"timepoint: {row_j['timepoint']}, setup: {row_j['view_setup']}"
+
+                if self.file_type == "zarr":
+                    zarr_root_path_other = self.prefix + row_j["file_path"]
+                    level_other, _ = self.choose_zarr_level(zarr_root_path_other)
+                    multiscale_other = self.get_zarr_multiscales(zarr_root_path_other)
+                    base_path_other = str(multiscale_other["datasets"][0]["path"])
+                    dim_other = self.load_image_metadata(zarr_root_path_other + f"/{base_path_other}")
+                    s_other = float(2 ** level_other)
+                    mipmap_of_downsample_other = self.affine_with_half_pixel_shift(s_other, s_other, s_other)
+
+                else:
+                    dim_other = self.load_image_metadata(self.prefix + row_j["file_path"])
+                    mipmap_of_downsample_other = self.create_mipmap_transform()
+
+                matrix = self.transform_models.get(view_id)
+                matrix_other = self.transform_models.get(view_id_other)
+
+                inverse_mipmap_other = self.get_inverse_mipmap_transform(mipmap_of_downsample_other)
+                inverse_matrix = self.get_inverse_mipmap_transform(matrix)
+
+                concatenated_matrix = np.dot(inverse_matrix, matrix_other)
+                t2 = np.dot(inverse_mipmap_other, concatenated_matrix)
+
+                intervals = self.estimate_bounds(t1, dim_base)
+                intervals_other = self.estimate_bounds(t2, dim_other)
+
+                bounding_boxes = tuple(np.round(v).astype(int) for v in intervals)
+                bounding_boxes_other = tuple(np.round(v).astype(int) for v in intervals_other)
+
+                overlaps = np.all(
+                    (bounding_boxes[1] >= bounding_boxes_other[0])
+                    & (bounding_boxes_other[1] >= bounding_boxes[0])
+                )
+
+                if not overlaps:
+                    continue
+
+                intersected_boxes = self.calculate_intersection(bounding_boxes, bounding_boxes_other)
+                volume_bounds = (
+                    np.array(downsampled_dim_base[0], dtype=int),
+                    np.array(downsampled_dim_base[1], dtype=int) - 1,
+                )
+                intersect = self.calculate_intersection(volume_bounds, intersected_boxes)
+
+                lb, ub = intersect
+                intersect_dict = {
+                    "lower_bound": lb,
+                    "upper_bound": ub,
+                    "span": self.calculate_new_dims(lb, ub),
+                }
+
+                self.max_interval_size = max(
+                    self.max_interval_size,
+                    self.size_interval(lb, ub),
+                )
+
+                all_intervals.append(intersect_dict)
 
             self.to_process[view_id] = all_intervals
-        
+
         return dsxy, dsz, level, mipmap_of_downsample
                 
     def run(self):

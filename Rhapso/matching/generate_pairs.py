@@ -10,10 +10,6 @@ class GeneratePairs:
         self.data_global = data_global
         self.match_type = match_type
     
-    # TODO - eventually handle if more than 1 timepoint
-    def merge_sets(self, v_sets, pair_sets, i1, i2):
-        return [], []
-    
     def set_id(self, v1, v_sets):
         """
         Find the index of the component in `v_sets` that contains `v1`
@@ -224,34 +220,79 @@ class GeneratePairs:
         
         return final_pairs
     
+    def is_face_neighbor(self, view_a, dims_a, view_b, dims_b, min_shared_fraction=0.5):
+        matrix_a = self.transform_matrices(view_a)
+        matrix_b = self.transform_matrices(view_b)
+
+        minimum_a, maximum_a = self.get_bounding_boxes(matrix_a, dims_a["size"])
+        minimum_b, maximum_b = self.get_bounding_boxes(matrix_b, dims_b["size"])
+
+        extent_a = maximum_a - minimum_a
+        extent_b = maximum_b - minimum_b
+        shared = np.minimum(maximum_a, maximum_b) - np.maximum(minimum_a, minimum_b)
+
+        if np.any(shared <= 0):
+            return False
+
+        shared_fraction = shared / np.maximum(np.minimum(extent_a, extent_b), 1e-9)
+        return np.count_nonzero(shared_fraction >= min_shared_fraction) >= 2
+    
     def setup_groups(self):
         """
-        Group views by timepoint and generate all unique unordered intra-timepoint pairs
+        Group views by timepoint and generate face-neighbor pairs only.
         """
-        views = list(self.data_global['viewsInterestPoints'].keys())
-
-        # Group views by timepoint
+        views = list(self.data_global["viewsInterestPoints"].keys())
         timepoint_groups = {}
-        for view in views:
-            timepoint, _ = view
-            if timepoint not in timepoint_groups:
-                timepoint_groups[timepoint] = []
-            timepoint_groups[timepoint].append(view)
 
-        # Create pairs within each timepoint
+        for view in views:
+            timepoint_groups.setdefault(view[0], []).append(view)
+
         pairs = []
-        for timepoint, timepoint_views in timepoint_groups.items():
-            for i in range(len(timepoint_views)):
-                for j in range(i + 1, len(timepoint_views)):
-                    pairs.append((timepoint_views[i], timepoint_views[j]))
+
+        for timepoint_views in timepoint_groups.values():
+            for view_a, view_b in combinations(timepoint_views, 2):
+                dims_a = self.data_global["viewSetup"]["byId"][view_a[1]]
+                dims_b = self.data_global["viewSetup"]["byId"][view_b[1]]
+
+                if self.is_face_neighbor(view_a, dims_a, view_b, dims_b):
+                    pairs.append((view_a, view_b))
 
         return {
-            'groups': timepoint_groups,
-            'pairs': pairs,
-            'rangeComparator': None,
-            'subsets': None,
-            'views': views
+            "groups": timepoint_groups,
+            "pairs": pairs,
+            "rangeComparator": None,
+            "subsets": None,
+            "views": views,
         }
+    
+    # def setup_groups(self):
+    #     """
+    #     Group views by timepoint and generate all unique unordered intra-timepoint pairs
+    #     """
+    #     views = list(self.data_global['viewsInterestPoints'].keys())
+
+    #     # Group views by timepoint
+    #     timepoint_groups = {}
+    #     for view in views:
+    #         timepoint, _ = view
+    #         if timepoint not in timepoint_groups:
+    #             timepoint_groups[timepoint] = []
+    #         timepoint_groups[timepoint].append(view)
+
+    #     # Create pairs within each timepoint
+    #     pairs = []
+    #     for timepoint, timepoint_views in timepoint_groups.items():
+    #         for i in range(len(timepoint_views)):
+    #             for j in range(i + 1, len(timepoint_views)):
+    #                 pairs.append((timepoint_views[i], timepoint_views[j]))
+
+    #     return {
+    #         'groups': timepoint_groups,
+    #         'pairs': pairs,
+    #         'rangeComparator': None,
+    #         'subsets': None,
+    #         'views': views
+    #     }
     
     def as_list(self, x):
         return x if isinstance(x, list) else [x]

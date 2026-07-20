@@ -2,22 +2,23 @@
 # INTEREST POINT DETECTION
 # -----------------------------------
 
-xml_file_path_detection: 's3://aind-open-data/exaSPIM_791116_2026-06-09_16-31-33_processed_2026-06-16_12-28-34/tile_alignment/rhapso/dataset.xml' 
-image_file_prefix: 's3://aind-open-data/exaSPIM_791116_2026-06-09_16-31-33_processed_2026-06-16_12-28-34/flatfield_correction/SPIM.ome.zarr/'
-xml_output_file_path: &detection_xml_output_file_path 's3://aind-scratch-data/sean.fite/exaSPIM-newest-test/rhapso-detection.xml'
-n5_output_file_prefix: &n5_output_file_prefix 's3://aind-scratch-data/sean.fite/exaSPIM-newest-test/'
+xml_file_path_detection: 's3://aind-open-data/exaSPIM_709220_2026-06-09_18-28-35_processed_2026-06-22_14-05-16/tile_alignment/dataset.xml' 
+image_file_prefix: 's3://aind-open-data/exaSPIM_709220_2026-06-09_18-28-35_processed_2026-06-22_14-05-16/denoised/SPIM.ome.zarr/'
+xml_output_file_path: &detection_xml_output_file_path 's3://aind-scratch-data/sean.fite/exaSPIM_709220/test1/rhapso-detection.xml'
+n5_output_file_prefix: &n5_output_file_prefix 's3://aind-scratch-data/sean.fite/exaSPIM_709220/test1/'
 run_type: 'ray' 
 file_type: 'zarr' 
 dsxy: 4
 dsz: 4
-min_intensity: 0
+min_intensity: 30
 max_intensity: 100
 sigma: 2.8
-threshold: 0.015  
+threshold: 0.02  
 median_filter: 8
 combine_distance: 16
 chunks_per_bound: 35
-max_spots: 30000
+max_spots: 50000
+overlap_only: True
 
 # SOLVER
 # -----------------------------------
@@ -34,7 +35,8 @@ fixed_tile:
 # -- RIGID --
 run_type_solver_rigid: 'rigid'
 xml_file_path_solver_rigid: *detection_xml_output_file_path
-xml_file_path_output_rigid: &rigid_solver_xml_output 's3://aind-scratch-data/sean.fite/exaSPIM-newest-test/rhapso-solver-rigid.xml'
+xml_file_path_output_rigid: &rigid_solver_xml_output 's3://aind-scratch-data/sean.fite/exaSPIM_709220/test1/rhapso-solver-rigid.xml'
+metrics_output_path_rigid: &rigid_solver_history_output 's3://aind-scratch-data/sean.fite/exaSPIM_709220/metrics/rigid-metrics.json'
 regularization_weight_solver_rigid: 1.0
 relative_threshold_rigid: 3.5
 absolute_threshold_rigid: 7.0
@@ -43,7 +45,8 @@ max_cleanup_rounds_rigid: 3
 # -- AFFINE --
 run_type_solver_affine: 'affine'
 xml_file_path_solver_affine: *rigid_solver_xml_output
-xml_file_path_output_affine: &affine_solver_xml_output 's3://aind-scratch-data/sean.fite/exaSPIM-newest-test/rhapso-solver-affine.xml'
+xml_file_path_output_affine: &affine_solver_xml_output 's3://aind-scratch-data/sean.fite/exaSPIM_709220/test1/rhapso-solver-affine.xml'
+metrics_output_path_affine: &affine_solver_history_output 's3://aind-scratch-data/sean.fite/exaSPIM_709220/metrics/affine-metrics.json'
 regularization_weight_solver_affine: 0.05
 relative_threshold_affine: 3.25
 absolute_threshold_affine: 6.0
@@ -51,8 +54,9 @@ max_cleanup_rounds_affine: 5
 
 # -- SPLIT AFFINE --
 run_type_solver_split_affine: 'split-affine'
-xml_file_path_solver_split_affine: 's3://aind-scratch-data/sean.fite/exaSPIM-newest-test/rhapso-split.xml'
-xml_file_path_output_split_affine: &affine_split_solver_xml_output 's3://aind-scratch-data/sean.fite/exaSPIM-newest-test/rhapso-solver-split-affine.xml'
+xml_file_path_solver_split_affine: 's3://aind-scratch-data/sean.fite/exaSPIM_709220/test1/rhapso-split.xml'
+xml_file_path_output_split_affine: &affine_split_solver_xml_output 's3://aind-scratch-data/sean.fite/exaSPIM_709220/test1/rhapso-solver-split-affine.xml'
+metrics_output_path_split_affine: &split_affine_solver_history_output 's3://aind-scratch-data/sean.fite/exaSPIM_709220/metrics/split-affine-metrics.json'
 regularization_weight_solver_split_affine: 0.10
 relative_threshold_split_affine: 3.0
 absolute_threshold_split_affine: 6.0
@@ -62,7 +66,7 @@ max_cleanup_rounds_split_affine: 5
 # -----------------------------------
 
 xml_file_path_split: *affine_solver_xml_output
-xml_output_file_path_split: &affine_split_xml_output 's3://aind-scratch-data/sean.fite/exaSPIM-newest-test/rhapso-split.xml'
+xml_output_file_path_split: &affine_split_xml_output 's3://aind-scratch-data/sean.fite/exaSPIM_709220/test1/rhapso-split.xml'
 n5_path_split: *n5_output_file_prefix
 point_density: 1.0
 min_points: 20
@@ -137,21 +141,24 @@ regularization_weight_matching_split_affine: 0.10
 
 # METRICS
 # ----------------------------
-downsample_xyz: [16.0, 16.0, 16.0]
+downsample_xyz: [4.0, 4.0, 4.0]
 alignment_base: *n5_output_file_prefix
 
 # -- RIGID --
 pre_xml_path_rigid: *detection_xml_output_file_path
-post_xml_path_rigid: *rigid_solver_xml_output  
+post_xml_path_rigid: *rigid_solver_xml_output
+solver_history_path_rigid: 's3://aind-scratch-data/sean.fite/exaSPIM_794495/rigid-solver_metrics.txt'
 match_type_rigid: 'rigid'
 
 # -- AFFINE --
-pre_xml_path_affine: *rigid_solver_xml_output 
+pre_xml_path_affine: *rigid_solver_xml_output
 post_xml_path_affine: *affine_solver_xml_output
+solver_history_path_affine: 's3://aind-scratch-data/sean.fite/exaSPIM_794495/affine-solver_metrics.txt'
 match_type_affine: 'affine'
 
 # -- SPLIT AFFINE --
 pre_xml_path_split_affine: *affine_solver_xml_output
 post_xml_path_split_affine: *affine_split_solver_xml_output
-split_xml_path_split_affine: *affine_split_xml_output  
+split_xml_path_split_affine: *affine_split_xml_output
+solver_history_path_split_affine: 's3://aind-scratch-data/sean.fite/exaSPIM_794495/split-affine-solver_metrics.txt'
 match_type_split_affine: 'split-affine'
