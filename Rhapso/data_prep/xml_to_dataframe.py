@@ -1,7 +1,8 @@
 import pandas as pd
 import xml.etree.ElementTree as ET
+import re
 
-# This component recieves an XML file containing Tiff or Zarr image metadata and converts
+# This component receives an XML file containing Tiff or Zarr image metadata and converts
 # it into several Dataframes
 
 class XMLToDataFrame:
@@ -98,17 +99,99 @@ class XMLToDataFrame:
         # Convert the list to a DataFrame and return
         return pd.DataFrame(image_loader_data)
     
-    def parse_image_loader_split_zarr(self):
-        pass
+    def parse_image_loader_split_zarr(self, root):
+        """
+        Parses a split.viewerimgloader XML structure where a single source image is virtually
+        subdivided into overlapping tiles via SetupIdDefinitions.
+
+        Parameters
+        ----------
+        root : xml.etree.ElementTree.Element
+            Root element of the parsed XML.
+
+        Returns
+        -------
+        pd.DataFrame
+            One row per split tile with columns: view_setup, timepoint, series, channel,
+            file_path, crop_min, crop_max, zarr_base_path.
+        """
+        outer_loader = root.find(".//ImageLoader[@format='split.viewerimgloader']")
+        if outer_loader is None:
+            raise ValueError(
+                "split.viewerimgloader ImageLoader node not found in XML; "
+                "ensure the XML contains an ImageLoader with format='split.viewerimgloader'."
+            )
+
+        inner_loader = outer_loader.find("ImageLoader")
+        if inner_loader is None:
+            raise ValueError(
+                "Nested ImageLoader node not found inside split.viewerimgloader configuration."
+            )
+
+        zarr_elem = inner_loader.find("zarr")
+        if zarr_elem is None or zarr_elem.text is None:
+            raise ValueError(
+                "<zarr> node with base path is missing from split.viewerimgloader configuration."
+            )
+
+        zarr_base_path = zarr_elem.text.strip()
+        # Build lookup from source setup id to (timepoint, zgroup_path)
+        zgroup_lookup = {}
+        for zg in inner_loader.findall(".//zgroups/zgroup"):
+            setup = zg.get("setup")
+            tp = zg.get("tp") or zg.get("timepoint")
+            path = zg.get("path")
+            zgroup_lookup[setup] = (tp, path)
+
+        image_loader_data = []
+        for sid in outer_loader.findall(".//SetupIds/SetupIdDefinition"):
+            new_id = sid.find("NewId").text.strip()
+            old_id = sid.find("OldId").text.strip()
+            crop_min = sid.find("min").text.strip()
+            crop_max = sid.find("max").text.strip()
+
+            if old_id not in zgroup_lookup:
+                raise ValueError(
+                    f"SetupIdDefinition refers to OldId {old_id!r} that is not present in the "
+                    f"inner loader's zgroups. Available setup ids: {sorted(zgroup_lookup.keys())}"
+                )
+            tp, zgroup_path = zgroup_lookup[old_id]
+
+            # Attempt to extract the channel from the path, assuming filenames include '_ch_<number>'
+            # (e.g. both '.zarr' and '.ome.zarr' variants). If this pattern is not present or is
+            # formatted differently, we deliberately fall back to channel 0 as a default.
+            channel_match = re.search(r'_ch_(\d+)', zgroup_path)
+            if channel_match:
+                channel = channel_match.group(1)
+            else:
+                # Default to channel 0 when channel information cannot be parsed from the path.
+                channel = 0
+
+            image_loader_data.append({
+                "view_setup": new_id,
+                "timepoint": tp,
+                "series": 1,
+                "channel": channel,
+                "file_path": zgroup_path,
+                "crop_min": crop_min,
+                "crop_max": crop_max,
+                "zarr_base_path": zarr_base_path,
+            })
+
+        return pd.DataFrame(image_loader_data)
 
     def route_image_loader(self, root):
         """
         Directs the XML parsing process based on the image loader format specified in the XML.
         """
         format_node = root.find(".//ImageLoader")
-        format_type = format_node.get("format")
+        if format_node is None:
+            raise ValueError("No <ImageLoader> element found in XML; cannot determine image loader format.")
 
-        if "filemap" in format_type:
+        format_type = (format_node.get("format") or "").lower()
+        if "split" in format_type:
+            return self.parse_image_loader_split_zarr(root)
+        elif "filemap" in format_type:
             return self.parse_image_loader_tiff(root)
         else:
             return self.parse_image_loader_zarr(root)
@@ -119,7 +202,7 @@ class XMLToDataFrame:
         """
         viewsetups_data = []
 
-        for vs in root.findall(".//ViewSetup"):
+        for vs in root.findall("./SequenceDescription/ViewSetups/ViewSetup"):
             id_ = vs.find("id").text
             # name = vs.find("name").text
             name = vs.findtext("name")
