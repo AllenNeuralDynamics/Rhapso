@@ -10,18 +10,29 @@ class XMLToDataFrame:
 
     def parse_image_loader_zarr(self, root):
         """
-        Parses image loader configuration from a Zarr file's XML 
+        Parses image loader configuration from a Zarr file's XML.
+        Adds split bounds when SetupIdDefinition metadata exists.
         """
         image_loader_data = []
+
+        split_metadata = {}
+
+        for definition in root.findall(".//SetupIds/SetupIdDefinition"):
+            new_id = definition.findtext("NewId")
+            min_text = definition.findtext("min")
+            max_text = definition.findtext("max")
+
+            if new_id is not None and min_text is not None and max_text is not None:
+                split_metadata[new_id] = {
+                    "split_min": tuple(map(int, min_text.split())),
+                    "split_max": tuple(map(int, max_text.split())),
+                }
 
         for il in root.findall(".//ImageLoader/zgroups/zgroup"):
             view_setup = il.get("setup")
             timepoint = il.get("timepoint") or il.get("tp")
             path_node = il.find("path")
-            file_path = (
-                il.get("path")
-                or (path_node.text if path_node is not None else None)
-            )
+            file_path = il.get("path") or (path_node.text if path_node is not None else None)
 
             if not file_path:
                 raise ValueError(
@@ -45,17 +56,69 @@ class XMLToDataFrame:
                     "Expected a tiled path containing '_ch_' or a fused path starting with 'ch_'."
                 )
 
-            image_loader_data.append(
-                {
-                    "view_setup": view_setup,
-                    "timepoint": timepoint,
-                    "series": 1,
-                    "channel": channel,
-                    "file_path": file_path,
-                }
-            )
+            row_data = {
+                "view_setup": view_setup,
+                "timepoint": timepoint,
+                "series": 1,
+                "channel": channel,
+                "file_path": file_path,
+            }
+
+            if view_setup in split_metadata:
+                row_data.update(split_metadata[view_setup])
+
+            image_loader_data.append(row_data)
 
         return pd.DataFrame(image_loader_data)
+
+    # def parse_image_loader_zarr(self, root):
+    #     """
+    #     Parses image loader configuration from a Zarr file's XML 
+    #     """
+    #     image_loader_data = []
+
+    #     for il in root.findall(".//ImageLoader/zgroups/zgroup"):
+    #         view_setup = il.get("setup")
+    #         timepoint = il.get("timepoint") or il.get("tp")
+    #         path_node = il.find("path")
+    #         file_path = (
+    #             il.get("path")
+    #             or (path_node.text if path_node is not None else None)
+    #         )
+
+    #         if not file_path:
+    #             raise ValueError(
+    #                 "[XMLToDataFrame] Missing zgroup path. Expected either "
+    #                 "<zgroup path='...'> or <zgroup><path>...</path></zgroup>. "
+    #                 f"zgroup attributes={il.attrib}"
+    #             )
+
+    #         if "_ch_" in file_path:
+    #             channel = (
+    #                 file_path.split("_ch_", 1)[1]
+    #                 .replace(".ome.zarr", "")
+    #                 .replace(".zarr", "")
+    #                 .split("/", 1)[0]
+    #             )
+    #         elif file_path.startswith("ch_"):
+    #             channel = file_path.split("/", 1)[0].removeprefix("ch_")
+    #         else:
+    #             raise ValueError(
+    #                 f"[XMLToDataFrame] Could not parse channel from zgroup path: {file_path!r}. "
+    #                 "Expected a tiled path containing '_ch_' or a fused path starting with 'ch_'."
+    #             )
+
+    #         image_loader_data.append(
+    #             {
+    #                 "view_setup": view_setup,
+    #                 "timepoint": timepoint,
+    #                 "series": 1,
+    #                 "channel": channel,
+    #                 "file_path": file_path,
+    #             }
+    #         )
+
+    #     return pd.DataFrame(image_loader_data)
 
     def parse_image_loader_tiff(self, root):
         """

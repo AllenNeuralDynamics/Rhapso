@@ -73,7 +73,7 @@ class ImageReader:
         
         return data
 
-    def fetch_image_data(self, record, dsxy, dsz):
+    def fetch_image_data(self, record, dsxy, dsz, level):
         """
         Loads image chunk, downsamples it, and sub_chunks based on predefined intervals.
         """
@@ -125,8 +125,28 @@ class ImageReader:
         lb = list(interval_key[0])
         ub = list(interval_key[1])
 
+        read_lb = lb.copy()
+        read_ub = ub.copy()
+
+        split_min = record.get("split_min")
+
+        if split_min is not None:
+            level_scale = 2 ** level
+            total_scale = np.asarray((level_scale * dsxy, level_scale * dsxy, level_scale * dsz), dtype=np.float64)
+
+            split_origin = np.floor(np.asarray(split_min, dtype=np.float64) / total_scale).astype(int)
+
+            read_lb += split_origin
+            read_ub += split_origin
+
+        downsampled_image_chunk = downsampled_stack[
+            read_lb[0]:read_ub[0] + 1,
+            read_lb[1]:read_ub[1] + 1,
+            read_lb[2]:read_ub[2] + 1,
+        ].compute()
+
         # Load image chunk into mem
-        downsampled_image_chunk = downsampled_stack[lb[0]:ub[0]+1, lb[1]:ub[1]+1, lb[2]:ub[2]+1].compute()
+        # downsampled_image_chunk = downsampled_stack[lb[0]:ub[0]+1, lb[1]:ub[1]+1, lb[2]:ub[2]+1].compute()
     
         interval_key = (
             tuple(lb),
@@ -136,9 +156,9 @@ class ImageReader:
 
         return view_id, interval_key, downsampled_image_chunk, offset, lower_bound
 
-    def run(self, metadata_df, dsxy, dsz):
+    def run(self, metadata_df, dsxy, dsz, level):
         """
         Executes the entry point of the script.
         """
-        return self.fetch_image_data(metadata_df, dsxy, dsz)
+        return self.fetch_image_data(metadata_df, dsxy, dsz, level)
 

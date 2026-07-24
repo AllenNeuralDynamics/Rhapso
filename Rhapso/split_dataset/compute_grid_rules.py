@@ -23,21 +23,50 @@ class ComputeGridRules:
         
         return int(a + b - (a % b))
     
-    def find_min_step_size(self):
-        """
-        Compute the minimal integer step size per axis (X,Y,Z) that is compatible with the chosen lowest resolution
-        """
-        lowest_resolution=(64.0, 64.0, 64.0)
-        min_step_size = [1, 1, 1]
+    # def find_min_step_size(self):
+    #     """
+    #     Compute the minimal integer step size per axis (X,Y,Z) that is compatible with the chosen lowest resolution
+    #     """
+    #     lowest_resolution=(64.0, 64.0, 64.0)
+    #     min_step_size = [1, 1, 1]
         
+    #     for d, r in enumerate(lowest_resolution):
+    #         frac = abs(r % 1.0)
+            
+    #         if frac > 1e-3 and (1.0 - frac) > 1e-3:
+    #             raise RuntimeError("Downsampling has a fraction > 0.001; cannot split dataset.")
+            
+    #         min_step_size[d] = math.lcm(min_step_size[d], int(round(r)))
+        
+    #     return min_step_size
+
+    def find_min_step_size(self):
+        lowest_resolution = (64.0, 64.0, 64.0)
+        min_step_size = [1, 1, 1]
+
         for d, r in enumerate(lowest_resolution):
             frac = abs(r % 1.0)
-            
+
             if frac > 1e-3 and (1.0 - frac) > 1e-3:
-                raise RuntimeError("Downsampling has a fraction > 0.001; cannot split dataset.")
-            
-            min_step_size[d] = math.lcm(min_step_size[d], int(round(r)))
-        
+                raise RuntimeError(
+                    "Downsampling has a fraction > 0.001; cannot split dataset."
+                )
+
+            step = int(round(r))
+            rounded_size = self.closest_larger_long_divisible_by(
+                self.target_image_size[d],
+                step,
+            )
+            rounded_overlap = self.closest_larger_long_divisible_by(
+                self.target_overlap[d],
+                step,
+            )
+
+            if rounded_overlap > 0 and rounded_size - step <= rounded_overlap:
+                step = 1
+
+            min_step_size[d] = step
+
         return min_step_size
 
     def collect_image_sizes(self):

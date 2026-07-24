@@ -5,9 +5,8 @@ Metadata Builder constructs lists of pathways to each image chunk needed for int
 """
 
 class MetadataBuilder:
-    def __init__(self, dataframes, overlapping_area, image_file_prefix, file_type, dsxy, dsz, chunks_per_bound, sigma, run_type,
-                 level
-        ):
+    def __init__(self, dataframes, overlapping_area, image_file_prefix, file_type, dsxy, dsz, 
+                 chunks_per_bound, sigma, run_type, level):
         self.image_loader_df = dataframes['image_loader']
         self.overlapping_area = overlapping_area
         self.image_file_prefix = image_file_prefix
@@ -68,7 +67,7 @@ class MetadataBuilder:
 
         return split(starts, stops, self.chunks_per_bound)
     
-    def build_image_metadata(self, process_intervals, file_path, view_id):
+    def build_image_metadata(self, process_intervals, file_path, view_id, split_min):
         """
         Builds list of metadata with optional sub-chunking
         """
@@ -88,7 +87,8 @@ class MetadataBuilder:
                     'file_path': file_path,
                     'interval_key': interval_key,
                     'offset': (0, 0, 0),
-                    'lb': lb_fixed
+                    'lb': lb_fixed,
+                    'split_min': split_min,
                 }) 
 
             # Apply sub-region chunking
@@ -120,7 +120,8 @@ class MetadataBuilder:
                             'file_path': file_path,
                             'interval_key': interval_key,
                             'offset': (0, 0, z),
-                            'lb' : lb
+                            'lb' : lb,
+                            'split_min': split_min,
                         })  
 
                 elif self.file_type == "zarr":
@@ -140,7 +141,8 @@ class MetadataBuilder:
                             'file_path': file_path,
                             'interval_key': (actual_lb, actual_ub, span),
                             'offset': offset,
-                            'lb': lb
+                            'lb': lb,
+                            'split_min': split_min,
                         })
     
     def build_paths(self):
@@ -150,6 +152,7 @@ class MetadataBuilder:
         for _, row in self.image_loader_df.iterrows():
             view_id = f"timepoint: {row['timepoint']}, setup: {row['view_setup']}"
             process_intervals = self.overlapping_area[view_id]
+            split_min = row.get("split_min")
             
             if self.file_type == 'zarr':
                 file_path = self.image_file_prefix + row['file_path'] + f'/{self.level}'
@@ -159,7 +162,7 @@ class MetadataBuilder:
                 raise ValueError(f"Unsupported file_type: {self.file_type!r}")
             
             if self.run_type == 'ray':
-                self.build_image_metadata(process_intervals, file_path, view_id)
+                self.build_image_metadata(process_intervals, file_path, view_id, split_min)
             else:
                 raise ValueError(f"Unsupported run type: {self.run_type!r}")
 

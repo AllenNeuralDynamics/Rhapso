@@ -76,7 +76,7 @@ worker_start_ray_commands:
 # CREATE WHL FILE
 # python3 setup.py bdist_wheel 
 
-# aws s3 cp /Users/sean.fite/Desktop/Rhapso/dist/Rhapso-0.3.7-py3-none-any.whl s3://aind-scratch-data/sean.fite/
+# aws s3 cp /Users/sean.fite/Desktop/Rhapso/dist/Rhapso-0.4.3-py3-none-any.whl s3://aind-scratch-data/sean.fite/
 
 # RAY UP / DOWN / CLEAR CACHE COMMANDS
 # ray up alignment_cluster_sean.yml --no-config-cache
@@ -85,7 +85,7 @@ worker_start_ray_commands:
 # rm -rf ~/.cache/ray
 
 # ACCESS RAY DASHBOARD
-# ssh -i /Users/sean.fite/Desktop/AllenInstitute/Auth/AWS/EC2-SSH-KEY/aind-ray-cluster.pem -L 8265:localhost:8265 ubuntu@18.236.95.240
+# ssh -i /Users/sean.fite/Desktop/AllenInstitute/Auth/AWS/EC2-SSH-KEY/aind-ray-cluster.pem -L 8265:localhost:8265 ubuntu@18.236.151.41
 # http://localhost:8265
 
 # TO FIX

@@ -1,0 +1,229 @@
+# SPLIT DATASET — SHARED BY ALL ROUNDS
+# -----------------------------------
+
+n5_path_split: ""
+point_density: 0
+min_points: 0
+max_points: 0
+error: 0.0
+exclude_radius: 0
+
+
+# ROUND 1
+# -----------------------------------
+
+# INTEREST POINT DETECTION
+
+run_type_round_1: ray
+file_type_round_1: zarr
+dsxy_round_1: 16
+dsz_round_1: 16
+
+min_intensity_fixed_round_1: 0
+max_intensity_fixed_round_1: 100
+min_intensity_moving_round_1: 0
+max_intensity_moving_round_1: 100
+
+sigma_round_1: 1.8
+threshold_round_1: 0.001
+median_filter_round_1: 8
+combine_distance_round_1: 8
+chunks_per_bound_round_1: 1
+max_spots_round_1: 30000
+overlap_only_round_1: false
+
+# INTEREST POINT MATCHING
+
+input_type_round_1: zarr
+match_type_round_1: rigid
+
+num_neighbors_round_1: 3
+redundancy_round_1: 0
+significance_round_1: 3
+search_radius_round_1: 300
+num_required_neighbors_round_1: 3
+
+ransac_sample_size_round_1: 3
+model_min_inliers_round_1: 5
+inlier_threshold_round_1: 60
+min_inlier_ratio_round_1: 0.01
+num_iterations_round_1: 10000
+regularization_weight_matching_round_1: 1.0
+
+# SOLVER
+
+run_type_solver_round_1: rigid
+relative_threshold_round_1: 3.5
+absolute_threshold_round_1: 7.0
+max_cleanup_rounds_round_1: 3
+min_matches_round_1: 5
+damp_round_1: 1.0
+regularization_weight_solver_round_1: 1.0
+max_iterations_solver_round_1: 10000
+max_allowed_error_round_1: .inf
+max_plateauwidth_round_1: 200
+
+
+# ROUND 2
+# -----------------------------------
+
+# INTEREST POINT DETECTION
+
+run_type_round_2: ray
+file_type_round_2: zarr
+dsxy_round_2: 8
+dsz_round_2: 8
+
+min_intensity_fixed_round_2: 0
+max_intensity_fixed_round_2: 100
+min_intensity_moving_round_2: 0
+max_intensity_moving_round_2: 100
+
+sigma_round_2: 1.8
+threshold_round_2: 0.001
+median_filter_round_2: 8
+combine_distance_round_2: 8
+chunks_per_bound_round_2: 1
+max_spots_round_2: 30000
+overlap_only_round_2: false
+
+# INTEREST POINT MATCHING
+
+input_type_round_2: zarr
+match_type_round_2: rigid
+
+num_neighbors_round_2: 3
+redundancy_round_2: 0
+significance_round_2: 3
+search_radius_round_2: 200
+num_required_neighbors_round_2: 3
+
+ransac_sample_size_round_2: 3
+model_min_inliers_round_2: 8
+inlier_threshold_round_2: 40
+min_inlier_ratio_round_2: 0.02
+num_iterations_round_2: 10000
+regularization_weight_matching_round_2: 1.0
+
+# SOLVER
+
+run_type_solver_round_2: rigid
+relative_threshold_round_2: 3.5
+absolute_threshold_round_2: 7.0
+max_cleanup_rounds_round_2: 3
+min_matches_round_2: 8
+damp_round_2: 1.0
+regularization_weight_solver_round_2: 1.0
+max_iterations_solver_round_2: 10000
+max_allowed_error_round_2: .inf
+max_plateauwidth_round_2: 200
+
+
+# ROUND 3
+# -----------------------------------
+
+# INTEREST POINT DETECTION
+
+run_type_round_3: ray
+file_type_round_3: zarr
+dsxy_round_3: 4
+dsz_round_3: 4
+
+min_intensity_fixed_round_3: 0
+max_intensity_fixed_round_3: 100
+min_intensity_moving_round_3: 0
+max_intensity_moving_round_3: 100
+
+sigma_round_3: 1.8
+threshold_round_3: 0.001
+median_filter_round_3: 8
+combine_distance_round_3: 16
+chunks_per_bound_round_3: 1
+max_spots_round_3: 30000
+overlap_only_round_3: false
+
+# INTEREST POINT MATCHING
+
+input_type_round_3: zarr
+match_type_round_3: affine
+
+num_neighbors_round_3: 3
+redundancy_round_3: 0
+significance_round_3: 3
+search_radius_round_3: 150
+num_required_neighbors_round_3: 3
+
+ransac_sample_size_round_3: 4
+model_min_inliers_round_3: 25
+inlier_threshold_round_3: 24
+min_inlier_ratio_round_3: 0.03
+num_iterations_round_3: 10000
+regularization_weight_matching_round_3: .30
+
+# SOLVER
+
+run_type_solver_round_3: affine
+relative_threshold_round_3: 3.5
+absolute_threshold_round_3: 7.0
+max_cleanup_rounds_round_3: 3
+min_matches_round_3: 15
+damp_round_3: 1.0
+regularization_weight_solver_round_3: .30
+max_iterations_solver_round_3: 10000
+max_allowed_error_round_3: .inf
+max_plateauwidth_round_3: 200
+
+
+# ROUND 4
+# -----------------------------------
+
+# INTEREST POINT DETECTION
+
+run_type_round_4: ray
+file_type_round_4: zarr
+dsxy_round_4: 2
+dsz_round_4: 2
+
+min_intensity_fixed_round_4: 0
+max_intensity_fixed_round_4: 100
+min_intensity_moving_round_4: 0
+max_intensity_moving_round_4: 100
+
+sigma_round_4: 1.8
+threshold_round_4: 0.001
+median_filter_round_4: 8
+combine_distance_round_4: 16
+chunks_per_bound_round_4: 1
+max_spots_round_4: 30000
+overlap_only_round_4: false
+
+# INTEREST POINT MATCHING
+
+input_type_round_4: zarr
+match_type_round_4: affine
+
+num_neighbors_round_4: 3
+redundancy_round_4: 0
+significance_round_4: 3
+search_radius_round_4: 80
+num_required_neighbors_round_4: 3
+
+ransac_sample_size_round_4: 4
+model_min_inliers_round_4: 12
+inlier_threshold_round_4: 16
+min_inlier_ratio_round_4: 0.05
+num_iterations_round_4: 10000
+regularization_weight_matching_round_4: .10
+
+# SOLVER
+
+run_type_solver_round_4: affine
+relative_threshold_round_4: 3.5
+absolute_threshold_round_4: 7.0
+max_cleanup_rounds_round_4: 3
+min_matches_round_4: 12
+damp_round_4: 1.0
+regularization_weight_solver_round_4: .10
+max_iterations_solver_round_4: 10000
+max_allowed_error_round_4: .inf
+max_plateauwidth_round_4: 200

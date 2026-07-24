@@ -154,9 +154,24 @@ class SplitImages:
 
         return dim_intervals
 
+    # def last_image_size(self, l, s, o):
+    #     num = l - 2 * (s - o) - o
+    #     den = s - o
+    #     rem = num % den if num >= 0 else -((-num) % den)
+    #     size = o + rem
+
+    #     if size < 0:
+    #         size = l + size
+
+    #     return size
+
     def last_image_size(self, l, s, o):
-        num = l - 2 * (s - o) - o
         den = s - o
+
+        if den <= 0:
+            return 0
+
+        num = l - 2 * den - o
         rem = num % den if num >= 0 else -((-num) % den)
         size = o + rem
 

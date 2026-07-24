@@ -79,12 +79,12 @@ class InterestPointDetection:
 
         # Use Ray to distribute peak detection to image chunking metadata 
         @ray.remote
-        def process_peak_detection_task(chunk_metadata, new_dsxy, new_dsz, min_intensity, max_intensity, sigma, threshold,
+        def process_peak_detection_task(chunk_metadata, new_dsxy, new_dsz, level, min_intensity, max_intensity, sigma, threshold,
                                         median_filter, mip_map_downsample):
             try:
                 difference_of_gaussian = DifferenceOfGaussian(min_intensity, max_intensity, sigma, threshold, median_filter, mip_map_downsample)
                 image_fetcher = ImageReader(self.file_type)
-                view_id, interval, image_chunk, offset, lb = image_fetcher.run(chunk_metadata, new_dsxy, new_dsz)
+                view_id, interval, image_chunk, offset, lb = image_fetcher.run(chunk_metadata, new_dsxy, new_dsz, level)
                 interest_points = difference_of_gaussian.run(image_chunk, offset, lb)
 
                 return {
@@ -98,7 +98,7 @@ class InterestPointDetection:
                 return {'error': str(e), 'view_id': chunk_metadata.get('view_id', 'unknown')}
 
         # Submit tasks to Ray
-        futures = [process_peak_detection_task.remote(chunk_metadata, new_dsxy, new_dsz, self.min_intensity, self.max_intensity, 
+        futures = [process_peak_detection_task.remote(chunk_metadata, new_dsxy, new_dsz, level, self.min_intensity, self.max_intensity, 
                                                       self.sigma, self.threshold, self.median_filter, mip_map_downsample)
             for chunk_metadata in image_chunk_metadata
         ]
