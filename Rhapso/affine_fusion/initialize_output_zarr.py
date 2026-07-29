@@ -1,6 +1,7 @@
 import numpy as np
 import zarr
 import os
+from numcodecs import Blosc
 
 """
 Initialize output zarr store/group in S3 or local storage.
@@ -8,11 +9,16 @@ Works with both Zarr-Python 2 and Zarr-Python 3 APIs.
 """
 
 class InitializeOutputZarr:
-    def __init__(self, output_path, zarr_input_prefix, dims, output_zarr_version):
+    def __init__(self, output_path, zarr_input_prefix, dims, output_zarr_version, compressor_cname, compressor_clevel, 
+                 compressor_shuffle, output_block_size):
         self.output_path = str(output_path).rstrip("/")
         self.zarr_input_prefix = str(zarr_input_prefix).rstrip("/")
         self.output_shape_zyx = (int(dims[2]), int(dims[1]), int(dims[0]))
         self.output_zarr_version = int(output_zarr_version)
+        self.compressor_cname = compressor_cname
+        self.compressor_clevel = compressor_clevel
+        self.compressor_shuffle = compressor_shuffle
+        self.output_block_size = output_block_size
 
         if self.output_zarr_version not in (2, 3):
             raise ValueError(
@@ -26,6 +32,28 @@ class InitializeOutputZarr:
                 "This environment has the Zarr 2 Python API, which cannot create "
                 "Zarr format 3 output. Install zarr>=3 or set output_zarr_version=2."
             )
+    
+    def make_compressor(self):
+        if self.output_zarr_version == 3:
+            return zarr.codecs.BloscCodec(
+                cname=self.compressor_cname,
+                clevel=self.compressor_clevel,
+                shuffle=self.compressor_shuffle,
+                blocksize=0,
+            )
+
+        shuffle = {
+            "noshuffle": Blosc.NOSHUFFLE,
+            "shuffle": Blosc.SHUFFLE,
+            "bitshuffle": Blosc.BITSHUFFLE,
+        }[self.compressor_shuffle]
+
+        return Blosc(
+            cname=self.compressor_cname,
+            clevel=self.compressor_clevel,
+            shuffle=shuffle,
+            blocksize=0,
+        )
         
     def first_child_zarr(self, path, anon=None):
         """
@@ -214,9 +242,10 @@ class InitializeOutputZarr:
 
     def create_output_array(self, root):
         Z, Y, X = self.output_shape_zyx
-
         shape = (1, 1, Z, Y, X)
-        chunks = (1, 1, 128, 256, 256)
+
+        X, Y, Z = self.output_block_size
+        chunks = (1, 1, Z, Y, X)
 
         if self.has_zarr3_store_api:
             kwargs = dict(
@@ -231,6 +260,7 @@ class InitializeOutputZarr:
             if self.output_zarr_version == 2:
                 root.create_array(
                     **kwargs,
+                    compressor=self.make_compressor(),
                     chunk_key_encoding={
                         "name": "v2",
                         "separator": "/",
@@ -240,6 +270,7 @@ class InitializeOutputZarr:
 
             root.create_array(
                 **kwargs,
+                compressors=[self.make_compressor()],
                 chunk_key_encoding={
                     "name": "default",
                     "separator": "/",
@@ -247,7 +278,6 @@ class InitializeOutputZarr:
             )
             return
 
-        # Zarr-Python 2 API.
         root.create_dataset(
             "0",
             shape=shape,
@@ -255,6 +285,7 @@ class InitializeOutputZarr:
             dtype=np.uint16,
             overwrite=False,
             fill_value=0,
+            compressor=self.make_compressor(),
             dimension_separator="/",
         )
 

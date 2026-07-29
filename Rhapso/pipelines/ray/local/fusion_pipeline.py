@@ -4,7 +4,7 @@ from Rhapso.util.ng_link_gen_z1 import NeuroglancerLinkGeneratorZ1
 import yaml
 
 # Point to param file
-with open("Rhapso/pipelines/ray/param/fusion/exaSPIM_665082.yml", "r") as file:
+with open("Rhapso/pipelines/ray/param/fusion/HCR_823476.yml", "r") as file:
     config = yaml.safe_load(file)
 
 # FUSION
@@ -13,10 +13,13 @@ fusion = AffineFusion(
     zarr_input_prefix=config["zarr_input_prefix"],
     output_path=config["output_path"],
     block_size=config["block_size"],
+    output_block_size=config["output_block_size"],
     intensity_range=config["intensity_range"],
-    block_scale=config["block_scale"],
     overlap_strategy=config["overlap_strategy"],
-    output_zarr_version=config["output_zarr_version"]
+    output_zarr_version=config["output_zarr_version"],
+    compressor_cname=config["compressor_cname"],
+    compressor_clevel=config["compressor_clevel"],
+    compressor_shuffle=config["compressor_shuffle"]
 )
 
 # MULTISCALE
@@ -26,8 +29,10 @@ multiscale = MultiScale(
     voxel_size=config["voxel_size"],                           
     n_lvls=config["n_lvls"],
     scale_factor=config["scale_factor"],
-    target_block_size_mb=config["target_block_size_mb"],
     base_level=config["base_level"],
+    compressor_cname=config["compressor_cname"],
+    compressor_clevel=config["compressor_clevel"],
+    compressor_shuffle=config["compressor_shuffle"]
 )
 
 # ng_link_gen = NeuroglancerLinkGeneratorZ1(      

@@ -1,18 +1,24 @@
+# SHARED
+# -----------------------------------
+compressor_cname: "zstd"                 # zstd, lz4, lz4hc, zlib, blosclz, snappy
+compressor_clevel: 6                     # 0-9
+compressor_shuffle: "bitshuffle"         # noshuffle, shuffle, bitshuffle
+
 # AFFINE FUSION
 # -----------------------------------
 aligned_xml_path: "s3://aind-scratch-data/sean.fite/alignment-1/rhapso-solver-affine.xml"
 zarr_input_prefix: "s3://aind-open-data/HCR_823476-s1-ls2_2025-11-18_00-00-00_processed_2026-03-03_22-58-55/image_radial_correction/"
-output_path: "s3://aind-scratch-data/sean.fite/z1_optimizations/823476-35/fusion/fused.zarr" 
-block_size: [256, 256, 256]           # xyz
+output_path: "s3://aind-scratch-data/sean.fite/z1_optimizations-2/823476-35/fusion/fused.zarr" 
+block_size: [512, 512, 256]           # xyz
+output_block_size: [256, 256, 128]    # xyz - needs to be smaller than block size
 intensity_range: [0, 65535]           # UINT16 default
-block_scale: [2, 2, 1]                # xyz
-overlap_strategy: "avg_blend"
-output_zarr_version: 3
+overlap_strategy: "avg_blend"         # avg_blend, lowest_view_wins, max_blend
+output_zarr_version: 3                # 2, 3
 
 # MULTISCALE
 # -----------------------------------
-multiscale_zarr_path: "s3://aind-scratch-data/sean.fite/z1_optimizations/823476-35/fusion/fused.zarr"
-multiscale_chunk_size: [128, 128, 128]
+multiscale_zarr_path: "s3://aind-scratch-data/sean.fite/z1_optimizations-2/823476-35/fusion/fused.zarr"
+multiscale_chunk_size: [128, 128, 128]                                          # ZYX
 voxel_size: [0.4586981717240068, 0.0920179382864407, 0.0920179382864407]        # ZYX
 n_lvls: 6                                                                       # Including base level
 scale_factor: [[1, 2, 2], [1, 2, 2], [2, 2, 2], [2, 2, 2], [2, 2, 2]]           # ZYX
@@ -29,6 +35,3 @@ zarr_paths: [
 json_upload_path: "s3://aind-scratch-data/sean.fite/new-test/HCR_000000-s107-ls1_2026-01-23_00-00-00_processed_2026-01-24_06-00-53/fusion/fused_ng.json"
 vmin: 90
 vmax: 400
-
-
-        

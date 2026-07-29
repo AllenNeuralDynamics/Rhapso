@@ -1,22 +1,25 @@
+# SHARED
+# -----------------------------------
+compressor_cname: "zstd"                 # zstd, lz4, lz4hc, zlib, blosclz, snappy
+compressor_clevel: 6                     # 0-9
+compressor_shuffle: "bitshuffle"         # noshuffle, shuffle, bitshuffle
+
 # AFFINE FUSION
 # -----------------------------------
 aligned_xml_path: "s3://aind-open-data/exaSPIM_665082_2026-06-22_18-14-20_processed_2026-07-04_11-12-34/tile_alignment/ip_split_affine_alignment/bigstitcher_affine.split.xml"
 zarr_input_prefix: "s3://aind-open-data/exaSPIM_665082_2026-06-22_18-14-20_processed_2026-07-04_11-12-34/flatfield_correction/SPIM.ome.zarr"
 output_path: "s3://aind-scratch-data/sean.fite/testing-fusion-3/fusion/fused.zarr" 
-block_size: [256, 256, 384]           # xyz
+block_size: [512, 512, 384]           # xyz
+output_block_size: [256, 256, 128]    # xyz - needs to be smaller than block size
 intensity_range: [0, 65535]           # UINT16 default
-block_scale: [2, 2, 1]                # xyz
-overlap_strategy: "avg_blend"
-output_zarr_version: 3
+overlap_strategy: "avg_blend"         # avg_blend, lowest_view_wins, max_blend
+output_zarr_version: 3                # 2, 3
 
 # MULTISCALE
 # -----------------------------------
 multiscale_zarr_path: "s3://aind-scratch-data/sean.fite/testing-fusion-3/fusion/fused.zarr"
-multiscale_chunk_size: [128, 128, 128]
+multiscale_chunk_size: [128, 128, 128]                                                     # ZYX
 voxel_size: [1.0, 0.7480000148631624, 0.747999882518797]                                   # ZYX
 n_lvls: 7                                                                                  # Including base level
 scale_factor: [[2, 2, 2], [2, 2, 2], [2, 2, 2], [2, 2, 2], [2, 2, 2], [2, 2, 2]]           # ZYX
-target_block_size_mb: 256
 base_level: 0
-
-        
