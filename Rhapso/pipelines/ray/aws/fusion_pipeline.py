@@ -22,10 +22,13 @@ fusion_cmd = (
     "    zarr_input_prefix=cfg[\\\"zarr_input_prefix\\\"],\n"
     "    output_path=cfg[\\\"output_path\\\"],\n"
     "    block_size=cfg[\\\"block_size\\\"],\n"
+    "    output_block_size=cfg[\\\"output_block_size\\\"],\n"
     "    intensity_range=cfg[\\\"intensity_range\\\"],\n"
-    "    block_scale=cfg[\\\"block_scale\\\"],\n"
     "    overlap_strategy=cfg[\\\"overlap_strategy\\\"],\n"
     "    output_zarr_version=cfg[\\\"output_zarr_version\\\"],\n"
+    "    compressor_cname=cfg[\\\"compressor_cname\\\"],\n"
+    "    compressor_clevel=cfg[\\\"compressor_clevel\\\"],\n"
+    "    compressor_shuffle=cfg[\\\"compressor_shuffle\\\"],\n"
     ")\n"
     "fusion.run()\n"
     "PY\n"
@@ -44,8 +47,10 @@ multiscale_cmd = (
     "    voxel_size=cfg[\\\"voxel_size\\\"],\n"
     "    n_lvls=cfg[\\\"n_lvls\\\"],\n"
     "    scale_factor=cfg[\\\"scale_factor\\\"],\n"
-    "    target_block_size_mb=cfg[\\\"target_block_size_mb\\\"],\n"
     "    base_level=cfg[\\\"base_level\\\"],\n"
+    "    compressor_cname=cfg[\\\"compressor_cname\\\"],\n"
+    "    compressor_clevel=cfg[\\\"compressor_clevel\\\"],\n"
+    "    compressor_shuffle=cfg[\\\"compressor_shuffle\\\"],\n"
     ")\n"
     "ms.run()\n"
     "PY\n"
@@ -77,3 +82,4 @@ finally:
     print("\n=== Tear down cluster ===")
     print("$", " ".join(["ray", "down", unified_yml, "-y"]))
     subprocess.run(["ray", "down", unified_yml, "-y"], cwd=prefix)
+    

@@ -11,16 +11,19 @@ import ray
 # This class implements the affine fusion pipeline
 
 class AffineFusion:
-    def __init__(self, aligned_xml_path, zarr_input_prefix, output_path, block_size, intensity_range, 
-                 block_scale, overlap_strategy, output_zarr_version):
+    def __init__(self, aligned_xml_path, zarr_input_prefix, output_path, block_size, output_block_size, intensity_range, 
+                 overlap_strategy, output_zarr_version, compressor_cname, compressor_clevel, compressor_shuffle):
         self.aligned_xml_path = aligned_xml_path
         self.zarr_input_prefix = zarr_input_prefix
         self.output_path = output_path 
         self.block_size = block_size
+        self.output_block_size = output_block_size
         self.intensity_range = intensity_range
-        self.block_scale = block_scale
         self.overlap_strategy = overlap_strategy
         self.output_zarr_version = output_zarr_version
+        self.compressor_cname = compressor_cname
+        self.compressor_clevel = compressor_clevel
+        self.compressor_shuffle = compressor_shuffle
 
     def affine_fusion(self):
         ray.init()
@@ -32,12 +35,14 @@ class AffineFusion:
         print("Bbox of fused volume computed")
 
         # Initialize zarr datastore in s3 for fused output
-        initialize_output_zarr = InitializeOutputZarr(self.output_path, self.zarr_input_prefix, dims, self.output_zarr_version)
+        initialize_output_zarr = InitializeOutputZarr(self.output_path, self.zarr_input_prefix, dims, self.output_zarr_version, 
+                                                      self.compressor_cname, self.compressor_clevel, self.compressor_shuffle, 
+                                                      self.output_block_size)
         initialize_output_zarr.run()
         print("Zarr group/store initialized with bbox dims")
 
         # Compute grid for fused volume
-        compute_grid = ComputeGrid(dims, self.block_size, self.block_scale)
+        compute_grid = ComputeGrid(dims, self.block_size)
         grid = compute_grid.run()
         print("Output grid computed")
 

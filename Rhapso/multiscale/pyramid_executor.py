@@ -5,6 +5,7 @@ import dask.array as da
 import numpy as np
 import numpy.typing as npt
 import ray
+import zarr
 
 """
 Handles windowed downsampling and block-wise execution using Ray.
@@ -12,7 +13,7 @@ Handles windowed downsampling and block-wise execution using Ray.
 
 class PyramidExecutor:
     def __init__(self, n_lvls: int, scale_factors, chunk_size: Tuple[int, ...], block_shape_zyx: Tuple[int, int, int], 
-                 zarr_path: str, base_level: int, zarr_version) -> None:
+                 zarr_path: str, base_level: int, zarr_version, compressor_cname, compressor_clevel, compressor_shuffle) -> None:
         self.n_lvls = n_lvls
         self.scale_factors = scale_factors
         self.chunk_size = chunk_size
@@ -20,6 +21,31 @@ class PyramidExecutor:
         self.zarr_path = zarr_path
         self.base_level = base_level
         self.output_zarr_version = zarr_version
+        self.compressor_cname = compressor_cname
+        self.compressor_clevel = compressor_clevel
+        self.compressor_shuffle = compressor_shuffle
+    
+    def make_compressor(self):
+        if self.output_zarr_version == 3:
+            return zarr.codecs.BloscCodec(
+                cname=self.compressor_cname,
+                clevel=self.compressor_clevel,
+                shuffle=self.compressor_shuffle,
+                blocksize=0,
+            )
+
+        shuffle = {
+            "noshuffle": Blosc.NOSHUFFLE,
+            "shuffle": Blosc.SHUFFLE,
+            "bitshuffle": Blosc.BITSHUFFLE,
+        }[self.compressor_shuffle]
+
+        return Blosc(
+            cname=self.compressor_cname,
+            clevel=self.compressor_clevel,
+            shuffle=shuffle,
+            blocksize=0,
+        )
 
     @staticmethod
     def reshape_windowed(array: npt.NDArray[Any], window_size: Sequence[int]) -> npt.NDArray[Any]:
@@ -210,18 +236,20 @@ class PyramidExecutor:
     
     def create_level_array(self, channel_group, name: str, shape, chunks, dtype):
         """
-        Create one pyramid level using the known output zarr version.
+        Create one pyramid level using the known output Zarr version.
         """
-        if self.output_zarr_version == 2:
-            compressor = Blosc(cname="zstd", clevel=3, shuffle=2, blocksize=0)
+        kwargs = dict(
+            name=name,
+            shape=shape,
+            chunks=chunks,
+            dtype=dtype,
+            overwrite=True,
+        )
 
+        if self.output_zarr_version == 2:
             return channel_group.create_array(
-                name=name,
-                shape=shape,
-                chunks=chunks,
-                dtype=dtype,
-                compressor=compressor,
-                overwrite=True,
+                **kwargs,
+                compressor=self.make_compressor(),
                 chunk_key_encoding={
                     "name": "v2",
                     "separator": "/",
@@ -229,11 +257,8 @@ class PyramidExecutor:
             )
 
         return channel_group.create_array(
-            name=name,
-            shape=shape,
-            chunks=chunks,
-            dtype=dtype,
-            overwrite=True,
+            **kwargs,
+            compressors=[self.make_compressor()],
             chunk_key_encoding={
                 "name": "default",
                 "separator": "/",
@@ -244,7 +269,6 @@ class PyramidExecutor:
         """
         Multiscale loop
         """
-        # compressor = Blosc(cname="zstd", clevel=3, shuffle=2, blocksize=0)
         start_level = self.base_level + 1
         levels_to_write = self.n_lvls - start_level
 
@@ -313,3 +337,4 @@ def process_block_instruction_remote(src_level: int, dst_level: int, src_slices:
     window_size = (1, 1, sz, sy, sx)
     dst_block = PyramidExecutor.windowed_mean(src_block, window_size=window_size)
     dst_arr[dst_slices] = dst_block
+    
